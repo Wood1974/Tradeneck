@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>TradeDeck</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// Load Stripe asynchronously and flag when ready
+window._stripeReady = false;
+(function(){
+  var s = document.createElement('script');
+  s.src = 'https://js.stripe.com/v3/';
+  s.onload = function(){ window._stripeReady = true; };
+  document.head.appendChild(s);
+})();
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -13,62 +23,52 @@
 }
 body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh}
 
-/* NAV */
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--surface);border-top:1px solid var(--border);z-index:100}
 nav button{flex:1;padding:12px 4px 10px;background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
 nav button.active{color:var(--teal)}
 nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
 
-/* LAYOUT */
 #app{padding:16px 16px 80px}
 .screen{display:none}.screen.active{display:block}
 
-/* CARDS */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
 .card h3{font-size:15px;margin-bottom:6px}
 .card p{font-size:13px;color:var(--muted);line-height:1.5}
 
-/* BUTTONS */
 .btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;border:none;cursor:pointer}
 .btn-primary{background:var(--teal);color:#000}
 .btn-outline{background:none;border:1px solid var(--border);color:var(--text)}
 .btn-danger{background:var(--danger);color:#fff}
 .btn-sm{padding:6px 12px;font-size:13px}
 .btn-block{width:100%;margin-top:8px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
 
-/* FORMS */
 input,textarea,select{width:100%;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;margin-bottom:10px;outline:none}
 input:focus,textarea:focus,select:focus{border-color:var(--teal)}
 textarea{min-height:80px;resize:vertical}
 label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 
-/* BADGE */
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
 .badge-teal{background:rgba(11,188,212,.15);color:var(--teal)}
 .badge-ksl{background:rgba(255,180,0,.15);color:#ffb400}
 
-/* TABS */
 .tab-bar{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px}
 .tab-btn{white-space:nowrap;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--muted);font-size:13px;cursor:pointer}
 .tab-btn.active{background:var(--teal);color:#000;border-color:var(--teal)}
 
-/* COUNTY */
 .county-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px}
 .county-tab{white-space:nowrap;padding:4px 10px;border-radius:14px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0}
 .county-tab.active{background:var(--teal);color:#000;border-color:var(--teal)}
 
-/* HEADER */
 .screen-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
 .screen-header h2{font-size:20px;font-weight:700}
 
-/* AUTH */
 #auth-wrap{max-width:400px;margin:60px auto;padding:0 16px}
 #auth-wrap h1{font-size:26px;font-weight:800;margin-bottom:6px}
 #auth-wrap .sub{color:var(--muted);margin-bottom:24px;font-size:14px}
 .auth-toggle{font-size:13px;color:var(--muted);margin-top:12px;text-align:center}
 .auth-toggle span{color:var(--teal);cursor:pointer}
 
-/* OVERLAY */
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:flex-end}
 .overlay.open{display:flex}
 .overlay-inner{background:var(--surface);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-height:90vh;overflow-y:auto}
@@ -76,7 +76,6 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 .overlay-header h3{font-size:17px;font-weight:700}
 .close-btn{background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer}
 
-/* DRAW */
 .milestone-row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
 .milestone-row input{margin-bottom:0}
 .milestone-row .pct{width:64px;flex-shrink:0}
@@ -86,28 +85,27 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 .draw-status.approved{background:rgba(80,200,120,.15);color:#50c878}
 .draw-status.disputed{background:rgba(224,85,85,.15);color:var(--danger)}
 
-/* ESCROW */
 .escrow-bar{background:var(--border);border-radius:4px;height:8px;margin:8px 0}
 .escrow-fill{background:var(--teal);height:100%;border-radius:4px}
 
-/* STARS */
 .stars{display:flex;gap:6px;font-size:28px;cursor:pointer;margin:10px 0}
 .stars span{color:var(--border)}
 .stars span.on{color:#ffb400}
 
-/* TOAST */
-#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;display:none;z-index:999;white-space:nowrap}
+/* STRIPE CARD ELEMENT */
+.stripe-card-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px}
+.fee-notice{background:rgba(11,188,212,.08);border:1px solid rgba(11,188,212,.25);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.5}
+.fee-notice strong{color:var(--teal)}
 
-/* UTIL */
+#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;display:none;z-index:999;white-space:nowrap}
+.error-box{background:rgba(224,85,85,.1);border:1px solid var(--danger);border-radius:8px;padding:12px;color:var(--danger);font-size:13px;margin-bottom:12px}
+.spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .7s linear infinite;margin:40px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+
 .mt8{margin-top:8px}.mt16{margin-top:16px}
 .flex{display:flex}.gap8{gap:8px}.between{justify-content:space-between}
 .text-muted{color:var(--muted);font-size:13px}
 .divider{border:none;border-top:1px solid var(--border);margin:16px 0}
-.error-box{background:rgba(224,85,85,.1);border:1px solid var(--danger);border-radius:8px;padding:12px;color:var(--danger);font-size:13px;margin-bottom:12px}
-
-/* SPINNER */
-.spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .7s linear infinite;margin:40px auto}
-@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -128,7 +126,6 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 <!-- MAIN APP -->
 <div id="app" style="display:none">
 
-  <!-- HOME -->
   <div id="screen-home" class="screen active">
     <div class="screen-header">
       <h2>Home</h2>
@@ -137,7 +134,6 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     <div id="home-content"><div class="spinner"></div></div>
   </div>
 
-  <!-- FIND WORK -->
   <div id="screen-work" class="screen">
     <div class="screen-header"><h2>Find Work</h2></div>
     <div class="tab-bar">
@@ -149,7 +145,6 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     <div id="work-content"><div class="spinner"></div></div>
   </div>
 
-  <!-- POST JOB -->
   <div id="screen-post" class="screen">
     <div class="screen-header"><h2>Post a Job</h2></div>
     <div class="card">
@@ -168,6 +163,11 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
       <textarea id="post-desc" placeholder="Scope, timeline, crew size…"></textarea>
       <label>Budget</label>
       <input id="post-budget" placeholder="e.g. $8,500 or negotiable"/>
+      <label>Posted by</label>
+      <select id="post-role">
+        <option value="contractor">Contractor</option>
+        <option value="homeowner">Homeowner</option>
+      </select>
       <hr class="divider"/>
       <h3 style="margin-bottom:12px">Draw Schedule <span class="text-muted" style="font-size:12px;font-weight:400">(optional)</span></h3>
       <div id="milestone-rows"></div>
@@ -175,22 +175,38 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
         <button class="btn btn-outline btn-sm" onclick="addMilestone()">+ Add Milestone</button>
         <span id="pct-total" class="text-muted"></span>
       </div>
-      <button class="btn btn-primary btn-block mt16" onclick="submitJob()">Post Job</button>
+      <button class="btn btn-primary btn-block mt16" onclick="initiatePostJob()">Post Job — $20 fee</button>
     </div>
   </div>
 
-  <!-- DRAWS -->
   <div id="screen-draws" class="screen">
     <div class="screen-header"><h2>Draw Manager</h2></div>
     <div id="draws-content"><div class="spinner"></div></div>
   </div>
 
-  <!-- PROFILE -->
   <div id="screen-profile" class="screen">
     <div class="screen-header"><h2>Profile</h2></div>
     <div id="profile-content"><div class="spinner"></div></div>
   </div>
 
+</div>
+
+<!-- PAYMENT OVERLAY -->
+<div class="overlay" id="payment-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <h3 id="payment-title">Platform Fee</h3>
+      <button class="close-btn" onclick="closeOverlay('payment-overlay')">×</button>
+    </div>
+    <div class="fee-notice">
+      <strong>$20.00 platform fee</strong><br>
+      <span id="payment-desc">One-time fee charged at the moment of acceptance.</span>
+    </div>
+    <label>Card Details</label>
+    <div class="stripe-card-wrap" id="card-element"></div>
+    <div id="card-error" class="error-box" style="display:none"></div>
+    <button id="pay-btn" class="btn btn-primary btn-block" onclick="submitPayment()">Pay $20 & Confirm</button>
+  </div>
 </div>
 
 <!-- RATING OVERLAY -->
@@ -201,10 +217,8 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
       <button class="close-btn" onclick="closeOverlay('rating-overlay')">×</button>
     </div>
     <div class="stars" id="star-picker">
-      <span onclick="setRating(1)">★</span>
-      <span onclick="setRating(2)">★</span>
-      <span onclick="setRating(3)">★</span>
-      <span onclick="setRating(4)">★</span>
+      <span onclick="setRating(1)">★</span><span onclick="setRating(2)">★</span>
+      <span onclick="setRating(3)">★</span><span onclick="setRating(4)">★</span>
       <span onclick="setRating(5)">★</span>
     </div>
     <textarea id="review-text" placeholder="Optional: share your experience…"></textarea>
@@ -212,7 +226,6 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   </div>
 </div>
 
-<!-- NAV -->
 <nav id="main-nav" style="display:none">
   <button class="active" onclick="switchTab('home')" id="nav-home">
     <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home
@@ -236,61 +249,152 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 <script>
 const SUPABASE_URL = 'https://jlaajejpqjldpbinktln.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW5rdGxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMDg3MTksImV4cCI6MjEwMTc4NDcxOX0.tP-seLGoJnivrYmNhhTDmDJw4Uk92D95-zrwWB1G_S4';
+const STRIPE_PK = 'pk_test_51TLWkTDNZcAJj6Kyd84RVIQ0qPO1iHP109ccBL4P9OQvShE21T291c4BhhtC8Z6CEYQKqmtjj2b6UZQe1n1CusGC00KNY7CwAl';
+const API_URL = 'https://tradedeck-api.onrender.com';
+const FEE_CENTS = 2000; // $20.00
 
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let _stripe = null;
+let cardElement = null;
+let stripeElements = null;
+function getStripe() {
+  if (!_stripe) {
+    if (typeof Stripe === 'undefined') throw new Error('Stripe.js not loaded yet — try again in a moment');
+    _stripe = Stripe(STRIPE_PK);
+  }
+  return _stripe;
+}
 
 let STATE = {
   user: null, profile: null,
   jobs: [], kslJobs: [], draws: [],
   workTab: 'open', county: 'all',
   ratingJobId: null, rating: 0,
-  milestones: []
+  milestones: [],
+  // payment context
+  pendingAction: null, // { type, data, onSuccess }
 };
 
-// ── TOAST ──────────────────────────────────────────────────────────────────
+// ── STRIPE SETUP ──────────────────────────────────────────────────────────
+function initStripeElement() {
+  if (cardElement) { cardElement.destroy(); cardElement = null; }
+  stripeElements = getStripe().elements();
+  cardElement = stripeElements.create('card', {
+    style: {
+      base: {
+        color: '#F0F0F0',
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: '15px',
+        '::placeholder': { color: '#666' },
+        backgroundColor: '#141414',
+      },
+      invalid: { color: '#e05555' }
+    }
+  });
+  cardElement.mount('#card-element');
+  cardElement.on('change', e => {
+    const el = document.getElementById('card-error');
+    el.textContent = e.error ? e.error.message : '';
+    el.style.display = e.error ? 'block' : 'none';
+  });
+}
+
+// ── PAYMENT FLOW ──────────────────────────────────────────────────────────
+// pendingAction types: 'apply' | 'hire' | 'post_job'
+function openPayment(title, desc, action) {
+  STATE.pendingAction = action;
+  document.getElementById('payment-title').textContent = title;
+  document.getElementById('payment-desc').textContent = desc;
+  document.getElementById('card-error').style.display = 'none';
+  document.getElementById('pay-btn').disabled = false;
+  document.getElementById('pay-btn').textContent = 'Pay $20 & Confirm';
+  document.getElementById('payment-overlay').classList.add('open');
+  setTimeout(initStripeElement, 100);
+}
+
+async function submitPayment() {
+  const btn = document.getElementById('pay-btn');
+  btn.disabled = true;
+  btn.textContent = 'Processing…';
+
+  try {
+    // 1. Create PaymentIntent on backend
+    const res = await fetch(`${API_URL}/api/payments/intent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: FEE_CENTS,
+        user_id: STATE.user.id,
+        action_type: STATE.pendingAction.type,
+        metadata: STATE.pendingAction.data
+      })
+    });
+    const { client_secret, error: apiErr } = await res.json();
+    if (apiErr) throw new Error(apiErr);
+
+    // 2. Confirm card payment
+    const { paymentIntent, error: stripeErr } = await getStripe().confirmCardPayment(client_secret, {
+      payment_method: { card: cardElement }
+    });
+    if (stripeErr) throw new Error(stripeErr.message);
+    if (paymentIntent.status !== 'succeeded') throw new Error('Payment did not complete');
+
+    // 3. Run the actual action
+    await STATE.pendingAction.onSuccess(paymentIntent.id);
+
+    closeOverlay('payment-overlay');
+    toast('Payment confirmed — action complete!');
+  } catch(e) {
+    const el = document.getElementById('card-error');
+    el.textContent = e.message;
+    el.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Pay $20 & Confirm';
+  }
+}
+
+// ── TOAST / UTILS ─────────────────────────────────────────────────────────
 function toast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.style.display = 'block';
-  setTimeout(() => el.style.display = 'none', 2500);
+  setTimeout(() => el.style.display = 'none', 2800);
+}
+function closeOverlay(id) { document.getElementById(id).classList.remove('open'); }
+function switchTab(tab) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-'+tab).classList.add('active');
+  document.getElementById('nav-'+tab).classList.add('active');
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
 let authMode = 'signin';
 function toggleAuth() {
-  authMode = authMode === 'signin' ? 'signup' : 'signin';
-  document.getElementById('auth-btn').textContent = authMode === 'signin' ? 'Sign In' : 'Create Account';
-  document.querySelector('.auth-toggle span').textContent = authMode === 'signin' ? 'Sign up' : 'Sign in';
+  authMode = authMode==='signin' ? 'signup' : 'signin';
+  document.getElementById('auth-btn').textContent = authMode==='signin' ? 'Sign In' : 'Create Account';
+  document.querySelector('.auth-toggle span').textContent = authMode==='signin' ? 'Sign up' : 'Sign in';
 }
 function showAuthError(msg) {
   const el = document.getElementById('auth-error');
-  el.textContent = msg;
-  el.style.display = msg ? 'block' : 'none';
+  el.textContent = msg; el.style.display = msg ? 'block' : 'none';
 }
 async function authSubmit() {
   const email = document.getElementById('auth-email').value.trim();
   const pw = document.getElementById('auth-password').value;
   showAuthError('');
-  if (!email || !pw) { showAuthError('Email and password required'); return; }
+  if (!email||!pw) { showAuthError('Email and password required'); return; }
   document.getElementById('auth-btn').textContent = '…';
   let res;
   try {
-    if (authMode === 'signup') res = await sb.auth.signUp({ email, password: pw });
-    else res = await sb.auth.signInWithPassword({ email, password: pw });
-  } catch(e) {
-    showAuthError(e.message);
-    document.getElementById('auth-btn').textContent = authMode === 'signin' ? 'Sign In' : 'Create Account';
-    return;
-  }
-  if (res.error) {
-    showAuthError(res.error.message);
-    document.getElementById('auth-btn').textContent = authMode === 'signin' ? 'Sign In' : 'Create Account';
-    return;
-  }
-  if (authMode === 'signup' && !res.data?.session) {
-    showAuthError('');
-    document.getElementById('auth-wrap').innerHTML = '<h1>TradeDeck</h1><p style="color:var(--teal);margin-top:16px">Check your email to confirm your account, then sign in.</p>';
+    res = authMode==='signup'
+      ? await sb.auth.signUp({email,password:pw})
+      : await sb.auth.signInWithPassword({email,password:pw});
+  } catch(e) { showAuthError(e.message); document.getElementById('auth-btn').textContent = authMode==='signin'?'Sign In':'Create Account'; return; }
+  if (res.error) { showAuthError(res.error.message); document.getElementById('auth-btn').textContent = authMode==='signin'?'Sign In':'Create Account'; return; }
+  if (authMode==='signup' && !res.data?.session) {
+    document.getElementById('auth-wrap').innerHTML = '<h1>TradeDeck</h1><p style="color:var(--teal);margin-top:16px">Check your email to confirm, then sign in.</p>';
     return;
   }
   await bootApp(res.data.user);
@@ -301,21 +405,17 @@ async function bootApp(user) {
   document.getElementById('auth-wrap').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('main-nav').style.display = 'flex';
-
-  // Upsert profile
-  let { data: profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
-  if (error || !profile) {
-    const ins = await sb.from('profiles').insert({ id: user.id, email: user.email, tier: 1 }).select().single();
-    profile = ins.data || { id: user.id, email: user.email, tier: 1, full_name: '', trade_type: '', bio: '' };
+  let { data: profile } = await sb.from('profiles').select('*').eq('id',user.id).single();
+  if (!profile) {
+    const ins = await sb.from('profiles').insert({id:user.id,email:user.email,tier:1}).select().single();
+    profile = ins.data || {id:user.id,email:user.email,tier:1,full_name:'',trade_type:'',bio:''};
   }
   STATE.profile = profile;
-
   await loadAll();
   renderAll();
 }
-
 async function loadAll() {
-  const [j, k, d] = await Promise.allSettled([
+  const [j,k,d] = await Promise.allSettled([
     sb.from('jobs').select('*').neq('source','ksl').eq('status','open').order('created_at',{ascending:false}).limit(50),
     sb.from('jobs').select('*').eq('source','ksl').order('created_at',{ascending:false}).limit(100),
     sb.from('draw_schedules').select('*, milestones(*)').limit(30)
@@ -324,40 +424,19 @@ async function loadAll() {
   STATE.kslJobs = k.status==='fulfilled' ? (k.value.data||[]) : [];
   STATE.draws   = d.status==='fulfilled' ? (d.value.data||[]) : [];
 }
+async function signOut() { await sb.auth.signOut(); location.reload(); }
 
-async function signOut() {
-  await sb.auth.signOut();
-  location.reload();
-}
-
-// ── TABS ──────────────────────────────────────────────────────────────────
-function switchTab(tab) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById('screen-'+tab).classList.add('active');
-  document.getElementById('nav-'+tab).classList.add('active');
-}
-function workTab(tab, btn) {
-  STATE.workTab = tab; STATE.county = 'all';
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('county-tabs').style.display = tab==='ksl' ? 'flex' : 'none';
-  renderWork();
-}
-function closeOverlay(id) { document.getElementById(id).classList.remove('open'); }
-
-// ── RENDER ALL ────────────────────────────────────────────────────────────
+// ── RENDER ────────────────────────────────────────────────────────────────
 function renderAll() { renderHome(); renderWork(); renderDraws(); renderProfile(); }
 
-// ── HOME ──────────────────────────────────────────────────────────────────
 function renderHome() {
   if (!STATE.profile) return;
   const p = STATE.profile;
   const tierNames = ['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
   const tierEl = document.getElementById('home-tier');
-  tierEl.textContent = tierNames[p.tier] || 'Verified';
+  tierEl.textContent = tierNames[p.tier]||'Verified';
   tierEl.style.display = 'inline-block';
-  const myJobs = STATE.jobs.filter(j => j.posted_by === STATE.user.id);
+  const myJobs = STATE.jobs.filter(j=>j.posted_by===STATE.user.id);
   document.getElementById('home-content').innerHTML = `
     <div class="card">
       <div class="flex between"><span class="text-muted">Jobs Posted</span><strong>${myJobs.length}</strong></div>
@@ -373,13 +452,10 @@ function renderHome() {
     ${STATE.jobs.slice(0,3).map(j=>`
       <div class="card">
         <div class="flex between"><h3>${j.title}</h3><span class="badge badge-teal">${j.trade_type||'Trade'}</span></div>
-        <p>${j.location||''}</p>
-        <p>${j.budget||''}</p>
-      </div>`).join('')}
-  `;
+        <p>${j.location||''}</p><p>${j.budget||''}</p>
+      </div>`).join('')}`;
 }
 
-// ── WORK ──────────────────────────────────────────────────────────────────
 const COUNTIES = ['All','Cache','Box Elder','Weber','Davis','Salt Lake','Utah','Wasatch','Summit','Duchesne','Uintah','Carbon','Emery','Grand','San Juan','Sevier','Piute','Garfield','Kane','Iron','Washington','Beaver','Millard','Juab','Sanpete','Tooele','Morgan','Rich'];
 const LEADS = [
   {n:'PermitStack',d:'Utah building permits — new construction signals'},
@@ -395,42 +471,12 @@ const LEADS = [
   {n:'Craigslist',d:'Gig and sub postings'},
 ];
 
-function renderWork() {
-  const el = document.getElementById('work-content');
-  if (STATE.workTab === 'leads') {
-    el.innerHTML = LEADS.map(l=>`<div class="card"><h3>${l.n}</h3><p>${l.d}</p></div>`).join('');
-    return;
-  }
-  if (STATE.workTab === 'ksl') {
-    const ctEl = document.getElementById('county-tabs');
-    ctEl.innerHTML = COUNTIES.map(c=>{
-      const val = c==='All' ? 'all' : c;
-      return `<button class="county-tab${STATE.county===val?' active':''}" onclick="filterCounty('${val}',this)">${c}</button>`;
-    }).join('');
-    const list = STATE.county==='all' ? STATE.kslJobs : STATE.kslJobs.filter(j=>j.county===STATE.county);
-    el.innerHTML = list.length ? list.map(j=>`
-      <div class="card">
-        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">KSL</span></div>
-        <p>${j.company||''} · ${j.location||''}</p>
-        <p style="margin-top:6px">${(j.description||'').slice(0,150)}${j.description?.length>150?'…':''}</p>
-        <p class="text-muted" style="margin-top:4px">${j.pay||''} · ${j.job_type||''}</p>
-      </div>`).join('') :
-      '<p class="text-muted" style="padding:20px 0">No KSL jobs in this area yet. Scraper pulls daily.</p>';
-    return;
-  }
-  // Open jobs
-  el.innerHTML = STATE.jobs.length ? STATE.jobs.map(j=>`
-    <div class="card">
-      <div class="flex between"><h3>${j.title}</h3><span class="badge badge-teal">${j.trade_type||'Trade'}</span></div>
-      <p>${j.location||''}</p>
-      <p>${j.budget||''}</p>
-      <p class="text-muted" style="margin-top:6px;font-size:12px">${(j.description||'').slice(0,100)}${(j.description||'').length>100?'…':''}</p>
-      <div class="flex gap8 mt8">
-        <button class="btn btn-primary btn-sm" onclick="applyJob('${j.id}')">Apply</button>
-        <button class="btn btn-outline btn-sm" onclick="openRating('${j.id}')">Rate</button>
-      </div>
-    </div>`).join('') :
-    '<p class="text-muted" style="padding:20px 0">No open jobs yet. Post the first one.</p>';
+function workTab(tab, btn) {
+  STATE.workTab = tab; STATE.county = 'all';
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('county-tabs').style.display = tab==='ksl' ? 'flex' : 'none';
+  renderWork();
 }
 function filterCounty(county, btn) {
   STATE.county = county;
@@ -438,16 +484,143 @@ function filterCounty(county, btn) {
   btn.classList.add('active');
   renderWork();
 }
-async function applyJob(jobId) {
-  const { error } = await sb.from('applications').insert({ job_id: jobId, applicant_id: STATE.user.id, message: '' });
-  if (error && error.code === '23505') { toast('Already applied'); return; }
-  if (error) { toast('Error: '+error.message); return; }
-  toast('Applied!');
+function renderWork() {
+  const el = document.getElementById('work-content');
+  if (STATE.workTab==='leads') {
+    el.innerHTML = LEADS.map(l=>`<div class="card"><h3>${l.n}</h3><p>${l.d}</p></div>`).join('');
+    return;
+  }
+  if (STATE.workTab==='ksl') {
+    document.getElementById('county-tabs').innerHTML = COUNTIES.map(c=>{
+      const val = c==='All'?'all':c;
+      return `<button class="county-tab${STATE.county===val?' active':''}" onclick="filterCounty('${val}',this)">${c}</button>`;
+    }).join('');
+    const list = STATE.county==='all' ? STATE.kslJobs : STATE.kslJobs.filter(j=>j.county===STATE.county);
+    el.innerHTML = list.length ? list.map(j=>`
+      <div class="card">
+        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">KSL</span></div>
+        <p>${j.company||''} · ${j.location||''}</p>
+        <p style="margin-top:6px">${(j.description||'').slice(0,150)}${(j.description||'').length>150?'…':''}</p>
+        <p class="text-muted" style="margin-top:4px">${j.pay||''} · ${j.job_type||''}</p>
+        <button class="btn btn-primary btn-sm mt8" onclick="initiateApply('${j.id}','${(j.title||'').replace(/'/g,"\\'")}')">Apply — $20 fee</button>
+      </div>`).join('') :
+      '<p class="text-muted" style="padding:20px 0">No KSL jobs in this area yet.</p>';
+    return;
+  }
+  el.innerHTML = STATE.jobs.length ? STATE.jobs.map(j=>`
+    <div class="card">
+      <div class="flex between"><h3>${j.title}</h3><span class="badge badge-teal">${j.trade_type||'Trade'}</span></div>
+      <p>${j.location||''}</p><p>${j.budget||''}</p>
+      <p class="text-muted" style="margin-top:6px;font-size:12px">${(j.description||'').slice(0,100)}${(j.description||'').length>100?'…':''}</p>
+      <div class="flex gap8 mt8">
+        <button class="btn btn-primary btn-sm" onclick="initiateApply('${j.id}','${(j.title||'').replace(/'/g,"\\'")}')">Apply — $20 fee</button>
+        <button class="btn btn-outline btn-sm" onclick="initiateHire('${j.id}','${(j.title||'').replace(/'/g,"\\'")}')">Hire — $20 fee</button>
+        <button class="btn btn-outline btn-sm" onclick="openRating('${j.id}')">Rate</button>
+      </div>
+    </div>`).join('') :
+    '<p class="text-muted" style="padding:20px 0">No open jobs yet.</p>';
 }
 
-// ── POST JOB ──────────────────────────────────────────────────────────────
+// ── FEE-GATED ACTIONS ─────────────────────────────────────────────────────
+
+// Worker applies to a job → worker pays $20
+function initiateApply(jobId, jobTitle) {
+  openPayment(
+    'Worker Application Fee',
+    `A $20 platform fee is charged when you apply to "${jobTitle}". This keeps TradeDeck spam-free and worker-serious.`,
+    {
+      type: 'worker_apply',
+      data: { job_id: jobId },
+      onSuccess: async (paymentIntentId) => {
+        const { error } = await sb.from('applications').insert({
+          job_id: jobId,
+          applicant_id: STATE.user.id,
+          message: '',
+          fee_payment_intent: paymentIntentId
+        });
+        if (error && error.code==='23505') { toast('Already applied'); return; }
+        if (error) throw new Error(error.message);
+        await loadAll(); renderAll();
+      }
+    }
+  );
+}
+
+// Contractor hires someone → contractor pays $20
+function initiateHire(jobId, jobTitle) {
+  openPayment(
+    'Contractor Hire Fee',
+    `A $20 platform fee is charged when you hire for "${jobTitle}". Confirms the engagement is live.`,
+    {
+      type: 'contractor_hire',
+      data: { job_id: jobId },
+      onSuccess: async (paymentIntentId) => {
+        await sb.from('jobs').update({
+          status: 'filled',
+          hire_payment_intent: paymentIntentId,
+          hired_by: STATE.user.id
+        }).eq('id', jobId);
+        await loadAll(); renderAll();
+        toast('Job marked as hired!');
+      }
+    }
+  );
+}
+
+// Homeowner or contractor posts a job → poster pays $20
+function initiatePostJob() {
+  const title = document.getElementById('post-title').value.trim();
+  if (!title) { toast('Job title required'); return; }
+  if (STATE.milestones.length) {
+    const total = STATE.milestones.reduce((s,m)=>s+(+m.pct||0),0);
+    if (total!==100) { toast('Milestone % must total 100'); return; }
+  }
+  const role = document.getElementById('post-role').value;
+  const roleLabel = role==='homeowner' ? 'Homeowner' : 'Contractor';
+  openPayment(
+    `${roleLabel} Job Post Fee`,
+    `A $20 platform fee is charged to post "${title}". Your listing goes live immediately after payment.`,
+    {
+      type: 'job_post',
+      data: { role },
+      onSuccess: async (paymentIntentId) => {
+        const budget = document.getElementById('post-budget').value;
+        const { data: job, error } = await sb.from('jobs').insert({
+          title,
+          trade_type: document.getElementById('post-trade').value,
+          location: document.getElementById('post-location').value,
+          description: document.getElementById('post-desc').value,
+          budget,
+          posted_by: STATE.user.id,
+          posted_by_role: role,
+          source: 'tradedeck',
+          status: 'open',
+          post_payment_intent: paymentIntentId
+        }).select().single();
+        if (error) throw new Error(error.message);
+        if (STATE.milestones.length && job) {
+          const val = parseInt(budget)||0;
+          const { data: sched } = await sb.from('draw_schedules').insert({job_id:job.id,contract_value:val}).select().single();
+          if (sched) {
+            await sb.from('milestones').insert(STATE.milestones.map((m,i)=>({
+              schedule_id:sched.id,name:m.name,pct:m.pct,
+              order_num:i+1,verifier_type:m.verifier,status:'pending'
+            })));
+          }
+        }
+        STATE.milestones=[];
+        renderMilestones();
+        ['post-title','post-location','post-desc','post-budget'].forEach(id=>document.getElementById(id).value='');
+        await loadAll(); renderAll();
+        switchTab('work');
+      }
+    }
+  );
+}
+
+// ── MILESTONES ────────────────────────────────────────────────────────────
 function addMilestone() {
-  STATE.milestones.push({ name:'', pct:0, verifier:'owner' });
+  STATE.milestones.push({name:'',pct:0,verifier:'owner'});
   renderMilestones();
 }
 function removeMilestone(i) { STATE.milestones.splice(i,1); renderMilestones(); }
@@ -471,59 +644,21 @@ function updatePct() {
   const el = document.getElementById('pct-total');
   if (!STATE.milestones.length) { el.textContent=''; return; }
   el.textContent = `${total}% / 100%`;
-  el.style.color = total===100 ? '#50c878' : total>100 ? 'var(--danger)' : 'var(--muted)';
-}
-async function submitJob() {
-  const title = document.getElementById('post-title').value.trim();
-  if (!title) { toast('Job title required'); return; }
-  if (STATE.milestones.length) {
-    const total = STATE.milestones.reduce((s,m)=>s+(+m.pct||0),0);
-    if (total !== 100) { toast('Milestone % must total 100'); return; }
-  }
-  const { data: job, error } = await sb.from('jobs').insert({
-    title,
-    trade_type: document.getElementById('post-trade').value,
-    location: document.getElementById('post-location').value,
-    description: document.getElementById('post-desc').value,
-    budget: document.getElementById('post-budget').value,
-    posted_by: STATE.user.id,
-    source: 'tradedeck',
-    status: 'open'
-  }).select().single();
-  if (error) { toast('Error: '+error.message); return; }
-  if (STATE.milestones.length && job) {
-    const budget = parseInt(document.getElementById('post-budget').value) || 0;
-    const { data: sched } = await sb.from('draw_schedules').insert({ job_id: job.id, contract_value: budget }).select().single();
-    if (sched) {
-      await sb.from('milestones').insert(STATE.milestones.map((m,i)=>({
-        schedule_id: sched.id, name: m.name, pct: m.pct,
-        order_num: i+1, verifier_type: m.verifier, status: 'pending'
-      })));
-    }
-  }
-  STATE.milestones = [];
-  renderMilestones();
-  ['post-title','post-location','post-desc','post-budget'].forEach(id=>document.getElementById(id).value='');
-  await loadAll(); renderAll();
-  toast('Job posted!');
-  switchTab('work');
+  el.style.color = total===100?'#50c878':total>100?'var(--danger)':'var(--muted)';
 }
 
 // ── DRAWS ─────────────────────────────────────────────────────────────────
 function renderDraws() {
   const el = document.getElementById('draws-content');
   if (!STATE.draws.length) {
-    el.innerHTML = '<p class="text-muted" style="padding:20px 0">No draw schedules yet. Add milestones when posting a job.</p>';
+    el.innerHTML='<p class="text-muted" style="padding:20px 0">No draw schedules yet.</p>';
     return;
   }
-  el.innerHTML = STATE.draws.map(d => {
-    const ms = d.milestones || [];
+  el.innerHTML = STATE.draws.map(d=>{
+    const ms = d.milestones||[];
     const released = ms.filter(m=>m.status==='approved').reduce((s,m)=>s+(m.pct||0),0);
     return `<div class="card">
-      <div class="flex between">
-        <h3>Draw Schedule</h3>
-        <span class="text-muted">$${(d.contract_value||0).toLocaleString()}</span>
-      </div>
+      <div class="flex between"><h3>Draw Schedule</h3><span class="text-muted">$${(d.contract_value||0).toLocaleString()}</span></div>
       <div class="escrow-bar"><div class="escrow-fill" style="width:${released}%"></div></div>
       <p class="text-muted" style="font-size:12px">${released}% released</p>
       ${ms.map(m=>`
@@ -531,17 +666,17 @@ function renderDraws() {
           <span>${m.name} (${m.pct}%)</span>
           <div class="flex gap8" style="align-items:center">
             <span class="draw-status ${m.status}">${m.status}</span>
-            ${m.status==='pending' ? `<button class="btn btn-outline btn-sm" onclick="drawAction('${m.id}','submitted')">Submit</button>` : ''}
-            ${m.status==='submitted' ? `
+            ${m.status==='pending'?`<button class="btn btn-outline btn-sm" onclick="drawAction('${m.id}','submitted')">Submit</button>`:''}
+            ${m.status==='submitted'?`
               <button class="btn btn-primary btn-sm" onclick="drawAction('${m.id}','approved')">Approve</button>
-              <button class="btn btn-danger btn-sm" onclick="drawAction('${m.id}','disputed')">Dispute</button>` : ''}
+              <button class="btn btn-danger btn-sm" onclick="drawAction('${m.id}','disputed')">Dispute</button>`:''}
           </div>
         </div>`).join('')}
     </div>`;
   }).join('');
 }
 async function drawAction(id, status) {
-  await sb.from('milestones').update({ status }).eq('id', id);
+  await sb.from('milestones').update({status}).eq('id',id);
   await loadAll(); renderDraws();
   toast(status.charAt(0).toUpperCase()+status.slice(1));
 }
@@ -551,8 +686,8 @@ function renderProfile() {
   const el = document.getElementById('profile-content');
   if (!STATE.profile) return;
   const p = STATE.profile;
-  const tierNames = ['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
-  el.innerHTML = `
+  const tierNames=['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
+  el.innerHTML=`
     <div class="card">
       <h3>${p.full_name||p.email}</h3>
       <p class="text-muted">${p.trade_type||'No trade type set'}</p>
@@ -572,8 +707,7 @@ function renderProfile() {
       <label>Bio</label><textarea id="edit-bio">${p.bio||''}</textarea>
       <button class="btn btn-primary btn-block" onclick="saveProfile()">Save Profile</button>
     </div>
-    <button class="btn btn-outline btn-block mt8" onclick="signOut()">Sign Out</button>
-  `;
+    <button class="btn btn-outline btn-block mt8" onclick="signOut()">Sign Out</button>`;
 }
 async function saveProfile() {
   const u = {
@@ -581,42 +715,38 @@ async function saveProfile() {
     trade_type: document.getElementById('edit-trade').value,
     bio: document.getElementById('edit-bio').value
   };
-  const { error } = await sb.from('profiles').update(u).eq('id', STATE.user.id);
+  const { error } = await sb.from('profiles').update(u).eq('id',STATE.user.id);
   if (error) { toast('Error: '+error.message); return; }
-  STATE.profile = {...STATE.profile, ...u};
-  renderProfile();
-  toast('Saved!');
+  STATE.profile = {...STATE.profile,...u};
+  renderProfile(); toast('Saved!');
 }
 
 // ── RATINGS ───────────────────────────────────────────────────────────────
 function openRating(jobId) {
-  STATE.ratingJobId = jobId; STATE.rating = 0;
+  STATE.ratingJobId=jobId; STATE.rating=0;
   document.querySelectorAll('#star-picker span').forEach(s=>s.classList.remove('on'));
-  document.getElementById('review-text').value = '';
+  document.getElementById('review-text').value='';
   document.getElementById('rating-overlay').classList.add('open');
 }
 function setRating(n) {
-  STATE.rating = n;
+  STATE.rating=n;
   document.querySelectorAll('#star-picker span').forEach((s,i)=>s.classList.toggle('on',i<n));
 }
 async function submitRating() {
   if (!STATE.rating) { toast('Pick a star rating'); return; }
   const { error } = await sb.from('reviews').insert({
-    job_id: STATE.ratingJobId,
-    reviewer_id: STATE.user.id,
-    rating: STATE.rating,
-    body: document.getElementById('review-text').value
+    job_id:STATE.ratingJobId,reviewer_id:STATE.user.id,
+    rating:STATE.rating,body:document.getElementById('review-text').value
   });
-  if (error && error.code==='23505') { toast('Already rated'); closeOverlay('rating-overlay'); return; }
+  if (error&&error.code==='23505') { toast('Already rated'); closeOverlay('rating-overlay'); return; }
   if (error) { toast('Error: '+error.message); return; }
-  toast('Rating submitted!');
-  closeOverlay('rating-overlay');
+  toast('Rating submitted!'); closeOverlay('rating-overlay');
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────
-(async () => {
+(async()=>{
   try {
-    const { data: { session } } = await sb.auth.getSession();
+    const {data:{session}} = await sb.auth.getSession();
     if (session?.user) await bootApp(session.user);
   } catch(e) {
     document.getElementById('auth-wrap').innerHTML +=
