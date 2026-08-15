@@ -102,6 +102,20 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 .spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .7s linear infinite;margin:40px auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* MESSAGE BUBBLES */
+.bubble{max-width:75%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.4;word-break:break-word}
+.bubble-me{background:var(--teal);color:#000;align-self:flex-end;border-bottom-right-radius:4px}
+.bubble-them{background:var(--surface);border:1px solid var(--border);color:var(--text);align-self:flex-start;border-bottom-left-radius:4px}
+.bubble-time{font-size:10px;color:var(--muted);margin-top:2px;text-align:right}
+
+/* CONNECTION CARDS */
+.connect-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.connect-card .info h4{font-size:14px;margin-bottom:2px}
+.connect-card .info p{font-size:12px;color:var(--muted)}
+.connect-status{font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px}
+.connect-status.pending{background:rgba(255,180,0,.15);color:#ffb400}
+.connect-status.accepted{background:rgba(80,200,120,.15);color:#50c878}
+
 .mt8{margin-top:8px}.mt16{margin-top:16px}
 .flex{display:flex}.gap8{gap:8px}.between{justify-content:space-between}
 .text-muted{color:var(--muted);font-size:13px}
@@ -184,6 +198,14 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     <div id="draws-content"><div class="spinner"></div></div>
   </div>
 
+  <div id="screen-messages" class="screen">
+    <div class="screen-header">
+      <h2>Messages</h2>
+      <span id="msg-unread-badge" class="badge badge-teal" style="display:none"></span>
+    </div>
+    <div id="messages-content"><div class="spinner"></div></div>
+  </div>
+
   <div id="screen-profile" class="screen">
     <div class="screen-header"><h2>Profile</h2></div>
     <div id="profile-content"><div class="spinner"></div></div>
@@ -206,6 +228,37 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     <div class="stripe-card-wrap" id="card-element"></div>
     <div id="card-error" class="error-box" style="display:none"></div>
     <button id="pay-btn" class="btn btn-primary btn-block" onclick="submitPayment()">Pay $20 & Confirm</button>
+  </div>
+</div>
+
+<!-- CONNECT REQUEST OVERLAY -->
+<div class="overlay" id="connect-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <h3>Request to Connect</h3>
+      <button class="close-btn" onclick="closeOverlay('connect-overlay')">×</button>
+    </div>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:16px">
+      Send a connection request to <strong id="connect-target-name" style="color:var(--text)"></strong>. 
+      They must accept before either of you can message each other.
+    </p>
+    <textarea id="connect-message" placeholder="Optional intro message…" style="min-height:60px"></textarea>
+    <button class="btn btn-primary btn-block" onclick="submitConnectRequest()">Send Request</button>
+  </div>
+</div>
+
+<!-- THREAD OVERLAY -->
+<div class="overlay" id="thread-overlay" style="align-items:stretch">
+  <div class="overlay-inner" style="border-radius:0;max-height:100vh;display:flex;flex-direction:column;padding:0">
+    <div class="overlay-header" style="padding:16px;border-bottom:1px solid var(--border);margin-bottom:0">
+      <h3 id="thread-title">Conversation</h3>
+      <button class="close-btn" onclick="closeOverlay('thread-overlay')">×</button>
+    </div>
+    <div id="thread-messages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px"></div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px">
+      <input id="thread-input" placeholder="Message…" style="margin-bottom:0;flex:1" onkeydown="if(event.key==='Enter')sendMessage()"/>
+      <button class="btn btn-primary btn-sm" onclick="sendMessage()">Send</button>
+    </div>
   </div>
 </div>
 
@@ -238,6 +291,10 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   </button>
   <button onclick="switchTab('draws')" id="nav-draws">
     <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Draws
+  </button>
+  <button onclick="switchTab('messages')" id="nav-messages">
+    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+    <span id="nav-msg-label">Messages</span>
   </button>
   <button onclick="switchTab('profile')" id="nav-profile">
     <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile
@@ -415,19 +472,24 @@ async function bootApp(user) {
   renderAll();
 }
 async function loadAll() {
-  const [j,k,d] = await Promise.allSettled([
+  const [j,k,d,c] = await Promise.allSettled([
     sb.from('jobs').select('*').neq('source','ksl').eq('status','open').order('created_at',{ascending:false}).limit(50),
     sb.from('jobs').select('*').eq('source','ksl').order('created_at',{ascending:false}).limit(100),
-    sb.from('draw_schedules').select('*, milestones(*)').limit(30)
+    sb.from('draw_schedules').select('*, milestones(*)').limit(30),
+    sb.from('connection_requests')
+      .select('*, sender:profiles!connection_requests_sender_id_fkey(id,full_name,email,trade_type), receiver:profiles!connection_requests_receiver_id_fkey(id,full_name,email,trade_type)')
+      .or(`sender_id.eq.${STATE.user.id},receiver_id.eq.${STATE.user.id}`)
+      .order('created_at',{ascending:false})
   ]);
-  STATE.jobs    = j.status==='fulfilled' ? (j.value.data||[]) : [];
-  STATE.kslJobs = k.status==='fulfilled' ? (k.value.data||[]) : [];
-  STATE.draws   = d.status==='fulfilled' ? (d.value.data||[]) : [];
+  STATE.jobs        = j.status==='fulfilled' ? (j.value.data||[]) : [];
+  STATE.kslJobs     = k.status==='fulfilled' ? (k.value.data||[]) : [];
+  STATE.draws       = d.status==='fulfilled' ? (d.value.data||[]) : [];
+  STATE.connections = c.status==='fulfilled' ? (c.value.data||[]) : [];
 }
 async function signOut() { await sb.auth.signOut(); location.reload(); }
 
 // ── RENDER ────────────────────────────────────────────────────────────────
-function renderAll() { renderHome(); renderWork(); renderDraws(); renderProfile(); }
+function renderAll() { renderHome(); renderWork(); renderDraws(); renderMessages(); renderProfile(); }
 
 function renderHome() {
   if (!STATE.profile) return;
@@ -512,9 +574,10 @@ function renderWork() {
       <div class="flex between"><h3>${j.title}</h3><span class="badge badge-teal">${j.trade_type||'Trade'}</span></div>
       <p>${j.location||''}</p><p>${j.budget||''}</p>
       <p class="text-muted" style="margin-top:6px;font-size:12px">${(j.description||'').slice(0,100)}${(j.description||'').length>100?'…':''}</p>
-      <div class="flex gap8 mt8">
-        <button class="btn btn-primary btn-sm" onclick="initiateApply('${j.id}','${(j.title||'').replace(/'/g,"\\'")}')">Apply — $20 fee</button>
-        <button class="btn btn-outline btn-sm" onclick="initiateHire('${j.id}','${(j.title||'').replace(/'/g,"\\'")}')">Hire — $20 fee</button>
+      <div class="flex gap8 mt8" style="flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="initiateApply('${j.id}','${(j.title||'').replace(/'/g,"\\'")}')">Apply — $20</button>
+        <button class="btn btn-outline btn-sm" onclick="initiateHire('${j.id}','${(j.title||'').replace(/'/g,"\\'")}')">Hire — $20</button>
+        ${j.posted_by && j.posted_by !== STATE.user.id ? `<button class="btn btn-outline btn-sm" onclick="initiateConnect('${j.posted_by}','${(j.title||'Job Poster').replace(/'/g,"\\'")}')">Connect</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="openRating('${j.id}')">Rate</button>
       </div>
     </div>`).join('') :
@@ -741,6 +804,209 @@ async function submitRating() {
   if (error&&error.code==='23505') { toast('Already rated'); closeOverlay('rating-overlay'); return; }
   if (error) { toast('Error: '+error.message); return; }
   toast('Rating submitted!'); closeOverlay('rating-overlay');
+}
+
+// ── MESSAGING ─────────────────────────────────────────────────────────────
+// STATE additions
+STATE.connections = [];       // all connection records for this user
+STATE.activeThreadId = null;  // current open conversation id
+STATE.activeThreadOther = {}; // {id, full_name, email}
+STATE.pendingConnectTarget = null;
+
+async function loadConnections() {
+  // Requests where I am sender or receiver
+  const { data } = await sb
+    .from('connection_requests')
+    .select('*, sender:profiles!connection_requests_sender_id_fkey(id,full_name,email,trade_type), receiver:profiles!connection_requests_receiver_id_fkey(id,full_name,email,trade_type)')
+    .or(`sender_id.eq.${STATE.user.id},receiver_id.eq.${STATE.user.id}`)
+    .order('created_at', { ascending: false });
+  STATE.connections = data || [];
+}
+
+async function loadMessages(conversationId) {
+  const { data } = await sb
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true });
+  return data || [];
+}
+
+function renderMessages() {
+  const el = document.getElementById('messages-content');
+  if (!STATE.connections.length) {
+    el.innerHTML = `
+      <div class="card">
+        <h3>No connections yet</h3>
+        <p>Find a job or a worker, then tap <strong>Connect</strong> to request messaging access. Both sides must accept before chatting.</p>
+      </div>`;
+    return;
+  }
+
+  const pending = STATE.connections.filter(c => c.status === 'pending');
+  const accepted = STATE.connections.filter(c => c.status === 'accepted');
+
+  let html = '';
+
+  if (pending.length) {
+    html += `<h3 style="font-size:13px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Pending (${pending.length})</h3>`;
+    html += pending.map(c => {
+      const isReceiver = c.receiver_id === STATE.user.id;
+      const other = isReceiver ? c.sender : c.receiver;
+      const awaitingMe = isReceiver && c.status === 'pending';
+      return `<div class="connect-card">
+        <div class="info">
+          <h4>${other?.full_name || other?.email || 'Unknown'}</h4>
+          <p>${other?.trade_type || ''}</p>
+          ${c.intro_message ? `<p style="margin-top:4px;font-style:italic">"${c.intro_message.slice(0,60)}"</p>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <span class="connect-status pending">${awaitingMe ? 'Accept?' : 'Waiting'}</span>
+          ${awaitingMe ? `<button class="btn btn-primary btn-sm" onclick="acceptConnection('${c.id}')">Accept</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  if (accepted.length) {
+    html += `<h3 style="font-size:13px;color:var(--muted);margin:16px 0 10px;text-transform:uppercase;letter-spacing:.05em">Conversations (${accepted.length})</h3>`;
+    html += accepted.map(c => {
+      const other = c.sender_id === STATE.user.id ? c.receiver : c.sender;
+      return `<div class="connect-card" onclick="openThread('${c.conversation_id}','${other?.id}','${(other?.full_name||other?.email||'').replace(/'/g,"\\'")}')">
+        <div class="info">
+          <h4>${other?.full_name || other?.email || 'Unknown'}</h4>
+          <p>${other?.trade_type || ''}</p>
+        </div>
+        <span class="connect-status accepted">Open →</span>
+      </div>`;
+    }).join('');
+  }
+
+  el.innerHTML = html;
+
+  // Unread badge
+  const unread = pending.filter(c => c.receiver_id === STATE.user.id).length;
+  const badge = document.getElementById('msg-unread-badge');
+  const navLabel = document.getElementById('nav-msg-label');
+  if (unread > 0) {
+    badge.textContent = unread;
+    badge.style.display = 'inline-block';
+    navLabel.textContent = `Msgs (${unread})`;
+  } else {
+    badge.style.display = 'none';
+    navLabel.textContent = 'Messages';
+  }
+}
+
+// Initiate connect from any job card
+function initiateConnect(targetUserId, targetName) {
+  STATE.pendingConnectTarget = { id: targetUserId, name: targetName };
+  document.getElementById('connect-target-name').textContent = targetName;
+  document.getElementById('connect-message').value = '';
+  document.getElementById('connect-overlay').classList.add('open');
+}
+
+async function submitConnectRequest() {
+  const target = STATE.pendingConnectTarget;
+  if (!target) return;
+
+  // Check if connection already exists
+  const existing = STATE.connections.find(c =>
+    (c.sender_id === STATE.user.id && c.receiver_id === target.id) ||
+    (c.receiver_id === STATE.user.id && c.sender_id === target.id)
+  );
+  if (existing) {
+    toast('Connection already exists');
+    closeOverlay('connect-overlay');
+    return;
+  }
+
+  // Create conversation first
+  const { data: convo } = await sb.from('conversations').insert({}).select().single();
+  if (!convo) { toast('Error creating conversation'); return; }
+
+  // Add both members
+  await sb.from('conversation_members').insert([
+    { conversation_id: convo.id, user_id: STATE.user.id },
+    { conversation_id: convo.id, user_id: target.id }
+  ]);
+
+  // Create connection request
+  const { error } = await sb.from('connection_requests').insert({
+    sender_id: STATE.user.id,
+    receiver_id: target.id,
+    conversation_id: convo.id,
+    intro_message: document.getElementById('connect-message').value,
+    status: 'pending'
+  });
+
+  if (error) { toast('Error: ' + error.message); return; }
+  closeOverlay('connect-overlay');
+  await loadConnections();
+  renderMessages();
+  toast('Connection request sent!');
+}
+
+async function acceptConnection(requestId) {
+  await sb.from('connection_requests').update({ status: 'accepted' }).eq('id', requestId);
+  await loadConnections();
+  renderMessages();
+  toast('Connected! You can now message each other.');
+}
+
+async function openThread(conversationId, otherId, otherName) {
+  STATE.activeThreadId = conversationId;
+  STATE.activeThreadOther = { id: otherId, name: otherName };
+  document.getElementById('thread-title').textContent = otherName;
+  document.getElementById('thread-messages').innerHTML = '<div class="spinner"></div>';
+  document.getElementById('thread-overlay').classList.add('open');
+
+  // Mark as read
+  await sb.from('conversation_members')
+    .update({ last_read_at: new Date().toISOString() })
+    .eq('conversation_id', conversationId)
+    .eq('user_id', STATE.user.id);
+
+  await renderThread();
+
+  // Realtime subscription
+  sb.channel('thread-'+conversationId)
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'messages',
+      filter: `conversation_id=eq.${conversationId}`
+    }, () => renderThread())
+    .subscribe();
+}
+
+async function renderThread() {
+  const msgs = await loadMessages(STATE.activeThreadId);
+  const el = document.getElementById('thread-messages');
+  if (!msgs.length) {
+    el.innerHTML = '<p class="text-muted" style="text-align:center;padding:20px">No messages yet. Say hello!</p>';
+    return;
+  }
+  el.innerHTML = msgs.map(m => {
+    const mine = m.sender_id === STATE.user.id;
+    const time = new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `<div style="display:flex;flex-direction:column;align-items:${mine ? 'flex-end' : 'flex-start'}">
+      <div class="bubble ${mine ? 'bubble-me' : 'bubble-them'}">${m.body}</div>
+      <span class="bubble-time">${time}</span>
+    </div>`;
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('thread-input');
+  const body = input.value.trim();
+  if (!body || !STATE.activeThreadId) return;
+  input.value = '';
+  await sb.from('messages').insert({
+    conversation_id: STATE.activeThreadId,
+    sender_id: STATE.user.id,
+    body
+  });
+  await renderThread();
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────
