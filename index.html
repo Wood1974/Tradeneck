@@ -1,1511 +1,628 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TradeDeck -- Hire the Trade. Find the Work.</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>TradeDeck</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+*{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --navy:#0A0A0A;--steel:#888888;--amber:#0BBCD4;--amber-dk:#0997AA;
-  --concrete:#FFFFFF;--white:#FFFFFF;--slate:#141414;--line:rgba(255,255,255,0.1);
-  --radius:4px;--green:#4ADE80;--red:#FF5555;--spruce:#1E3A2F;--brass:#B8960C;
+  --bg:#0A0A0A;--surface:#141414;--border:#222;
+  --teal:#0BBCD4;--text:#F0F0F0;--muted:#888;--danger:#e05555;
 }
-html{scroll-behavior:smooth}
-body{font-family:'Inter',sans-serif;background:var(--navy);color:var(--concrete);min-height:100vh}
+body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh}
 
 /* NAV */
-nav{display:flex;align-items:center;justify-content:space-between;padding:16px 40px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--navy);z-index:100}
-.logo{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.6rem;letter-spacing:0.04em;color:var(--white);cursor:pointer}
-.logo span{color:var(--amber)}
-.nav-right{display:flex;gap:12px;align-items:center}
-.nav-user{display:flex;align-items:center;gap:10px}
-.nav-tier{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;padding:3px 9px;border-radius:2px;border:1.5px solid var(--amber);color:var(--amber);background:rgba(11,188,212,0.08)}
-.nav-email{color:var(--steel);font-size:0.8rem}
-.btn-primary{background:var(--amber);color:#000;border:none;padding:10px 22px;border-radius:var(--radius);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:0.06em;cursor:pointer;text-transform:uppercase;transition:background 0.15s;text-decoration:none;display:inline-block}
-.btn-primary:hover{background:var(--amber-dk)}
-.btn-ghost{background:transparent;color:var(--concrete);border:1px solid var(--steel);padding:10px 22px;border-radius:var(--radius);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:0.06em;cursor:pointer;text-transform:uppercase;transition:all 0.15s}
-.btn-ghost:hover{border-color:var(--white);color:var(--white)}
-.btn-sm{padding:7px 16px;font-size:0.85rem}
-.btn-danger{background:#8B2020;color:#fff;border:none;padding:7px 16px;border-radius:var(--radius);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.85rem;letter-spacing:0.06em;cursor:pointer;text-transform:uppercase}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--surface);border-top:1px solid var(--border);z-index:100}
+nav button{flex:1;padding:12px 4px 10px;background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+nav button.active{color:var(--teal)}
+nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
 
-/* PAGE TABS */
-.page-tab-bar{display:flex;border-bottom:1px solid var(--line);background:var(--navy);overflow-x:auto;position:sticky;top:57px;z-index:99}
-.page-tab{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.9rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);padding:14px 22px;cursor:pointer;border:none;background:none;border-bottom:3px solid transparent;transition:all 0.15s;white-space:nowrap}
-.page-tab:hover{color:var(--white)}
-.page-tab.active{color:var(--amber);border-bottom-color:var(--amber)}
-.page-view{display:none}
-.page-view.active{display:block}
+/* LAYOUT */
+#app{padding:16px 16px 80px}
+.screen{display:none}.screen.active{display:block}
 
-/* AUTH MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:500;align-items:center;justify-content:center;padding:20px}
-.modal-overlay.active{display:flex}
-.modal-panel{background:var(--slate);border:1px solid var(--line);border-radius:8px;width:100%;max-width:420px;padding:32px}
-.modal-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.6rem;text-transform:uppercase;color:var(--white);margin-bottom:6px;letter-spacing:0.04em}
-.modal-sub{color:var(--steel);font-size:0.875rem;margin-bottom:24px}
-.modal-tabs{display:flex;gap:0;margin-bottom:24px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
-.modal-tab{flex:1;padding:10px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.9rem;letter-spacing:0.06em;text-transform:uppercase;border:none;background:transparent;color:var(--steel);cursor:pointer;transition:all 0.15s}
-.modal-tab.active{background:var(--amber);color:#000}
-.auth-field{margin-bottom:16px}
-.auth-field label{display:block;font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:6px;font-weight:500}
-.auth-field input{width:100%;background:var(--navy);border:1px solid rgba(255,255,255,0.15);border-radius:var(--radius);color:var(--white);font-family:'Inter',sans-serif;font-size:0.9rem;padding:11px 14px;outline:none;transition:border-color 0.15s}
-.auth-field input:focus{border-color:var(--amber)}
-.auth-field input::placeholder{color:rgba(255,255,255,0.25)}
-.auth-error{color:var(--red);font-size:0.8rem;margin-bottom:12px;display:none}
-.auth-success{color:var(--green);font-size:0.8rem;margin-bottom:12px;display:none}
-.modal-close{position:absolute;top:16px;right:20px;background:none;border:none;color:var(--steel);font-size:1.4rem;cursor:pointer}
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
+.card h3{font-size:15px;margin-bottom:6px}
+.card p{font-size:13px;color:var(--muted);line-height:1.5}
 
-/* HERO */
-.hero{padding:90px 40px 40px;max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
-.hero-eyebrow{font-family:'Barlow Condensed',sans-serif;font-size:0.8rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--amber);margin-bottom:18px}
-.hero h1{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(2.8rem,5vw,4.2rem);line-height:1.0;color:var(--white);text-transform:uppercase;letter-spacing:0.02em;margin-bottom:20px}
-.hero h1 em{font-style:normal;color:var(--amber)}
-.hero-sub{color:var(--steel);font-size:1rem;line-height:1.65;margin-bottom:36px;max-width:440px}
-.hero-ctas{display:flex;gap:14px;flex-wrap:wrap}
-.blueprint-card{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:28px;position:relative;overflow:hidden}
-.blueprint-card::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(139,155,180,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(139,155,180,0.06) 1px,transparent 1px);background-size:28px 28px;pointer-events:none}
-.bc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}
-.bc-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.25rem;letter-spacing:0.04em;color:var(--white);text-transform:uppercase}
-.bc-subtitle{color:var(--steel);font-size:0.8rem;margin-top:2px}
-.badge{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;padding:4px 10px;border-radius:2px;border:1.5px solid}
-.badge-open{color:#4ADE80;border-color:#4ADE80;background:rgba(74,222,128,0.08)}
-.badge-amber{color:var(--amber);border-color:var(--amber);background:rgba(11,188,212,0.1)}
-.badge-permit{color:var(--amber);border-color:var(--amber);background:rgba(11,188,212,0.08)}
-.bc-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
-.bc-field label{display:block;font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:4px;font-weight:500}
-.bc-field .val{font-size:0.9rem;color:var(--concrete);font-weight:500}
-.bc-divider{border:none;border-top:1px dashed var(--line);margin:16px 0}
-.bc-footer{display:flex;justify-content:space-between;align-items:center}
-.bc-apply-count{color:var(--steel);font-size:0.8rem}
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;border:none;cursor:pointer}
+.btn-primary{background:var(--teal);color:#000}
+.btn-outline{background:none;border:1px solid var(--border);color:var(--text)}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-sm{padding:6px 12px;font-size:13px}
+.btn-block{width:100%;margin-top:8px}
 
-/* STATS */
-.stats-bar{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:24px 40px;display:flex;justify-content:center;gap:60px;flex-wrap:wrap}
-.stat{text-align:center}
-.stat .num{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:2rem;color:var(--amber);line-height:1}
-.stat .lbl{font-size:0.75rem;color:var(--steel);text-transform:uppercase;letter-spacing:0.08em;margin-top:4px}
+/* FORMS */
+input,textarea,select{width:100%;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;margin-bottom:10px;outline:none}
+input:focus,textarea:focus,select:focus{border-color:var(--teal)}
+textarea{min-height:80px;resize:vertical}
+label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 
-/* SECTION */
-.section{max-width:1100px;margin:0 auto;padding:80px 40px}
-.section-label{font-family:'Barlow Condensed',sans-serif;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--amber);margin-bottom:12px}
-.section-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(2rem,4vw,3rem);text-transform:uppercase;color:var(--white);margin-bottom:48px;line-height:1.0}
+/* BADGE */
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
+.badge-teal{background:rgba(11,188,212,.15);color:var(--teal)}
+.badge-ksl{background:rgba(255,180,0,.15);color:#ffb400}
 
-/* POST BAR */
-.post-bar{background:linear-gradient(135deg,var(--slate) 0%,#232840 100%);border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:40px;text-align:center}
-.post-bar h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:2.2rem;text-transform:uppercase;color:var(--white);margin-bottom:8px}
-.post-bar p{color:var(--steel);margin-bottom:24px;font-size:0.9rem}
+/* TABS */
+.tab-bar{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px}
+.tab-btn{white-space:nowrap;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--muted);font-size:13px;cursor:pointer}
+.tab-btn.active{background:var(--teal);color:#000;border-color:var(--teal)}
 
-/* FIND WORK */
-.fw-header{background:linear-gradient(135deg,var(--slate) 0%,#232840 100%);border-bottom:1px solid var(--line);padding:48px 40px 40px}
-.fw-header-inner{max-width:1100px;margin:0 auto}
-.fw-eyebrow{font-family:'Barlow Condensed',sans-serif;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--amber);margin-bottom:10px}
-.fw-header h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(2rem,4vw,3rem);text-transform:uppercase;color:var(--white);line-height:1;margin-bottom:10px}
-.fw-header p{color:var(--steel);font-size:0.9rem;max-width:520px}
-.fw-filters{background:var(--slate);border-bottom:1px solid var(--line);padding:18px 40px;position:sticky;top:105px;z-index:90}
-.fw-filters-inner{max-width:1100px;margin:0 auto;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-.fw-search{flex:1;min-width:200px;background:var(--navy);border:1px solid rgba(139,155,180,0.3);border-radius:var(--radius);color:var(--concrete);font-family:'Inter',sans-serif;font-size:0.875rem;padding:9px 14px;outline:none;transition:border-color 0.15s}
-.fw-search::placeholder{color:rgba(139,155,180,0.5)}
-.fw-search:focus{border-color:var(--amber)}
-.fw-select{background:var(--navy);border:1px solid rgba(139,155,180,0.3);border-radius:var(--radius);color:var(--concrete);font-family:'Inter',sans-serif;font-size:0.875rem;padding:9px 14px;outline:none;appearance:none;cursor:pointer;min-width:140px}
-.fw-select:focus{border-color:var(--amber)}
-.fw-clear{background:none;border:1px solid rgba(139,155,180,0.3);border-radius:var(--radius);color:var(--steel);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.8rem;letter-spacing:0.06em;text-transform:uppercase;padding:9px 16px;cursor:pointer;transition:all 0.15s;white-space:nowrap}
-.fw-clear:hover{border-color:var(--steel);color:var(--white)}
-.fw-count{font-size:0.78rem;color:var(--steel);margin-left:auto;white-space:nowrap}
-.fw-subtabs{max-width:1100px;margin:0 auto;display:flex;border-bottom:1px solid var(--line);padding:0 40px}
-.fw-subtab{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.85rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);padding:16px 24px 14px;cursor:pointer;border:none;background:none;border-bottom:3px solid transparent;transition:all 0.15s;margin-bottom:-1px}
-.fw-subtab:hover{color:var(--white)}
-.fw-subtab.active{color:var(--amber);border-bottom-color:var(--amber)}
-.fw-subview{display:none}
-.fw-subview.active{display:block}
-.fw-body{max-width:1100px;margin:0 auto;padding:32px 40px 60px}
-.jobs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px}
-.job-card{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:22px;position:relative;overflow:hidden;transition:border-color 0.15s,transform 0.15s;cursor:pointer}
-.job-card:hover{border-color:rgba(139,155,180,0.5);transform:translateY(-2px)}
-.job-card::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(139,155,180,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(139,155,180,0.05) 1px,transparent 1px);background-size:24px 24px;pointer-events:none}
-.jc-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
-.jc-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;text-transform:uppercase;color:var(--white);letter-spacing:0.03em;line-height:1.2}
-.jc-meta{color:var(--steel);font-size:0.78rem;margin-top:3px}
-.jc-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.jc-field label{display:block;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:2px}
-.jc-field .jval{font-size:0.85rem;color:var(--concrete)}
-.jc-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:12px;margin-top:4px}
-.jc-apply-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.8rem;letter-spacing:0.06em;text-transform:uppercase;background:var(--amber);color:#000;border:none;padding:7px 16px;border-radius:var(--radius);cursor:pointer;transition:background 0.15s}
-.jc-apply-btn:hover{background:var(--amber-dk)}
-.jc-apply-btn:disabled{background:#333;color:var(--steel);cursor:default}
+/* COUNTY */
+.county-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px}
+.county-tab{white-space:nowrap;padding:4px 10px;border-radius:14px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0}
+.county-tab.active{background:var(--teal);color:#000;border-color:var(--teal)}
 
-/* LEAD SOURCES */
-.ls-section{margin-bottom:36px}
-.ls-section-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--amber);padding:10px 0 8px;border-bottom:1px solid var(--line);margin-bottom:10px}
-.ls-item{display:flex;align-items:center;gap:14px;background:var(--slate);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;transition:border-color 0.15s}
-.ls-item:hover{border-color:rgba(139,155,180,0.45)}
-.ls-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;text-transform:uppercase;color:var(--white);letter-spacing:0.03em;min-width:160px}
-.ls-desc{font-size:0.82rem;color:var(--steel);flex:1;line-height:1.5}
-.ls-tags{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
-.ls-tag{font-family:'Barlow Condensed',sans-serif;font-size:0.65rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:3px 8px;border-radius:2px;border:1px solid;white-space:nowrap}
-.ls-tag-free{color:#4ADE80;border-color:rgba(74,222,128,0.4);background:rgba(74,222,128,0.06)}
-.ls-tag-paid{color:var(--amber);border-color:rgba(11,188,212,0.4);background:rgba(11,188,212,0.06)}
-.ls-tag-trade{color:var(--steel);border-color:rgba(139,155,180,0.3);background:rgba(139,155,180,0.06)}
-.ls-link{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.78rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--amber);text-decoration:none;white-space:nowrap;padding:6px 12px;border:1px solid rgba(11,188,212,0.3);border-radius:var(--radius);transition:all 0.15s}
-.ls-link:hover{background:var(--amber);color:var(--navy)}
-.fw-empty{text-align:center;padding:60px 20px;color:var(--steel)}
+/* HEADER */
+.screen-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.screen-header h2{font-size:20px;font-weight:700}
 
-/* COMPANYCAM */
-.cc-header{background:linear-gradient(135deg,var(--slate) 0%,#232840 100%);border-bottom:1px solid var(--line);padding:48px 40px 40px}
-.cc-header-inner{max-width:1100px;margin:0 auto}
-.cc-eyebrow{font-family:'Barlow Condensed',sans-serif;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--amber);margin-bottom:10px}
-.cc-header h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(2rem,4vw,3rem);text-transform:uppercase;color:var(--white);line-height:1;margin-bottom:10px}
-.cc-header p{color:var(--steel);font-size:0.9rem;max-width:520px}
-.cc-body{max-width:1100px;margin:0 auto;padding:32px 40px 60px}
-.cc-connect-banner{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:32px;text-align:center;margin-bottom:28px}
-.cc-connect-banner h3{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.2rem;text-transform:uppercase;color:var(--white);margin-bottom:8px}
-.cc-connect-banner p{color:var(--steel);font-size:0.875rem;margin-bottom:18px}
-.cc-api-input{background:var(--navy);border:1px solid rgba(139,155,180,0.3);border-radius:var(--radius);color:var(--concrete);font-family:'Inter',sans-serif;font-size:0.875rem;padding:10px 14px;outline:none;width:100%;max-width:400px;margin:0 auto 12px;display:block}
-.cc-api-input:focus{border-color:var(--amber)}
-.cc-stats{display:flex;gap:24px;margin-bottom:28px;flex-wrap:wrap}
-.cc-stat{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:16px 20px;flex:1;min-width:120px}
-.cc-stat .num{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.8rem;color:var(--amber);line-height:1}
-.cc-stat .lbl{font-size:0.72rem;color:var(--steel);text-transform:uppercase;letter-spacing:0.08em;margin-top:4px}
-.cc-toolbar{display:flex;gap:12px;align-items:center;margin-bottom:24px;flex-wrap:wrap}
-.cc-job-select{background:var(--slate);border:1px solid rgba(139,155,180,0.3);border-radius:var(--radius);color:var(--concrete);font-family:'Inter',sans-serif;font-size:0.875rem;padding:9px 14px;outline:none;appearance:none;min-width:200px;cursor:pointer}
-.cc-photos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
-.cc-photo-card{background:var(--slate);border:1px solid var(--line);border-radius:6px;overflow:hidden;transition:border-color 0.15s,transform 0.15s}
-.cc-photo-card:hover{border-color:rgba(139,155,180,0.5);transform:translateY(-2px)}
-.cc-photo-img-placeholder{width:100%;aspect-ratio:4/3;background:var(--navy);display:flex;align-items:center;justify-content:center;color:var(--steel);font-size:0.8rem;letter-spacing:0.1em;text-transform:uppercase;font-family:'Barlow Condensed',sans-serif;font-weight:700}
-.cc-photo-meta{padding:10px 12px}
-.cc-photo-caption{font-size:0.82rem;color:var(--concrete);font-weight:500;margin-bottom:4px}
-.cc-photo-date{font-size:0.72rem;color:var(--steel)}
-.cc-photo-tag{display:inline-block;font-family:'Barlow Condensed',sans-serif;font-size:0.65rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:2px 7px;border-radius:2px;border:1px solid rgba(11,188,212,0.4);color:var(--amber);background:rgba(11,188,212,0.06);margin-top:4px}
+/* AUTH */
+#auth-wrap{max-width:400px;margin:60px auto;padding:0 16px}
+#auth-wrap h1{font-size:26px;font-weight:800;margin-bottom:6px}
+#auth-wrap .sub{color:var(--muted);margin-bottom:24px;font-size:14px}
+.auth-toggle{font-size:13px;color:var(--muted);margin-top:12px;text-align:center}
+.auth-toggle span{color:var(--teal);cursor:pointer}
 
-/* GC LEADS */
-.gcl-header{background:linear-gradient(135deg,var(--slate) 0%,#1a2030 100%);border-bottom:1px solid var(--line);padding:48px 40px 40px}
-.gcl-header-inner{max-width:1100px;margin:0 auto}
-.gcl-eyebrow{font-family:'Barlow Condensed',sans-serif;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--amber);margin-bottom:10px}
-.gcl-header h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(2rem,4vw,3rem);text-transform:uppercase;color:var(--white);line-height:1;margin-bottom:10px}
-.gcl-header p{color:var(--steel);font-size:0.9rem;max-width:520px}
-.gcl-filters{background:var(--slate);border-bottom:1px solid var(--line);padding:18px 40px;position:sticky;top:105px;z-index:90}
-.gcl-filters-inner{max-width:1100px;margin:0 auto;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-.gcl-body{max-width:1100px;margin:0 auto;padding:32px 40px 60px}
-.gcl-disclaimer{background:rgba(11,188,212,0.06);border:1px solid rgba(11,188,212,0.2);border-radius:6px;padding:14px 18px;font-size:0.82rem;color:var(--steel);margin-bottom:24px;line-height:1.5}
-.gcl-stats{display:flex;gap:24px;margin-bottom:28px;flex-wrap:wrap}
-.gcl-stat{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:16px 20px;flex:1;min-width:120px}
-.gcl-stat .num{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.8rem;color:var(--amber);line-height:1}
-.gcl-stat .lbl{font-size:0.72rem;color:var(--steel);text-transform:uppercase;letter-spacing:0.08em;margin-top:4px}
-.gcl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px}
-.gcl-card{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:20px;transition:border-color 0.15s}
-.gcl-card:hover{border-color:rgba(139,155,180,0.4)}
-.gcl-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
-.gcl-address{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;text-transform:uppercase;color:var(--white);letter-spacing:0.03em}
-.gcl-city{color:var(--steel);font-size:0.78rem;margin-top:2px}
-.gcl-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
-.gcl-field label{display:block;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:2px}
-.gcl-field .gval{font-size:0.85rem;color:var(--concrete)}
-.gcl-desc{font-size:0.8rem;color:var(--steel);margin-bottom:10px;line-height:1.5}
-.gcl-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:10px}
-.gcl-permit{font-size:0.72rem;color:var(--steel)}
-.gcl-age{font-size:0.72rem;color:var(--steel)}
-.gcl-empty{text-align:center;padding:60px 20px;color:var(--steel)}
+/* OVERLAY */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:flex-end}
+.overlay.open{display:flex}
+.overlay-inner{background:var(--surface);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-height:90vh;overflow-y:auto}
+.overlay-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.overlay-header h3{font-size:17px;font-weight:700}
+.close-btn{background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer}
 
-/* DRAW MANAGER */
-.draw-header{background:linear-gradient(135deg,var(--slate) 0%,#1a2030 100%);border-bottom:1px solid var(--line);padding:48px 40px 40px}
-.draw-header-inner{max-width:1100px;margin:0 auto}
-.draw-eyebrow{font-family:'Barlow Condensed',sans-serif;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--amber);margin-bottom:10px}
-.draw-header h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(2rem,4vw,3rem);text-transform:uppercase;color:var(--white);line-height:1;margin-bottom:10px}
-.draw-body{max-width:1100px;margin:0 auto;padding:32px 40px 60px}
-.draw-auth-gate{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:48px;text-align:center}
-.draw-auth-gate h3{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.4rem;text-transform:uppercase;color:var(--white);margin-bottom:10px}
-.draw-auth-gate p{color:var(--steel);margin-bottom:24px}
-.draw-summary{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:32px}
-.draw-stat{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:16px 20px}
-.draw-stat .num{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.8rem;color:var(--amber);line-height:1}
-.draw-stat .lbl{font-size:0.72rem;color:var(--steel);text-transform:uppercase;letter-spacing:0.08em;margin-top:4px}
-.draw-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px}
-.draw-toolbar-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;text-transform:uppercase;color:var(--white);letter-spacing:0.04em}
-.draws-list{display:flex;flex-direction:column;gap:14px}
-.draw-card{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:20px}
-.draw-card-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
-.draw-milestone{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.05rem;text-transform:uppercase;color:var(--white);letter-spacing:0.03em}
-.draw-job{color:var(--steel);font-size:0.78rem;margin-top:2px}
-.draw-status-badge{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;padding:4px 10px;border-radius:2px;border:1.5px solid}
-.status-pending{color:var(--steel);border-color:var(--steel);background:rgba(136,136,136,0.08)}
-.status-submitted{color:#F59E0B;border-color:#F59E0B;background:rgba(245,158,11,0.08)}
-.status-approved{color:#4ADE80;border-color:#4ADE80;background:rgba(74,222,128,0.08)}
-.status-disputed{color:#FF5555;border-color:#FF5555;background:rgba(255,85,85,0.08)}
-.draw-fields{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
-.draw-field label{display:block;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:2px}
-.draw-field .dval{font-size:0.88rem;color:var(--concrete)}
-.draw-progress{background:rgba(255,255,255,0.06);border-radius:2px;height:4px;margin-bottom:14px;overflow:hidden}
-.draw-progress-fill{height:100%;background:var(--amber);border-radius:2px;transition:width 0.4s}
-.draw-actions{display:flex;gap:8px;flex-wrap:wrap}
-.draw-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.8rem;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px;border-radius:var(--radius);border:none;cursor:pointer;transition:all 0.15s}
-.draw-btn-submit{background:var(--amber);color:#000}
-.draw-btn-submit:hover{background:var(--amber-dk)}
-.draw-btn-approve{background:rgba(74,222,128,0.15);color:#4ADE80;border:1px solid rgba(74,222,128,0.3)}
-.draw-btn-approve:hover{background:rgba(74,222,128,0.25)}
-.draw-btn-dispute{background:rgba(255,85,85,0.12);color:#FF5555;border:1px solid rgba(255,85,85,0.3)}
-.draw-btn-dispute:hover{background:rgba(255,85,85,0.2)}
-.new-draw-form{background:rgba(11,188,212,0.04);border:1px solid rgba(11,188,212,0.2);border-radius:6px;padding:24px;margin-bottom:24px}
-.new-draw-form h4{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;text-transform:uppercase;color:var(--white);margin-bottom:16px;letter-spacing:0.04em}
-.draw-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
-.draw-form-field label{display:block;font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:6px}
-.draw-form-field input,.draw-form-field select{width:100%;background:var(--navy);border:1px solid rgba(255,255,255,0.12);border-radius:var(--radius);color:var(--white);font-family:'Inter',sans-serif;font-size:0.88rem;padding:9px 12px;outline:none;transition:border-color 0.15s;appearance:none}
-.draw-form-field input:focus,.draw-form-field select:focus{border-color:var(--amber)}
-.draw-form-field input::placeholder{color:rgba(255,255,255,0.2)}
-.pct-warning{font-size:0.75rem;color:#FF5555;margin-top:4px;display:none}
+/* DRAW */
+.milestone-row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.milestone-row input{margin-bottom:0}
+.milestone-row .pct{width:64px;flex-shrink:0}
+.draw-status{padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase}
+.draw-status.pending{background:rgba(255,180,0,.15);color:#ffb400}
+.draw-status.submitted{background:rgba(11,188,212,.15);color:var(--teal)}
+.draw-status.approved{background:rgba(80,200,120,.15);color:#50c878}
+.draw-status.disputed{background:rgba(224,85,85,.15);color:var(--danger)}
 
-/* INTAKE */
-.intake-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:300;align-items:center;justify-content:center;padding:20px}
-.intake-overlay.active{display:flex}
-.intake-panel{background:var(--navy);border:1px solid var(--line);border-radius:8px;width:100%;max-width:580px;max-height:88vh;display:flex;flex-direction:column}
-.intake-header{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
-.intake-header-left{display:flex;align-items:center;gap:12px}
-.intake-logo{width:36px;height:36px;background:var(--amber);border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:0.85rem;color:#000;letter-spacing:0.04em}
-.intake-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;text-transform:uppercase;color:var(--white);letter-spacing:0.04em}
-.intake-subtitle{font-size:0.72rem;color:var(--steel);margin-top:1px}
-.intake-close{background:none;border:none;color:var(--steel);font-size:1.3rem;cursor:pointer;line-height:1;transition:color 0.15s}
-.intake-close:hover{color:var(--white)}
-.intake-messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
-.intake-msg{display:flex;gap:10px;align-items:flex-start}
-.intake-msg.user{flex-direction:row-reverse}
-.intake-msg-avatar{width:28px;height:28px;border-radius:50%;background:var(--slate);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.6rem;color:var(--steel);flex-shrink:0}
-.intake-msg.ai .intake-msg-avatar{background:var(--amber);color:#000;border-color:var(--amber)}
-.intake-msg-bubble{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:10px 14px;font-size:0.875rem;color:var(--concrete);line-height:1.55;max-width:85%}
-.intake-msg.user .intake-msg-bubble{background:rgba(11,188,212,0.1);border-color:rgba(11,188,212,0.25)}
-.intake-typing{display:flex;gap:4px;padding:12px 14px;align-items:center}
-.intake-typing span{width:6px;height:6px;border-radius:50%;background:var(--steel);animation:typing 1.2s infinite}
-.intake-typing span:nth-child(2){animation-delay:0.2s}
-.intake-typing span:nth-child(3){animation-delay:0.4s}
-@keyframes typing{0%,60%,100%{opacity:0.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
-.intake-footer{padding:14px 20px;border-top:1px solid var(--line);flex-shrink:0}
-.intake-input-row{display:flex;gap:10px;align-items:flex-end}
-.intake-input{flex:1;background:var(--slate);border:1px solid rgba(255,255,255,0.12);border-radius:var(--radius);color:var(--concrete);font-family:'Inter',sans-serif;font-size:0.9rem;padding:10px 14px;outline:none;resize:none;max-height:120px;transition:border-color 0.15s}
-.intake-input:focus{border-color:var(--amber)}
-.intake-input::placeholder{color:rgba(255,255,255,0.25)}
-.intake-send{background:var(--amber);border:none;border-radius:var(--radius);padding:10px 16px;cursor:pointer;transition:background 0.15s;flex-shrink:0}
-.intake-send:hover{background:var(--amber-dk)}
-.intake-send svg{width:18px;height:18px;fill:none;stroke:#000;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.intake-disclaimer{font-size:0.7rem;color:rgba(136,136,136,0.6);margin-top:8px;text-align:center}
-.intake-posted-card{background:rgba(11,188,212,0.06);border:1px solid rgba(11,188,212,0.2);border-radius:6px;padding:14px;margin-top:8px}
-.intake-posted-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;text-transform:uppercase;color:var(--white);letter-spacing:0.03em;margin-bottom:10px}
-.intake-posted-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-.intake-posted-field label{display:block;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:2px}
-.intake-posted-field .ipval{font-size:0.82rem;color:var(--concrete)}
-.intake-view-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.78rem;letter-spacing:0.06em;text-transform:uppercase;background:var(--amber);color:#000;border:none;padding:7px 14px;border-radius:var(--radius);cursor:pointer;width:100%}
+/* ESCROW */
+.escrow-bar{background:var(--border);border-radius:4px;height:8px;margin:8px 0}
+.escrow-fill{background:var(--teal);height:100%;border-radius:4px}
 
-/* PROFILE */
-.profile-header{background:linear-gradient(135deg,var(--slate) 0%,#1a2030 100%);border-bottom:1px solid var(--line);padding:48px 40px 40px}
-.profile-header-inner{max-width:1100px;margin:0 auto;display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap}
-.profile-avatar{width:80px;height:80px;border-radius:50%;background:var(--amber);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.8rem;color:#000;flex-shrink:0}
-.profile-info{}
-.profile-name{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:2rem;text-transform:uppercase;color:var(--white);letter-spacing:0.02em;line-height:1}
-.profile-company{color:var(--amber);font-size:0.9rem;margin-top:4px}
-.profile-meta{color:var(--steel);font-size:0.82rem;margin-top:6px}
-.profile-tier-display{display:flex;align-items:center;gap:10px;margin-top:12px}
-.tier-badge-lg{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.85rem;letter-spacing:0.1em;text-transform:uppercase;padding:6px 16px;border-radius:2px;border:2px solid var(--amber);color:var(--amber);background:rgba(11,188,212,0.08)}
-.profile-body{max-width:1100px;margin:0 auto;padding:32px 40px 60px}
-.profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
-.profile-card{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:24px}
-.profile-card h3{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.85rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--amber);margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:10px}
-.profile-field-row{margin-bottom:14px}
-.profile-field-row label{display:block;font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:5px}
-.profile-field-row input,.profile-field-row select{width:100%;background:var(--navy);border:1px solid rgba(255,255,255,0.1);border-radius:var(--radius);color:var(--white);font-family:'Inter',sans-serif;font-size:0.88rem;padding:9px 12px;outline:none;transition:border-color 0.15s;appearance:none}
-.profile-field-row input:focus,.profile-field-row select:focus{border-color:var(--amber)}
-.profile-field-row .field-val{font-size:0.88rem;color:var(--concrete);padding:9px 0}
-.tier-progress{margin-top:8px}
-.tier-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}
-.tier-row:last-child{border:none}
-.tier-num{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.85rem;width:20px;color:var(--steel)}
-.tier-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.9rem;text-transform:uppercase;letter-spacing:0.06em;flex:1}
-.tier-active{color:var(--amber)}
-.tier-inactive{color:rgba(136,136,136,0.4)}
-.tier-check{color:var(--green);font-size:1rem}
-.tier-dot{color:rgba(136,136,136,0.3);font-size:0.8rem}
-.profile-auth-gate{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:60px;text-align:center}
-.profile-auth-gate h3{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.4rem;text-transform:uppercase;color:var(--white);margin-bottom:10px}
-.profile-auth-gate p{color:var(--steel);margin-bottom:24px}
-
-/* FOOTER */
-footer{border-top:1px solid var(--line);padding:32px 40px;display:flex;justify-content:space-between;align-items:center;max-width:1100px;margin:0 auto;flex-wrap:wrap;gap:16px}
-footer p{font-size:0.8rem;color:var(--steel)}
+/* STARS */
+.stars{display:flex;gap:6px;font-size:28px;cursor:pointer;margin:10px 0}
+.stars span{color:var(--border)}
+.stars span.on{color:#ffb400}
 
 /* TOAST */
-.toast{position:fixed;bottom:24px;right:24px;background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:14px 20px;font-size:0.875rem;color:var(--concrete);z-index:999;transform:translateY(80px);opacity:0;transition:all 0.3s;max-width:320px}
-.toast.show{transform:translateY(0);opacity:1}
-.toast.success{border-color:rgba(74,222,128,0.4);color:#4ADE80}
-.toast.error{border-color:rgba(255,85,85,0.4);color:#FF5555}
+#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;display:none;z-index:999;white-space:nowrap}
 
-@media(max-width:768px){
-  nav{padding:14px 20px}
-  .nav-email{display:none}
-  .hero{grid-template-columns:1fr;padding:50px 20px 40px;gap:36px}
-  .stats-bar{padding:20px;gap:32px}
-  .fw-header,.cc-header,.draw-header,.profile-header,.gcl-header{padding:32px 20px 28px}
-  .fw-filters,.gcl-filters{padding:14px 20px;top:100px}
-  .fw-body,.cc-body,.draw-body,.profile-body,.gcl-body{padding:24px 20px 48px}
-  .fw-subtabs{padding:0 20px}
-  .ls-item{flex-wrap:wrap}
-  .ls-name{min-width:unset;width:100%}
-  .ls-tags{margin-left:0}
-  .profile-grid{grid-template-columns:1fr}
-  .draw-form-grid{grid-template-columns:1fr}
-  footer{padding:24px 20px}
-  .draw-fields{grid-template-columns:1fr 1fr}
-}
+/* UTIL */
+.mt8{margin-top:8px}.mt16{margin-top:16px}
+.flex{display:flex}.gap8{gap:8px}.between{justify-content:space-between}
+.text-muted{color:var(--muted);font-size:13px}
+.divider{border:none;border-top:1px solid var(--border);margin:16px 0}
+.error-box{background:rgba(224,85,85,.1);border:1px solid var(--danger);border-radius:8px;padding:12px;color:var(--danger);font-size:13px;margin-bottom:12px}
+
+/* SPINNER */
+.spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .7s linear infinite;margin:40px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 
-<nav>
-  <div class="logo" id="navLogo">Trade<span>Deck</span></div>
-  <div class="nav-right">
-    <div class="nav-user" id="navUser" style="display:none">
-      <span class="nav-tier" id="navTier">Tier 1</span>
-      <span class="nav-email" id="navEmail"></span>
-      <button class="btn-ghost btn-sm" id="navLogout">Sign Out</button>
-    </div>
-    <div id="navGuest">
-      <button class="btn-primary btn-sm" id="navSignIn">Sign In</button>
-    </div>
-  </div>
-</nav>
-
-<div class="page-tab-bar">
-  <button class="page-tab active" data-page="home">Home</button>
-  <button class="page-tab" data-page="findwork">Find Work</button>
-  <button class="page-tab" data-page="draws">Draw Manager</button>
-  <button class="page-tab" data-page="sitephotos">Site Photos</button>
-  <button class="page-tab" data-page="gcleads">GC Leads</button>
-  <button class="page-tab" data-page="postjob">Post a Job</button>
-  <button class="page-tab" data-page="profile">Profile</button>
+<!-- AUTH -->
+<div id="auth-wrap">
+  <h1>TradeDeck</h1>
+  <p class="sub">The marketplace built for the trades.</p>
+  <div id="auth-error" class="error-box" style="display:none"></div>
+  <label>Email</label>
+  <input id="auth-email" type="email" placeholder="you@example.com"/>
+  <label>Password</label>
+  <input id="auth-password" type="password" placeholder="••••••••"/>
+  <button id="auth-btn" class="btn btn-primary btn-block" onclick="authSubmit()">Sign In</button>
+  <p class="auth-toggle">No account? <span onclick="toggleAuth()">Sign up</span></p>
 </div>
 
-<!-- ===================== HOME ===================== -->
-<div class="page-view active" id="page-home">
-  <section style="max-width:1100px;margin:0 auto;">
-    <div class="hero">
-      <div>
-        <div class="hero-eyebrow">The Trade Marketplace</div>
-        <h1>Hire the Trade.<br><em>Find</em> the Work.</h1>
-        <p class="hero-sub">Twenty years. Every nail. Every pour. Every roof.<br>TradeDeck connects contractors and subs who know the difference between a shortcut and a standard.</p>
-        <div class="hero-ctas">
-          <button class="btn-primary" id="heroPostBtn">Post a Job</button>
-          <button class="btn-ghost" id="heroFindWork">Find Work</button>
-        </div>
-      </div>
-      <div class="blueprint-card" id="heroCard">
-        <div style="color:var(--steel);font-size:0.85rem;">Loading latest job...</div>
-      </div>
-    </div>
-  </section>
-  <div class="stats-bar">
-    <div class="stat"><div class="num" id="statJobs">--</div><div class="lbl">Open Jobs</div></div>
-    <div class="stat"><div class="num">5</div><div class="lbl">Tier Levels</div></div>
-    <div class="stat"><div class="num">Utah</div><div class="lbl">Markets Served</div></div>
-    <div class="stat"><div class="num">$0</div><div class="lbl">To Post</div></div>
-  </div>
-  <div class="post-bar">
-    <h2>The Crew Doesn't Find Itself.</h2>
-    <p>Post a job in under 2 minutes. Subs in your trade and region see it immediately.</p>
-    <button class="btn-primary" id="barPostBtn">Post a Job — It's Free</button>
-  </div>
-  <footer>
-    <div class="logo">Trade<span>Deck</span></div>
-    <p>&copy; 2026 TradeDeck &middot; tradedeckapp.com</p>
-    <p>For the trade. By the trade.</p>
-  </footer>
-</div>
+<!-- MAIN APP -->
+<div id="app" style="display:none">
 
-<!-- ===================== FIND WORK ===================== -->
-<div class="page-view" id="page-findwork">
-  <div class="fw-header">
-    <div class="fw-header-inner">
-      <div class="fw-eyebrow">Find Work</div>
-      <h2>Open Jobs &amp; Lead Sources</h2>
-      <p>Browse open job posts in your trade, or explore every channel where work gets posted.</p>
+  <!-- HOME -->
+  <div id="screen-home" class="screen active">
+    <div class="screen-header">
+      <h2>Home</h2>
+      <span id="home-tier" class="badge badge-teal" style="display:none"></span>
     </div>
+    <div id="home-content"><div class="spinner"></div></div>
   </div>
-  <div style="background:var(--slate);border-bottom:1px solid var(--line);">
-    <div class="fw-subtabs">
-      <button class="fw-subtab active" data-sub="jobs">Open Jobs</button>
-      <button class="fw-subtab" data-sub="sources">Lead Sources</button>
+
+  <!-- FIND WORK -->
+  <div id="screen-work" class="screen">
+    <div class="screen-header"><h2>Find Work</h2></div>
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="workTab('open',this)">Open Jobs</button>
+      <button class="tab-btn" onclick="workTab('ksl',this)">KSL Jobs</button>
+      <button class="tab-btn" onclick="workTab('leads',this)">Lead Sources</button>
     </div>
+    <div id="county-tabs" class="county-tabs" style="display:none"></div>
+    <div id="work-content"><div class="spinner"></div></div>
   </div>
-  <div class="fw-filters">
-    <div class="fw-filters-inner">
-      <input type="text" class="fw-search" id="fwSearch" placeholder="Search jobs, trades, platforms...">
-      <select class="fw-select" id="fwTrade">
-        <option value="">All Trades</option>
+
+  <!-- POST JOB -->
+  <div id="screen-post" class="screen">
+    <div class="screen-header"><h2>Post a Job</h2></div>
+    <div class="card">
+      <label>Job Title</label>
+      <input id="post-title" placeholder="e.g. Framing crew needed — 2,800 sq ft"/>
+      <label>Trade Type</label>
+      <select id="post-trade">
         <option>Framing</option><option>Concrete</option><option>Roofing</option>
         <option>Electrical</option><option>Plumbing</option><option>HVAC</option>
-        <option>Excavation</option><option>Flooring</option><option>Siding</option>
-        <option>Finish Carpentry</option><option>Painting</option><option>General</option>
+        <option>Drywall</option><option>Flooring</option><option>Excavation</option>
+        <option>Landscaping</option><option>General Contractor</option><option>Other</option>
       </select>
-      <select class="fw-select" id="fwCost">
-        <option value="">All Cost Types</option>
-        <option value="free">Free Only</option>
-        <option value="paid">Paid</option>
-      </select>
-      <button class="fw-clear" id="fwClearBtn">Clear</button>
-      <span class="fw-count" id="fwCount"></span>
-    </div>
-  </div>
-  <div class="fw-subview active" id="sub-jobs">
-    <div class="fw-body">
-      <div class="jobs-grid" id="jobsGrid"><div style="color:var(--steel);font-size:0.9rem;grid-column:1/-1;">Loading jobs...</div></div>
-      <div class="fw-empty" id="jobsEmpty" style="display:none;"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.4rem;text-transform:uppercase;color:var(--steel);">No Jobs Match</div><p style="font-size:0.875rem;margin-top:8px;">Try adjusting your filters.</p></div>
-    </div>
-  </div>
-  <div class="fw-subview" id="sub-sources">
-    <div class="fw-body">
-      <div id="leadSourcesList">
-        <div class="ls-section">
-          <div class="ls-section-title">Boots on the Ground — Free</div>
-          <div class="ls-item" data-trade="General" data-cost="free" data-text="jobsite cold outreach truck door knock active crew">
-            <div class="ls-name">Jobsite Cold Outreach</div>
-            <div class="ls-desc">Drive active job sites. Write down names from sub trucks. The highest-close-rate lead in the trades is a warm referral from another sub on the same site.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-free">Free</span><span class="ls-tag ls-tag-trade">All Trades</span></div>
-            <a class="ls-link" href="https://tradedeckapp.com" target="_blank">Post on TradeDeck</a>
-          </div>
-          <div class="ls-item" data-trade="General" data-cost="free" data-text="lumber yard supply house 84 lumber marjam counter staff">
-            <div class="ls-name">Lumber Yards &amp; Supply Houses</div>
-            <div class="ls-desc">Counter staff at ProDesk, 84 Lumber, Marjam know every GC in the market. Drop cards, build relationships, ask directly.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-free">Free</span><span class="ls-tag ls-tag-trade">All Trades</span></div>
-            <a class="ls-link" href="https://www.84lumber.com" target="_blank">Visit</a>
-          </div>
-          <div class="ls-item" data-trade="General" data-cost="free" data-text="permit pulling city county public record planning">
-            <div class="ls-name">City &amp; County Permit Records</div>
-            <div class="ls-desc">Building permits are public record. Search your city portal for new construction — they show the GC, address, and project scope. Find the job before you're even needed.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-free">Free</span><span class="ls-tag ls-tag-trade">All Trades</span></div>
-            <a class="ls-link" href="https://www.utah.gov" target="_blank">Utah.gov</a>
-          </div>
-        </div>
-        <div class="ls-section">
-          <div class="ls-section-title">Digital — Free</div>
-          <div class="ls-item" data-trade="General" data-cost="free" data-text="google business profile local seo map pack near me">
-            <div class="ls-name">Google Business Profile</div>
-            <div class="ls-desc">The most important free tool in the trades. When someone searches "contractor near me" Google shows the map pack first. Fill every field, add 20+ project photos.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-free">Free</span><span class="ls-tag ls-tag-trade">All Trades</span></div>
-            <a class="ls-link" href="https://business.google.com" target="_blank">Visit</a>
-          </div>
-          <div class="ls-item" data-trade="General" data-cost="free" data-text="planhub subcontractor bids invitations free GC 400000">
-            <div class="ls-name">PlanHub</div>
-            <div class="ls-desc">Free sub plan — receive bid invitations from GCs in your trade and region. 400,000+ subs, 30,000+ suppliers. Set your trade and service area and ITBs come to you.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-free">Free Tier</span><span class="ls-tag ls-tag-trade">All Trades</span></div>
-            <a class="ls-link" href="https://planhub.com/subcontractors" target="_blank">Visit</a>
-          </div>
-          <div class="ls-item" data-trade="General" data-cost="free" data-text="linkedin professional network GC outreach direct message">
-            <div class="ls-name">LinkedIn</div>
-            <div class="ls-desc">Search "General Contractor Utah" and send direct messages. Best for the demand side — GCs who post jobs.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-free">Free</span><span class="ls-tag ls-tag-trade">All Trades</span></div>
-            <a class="ls-link" href="https://linkedin.com" target="_blank">Visit</a>
-          </div>
-          <div class="ls-item" data-trade="General" data-cost="free" data-text="facebook groups local contractors trades utah wasatch">
-            <div class="ls-name">Facebook Groups</div>
-            <div class="ls-desc">Search "[Trade] Contractors [City/State]" — dozens of active groups. Post job openings, recruit subs. Engage as a member first, not an advertiser.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-free">Free</span><span class="ls-tag ls-tag-trade">All Trades</span></div>
-            <a class="ls-link" href="https://facebook.com/groups" target="_blank">Visit</a>
-          </div>
-          <div class="ls-item" data-trade="General" data-cost="free" data-text="buildingconnected subcontractor bid invitation GC autodesk">
-            <div class="ls-name">BuildingConnected</div>
-            <div class="ls-desc">Free sub profile — GCs using BuildingConnected (Autodesk) invite subs from its directory. Create a profile so you show up when a GC searches your trade.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-free">Free Profile</span><span class="ls-tag ls-tag-trade">Commercial</span></div>
-            <a class="ls-link" href="https://app.buildingconnected.com" target="_blank">Visit</a>
-          </div>
-          <div class="ls-item" data-trade="General" data-cost="free" data-text="SAM.gov federal government contract bid public works GSA">
-            <div class="ls-name">SAM.gov</div>
-            <div class="ls-desc">Federal system for government contract notices. Free to search and register. Primary source for any contractor pursuing public work.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-free">Free</span><span class="ls-tag ls-tag-trade">All Trades</span></div>
-            <a class="ls-link" href="https://sam.gov" target="_blank">Visit</a>
-          </div>
-        </div>
-        <div class="ls-section">
-          <div class="ls-section-title">Digital — Paid</div>
-          <div class="ls-item" data-trade="General" data-cost="paid" data-text="google local services ads LSA verified badge pay per lead">
-            <div class="ls-name">Google LSA</div>
-            <div class="ls-desc">Local Services Ads — Google-verified badge, pay-per-lead ($20-150). Best for urgent residential jobs. Speed to respond is everything here.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-paid">$20-150/lead</span><span class="ls-tag ls-tag-trade">All Trades</span></div>
-            <a class="ls-link" href="https://ads.google.com/local-services-ads" target="_blank">Visit</a>
-          </div>
-          <div class="ls-item" data-trade="General" data-cost="paid" data-text="thumbtack lead generation pay per lead homeowner AI">
-            <div class="ls-name">Thumbtack</div>
-            <div class="ls-desc">Pay-per-lead ($2-50). AI matching improved significantly in 2026. Good for residential trades at every level. Build a strong profile with reviews.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-paid">$2-50/lead</span><span class="ls-tag ls-tag-trade">All Trades</span></div>
-            <a class="ls-link" href="https://thumbtack.com" target="_blank">Visit</a>
-          </div>
-          <div class="ls-item" data-trade="General" data-cost="paid" data-text="angi angies list homeowner subscription verified reviews">
-            <div class="ls-name">Angi</div>
-            <div class="ls-desc">Subscription $100-400/mo. Best for contractors who consistently collect reviews. The more reviews you have, the higher you rank.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-paid">$100-400/mo</span><span class="ls-tag ls-tag-trade">All Trades</span></div>
-            <a class="ls-link" href="https://angi.com" target="_blank">Visit</a>
-          </div>
-          <div class="ls-item" data-trade="General" data-cost="paid" data-text="houzz pro luxury remodelers designers portfolio high end">
-            <div class="ls-name">Houzz Pro</div>
-            <div class="ls-desc">Best for high-end residential. Subscription $65-350/mo. Photo portfolio display is the feature — quality project photography here beats everything for luxury work.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-paid">$65-350/mo</span><span class="ls-tag ls-tag-trade">Remodel / Luxury</span></div>
-            <a class="ls-link" href="https://houzz.com/pro" target="_blank">Visit</a>
-          </div>
-        </div>
-        <div class="ls-section">
-          <div class="ls-section-title">Associations &amp; Trade Networks</div>
-          <div class="ls-item" data-trade="General" data-cost="paid" data-text="AGC associated general contractors utah chapter membership">
-            <div class="ls-name">AGC Utah</div>
-            <div class="ls-desc">Associated General Contractors — Utah chapter. Direct warm-intro channel to GCs who hire subs. One chapter event beats a month of cold outreach.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-paid">Membership</span><span class="ls-tag ls-tag-trade">GC Network</span></div>
-            <a class="ls-link" href="https://agcutah.com" target="_blank">Visit</a>
-          </div>
-          <div class="ls-item" data-trade="General" data-cost="paid" data-text="NAHB home builders association utah residential wasatch back">
-            <div class="ls-name">Home Builders Association of Utah</div>
-            <div class="ls-desc">Residential-focused, directly aligned with the Wasatch Back custom home market. The GCs building the homes you want to sub on are members here.</div>
-            <div class="ls-tags"><span class="ls-tag ls-tag-paid">Membership</span><span class="ls-tag ls-tag-trade">Residential</span></div>
-            <a class="ls-link" href="https://www.utahnahb.org" target="_blank">Visit</a>
-          </div>
-        </div>
+      <label>Location / County</label>
+      <input id="post-location" placeholder="e.g. Francis, Summit County"/>
+      <label>Description</label>
+      <textarea id="post-desc" placeholder="Scope, timeline, crew size…"></textarea>
+      <label>Budget</label>
+      <input id="post-budget" placeholder="e.g. $8,500 or negotiable"/>
+      <hr class="divider"/>
+      <h3 style="margin-bottom:12px">Draw Schedule <span class="text-muted" style="font-size:12px;font-weight:400">(optional)</span></h3>
+      <div id="milestone-rows"></div>
+      <div class="flex gap8 mt8" style="align-items:center">
+        <button class="btn btn-outline btn-sm" onclick="addMilestone()">+ Add Milestone</button>
+        <span id="pct-total" class="text-muted"></span>
       </div>
-      <div class="fw-empty" id="sourcesEmpty" style="display:none;"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.4rem;text-transform:uppercase;color:var(--steel);">No Sources Match</div></div>
+      <button class="btn btn-primary btn-block mt16" onclick="submitJob()">Post Job</button>
     </div>
+  </div>
+
+  <!-- DRAWS -->
+  <div id="screen-draws" class="screen">
+    <div class="screen-header"><h2>Draw Manager</h2></div>
+    <div id="draws-content"><div class="spinner"></div></div>
+  </div>
+
+  <!-- PROFILE -->
+  <div id="screen-profile" class="screen">
+    <div class="screen-header"><h2>Profile</h2></div>
+    <div id="profile-content"><div class="spinner"></div></div>
+  </div>
+
+</div>
+
+<!-- RATING OVERLAY -->
+<div class="overlay" id="rating-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <h3>Rate this Job</h3>
+      <button class="close-btn" onclick="closeOverlay('rating-overlay')">×</button>
+    </div>
+    <div class="stars" id="star-picker">
+      <span onclick="setRating(1)">★</span>
+      <span onclick="setRating(2)">★</span>
+      <span onclick="setRating(3)">★</span>
+      <span onclick="setRating(4)">★</span>
+      <span onclick="setRating(5)">★</span>
+    </div>
+    <textarea id="review-text" placeholder="Optional: share your experience…"></textarea>
+    <button class="btn btn-primary btn-block" onclick="submitRating()">Submit</button>
   </div>
 </div>
 
-<!-- ===================== DRAW MANAGER ===================== -->
-<div class="page-view" id="page-draws">
-  <div class="draw-header">
-    <div class="draw-header-inner">
-      <div class="draw-eyebrow">Milestone-Based Escrow</div>
-      <h2>Draw Manager</h2>
-      <p style="color:var(--steel);font-size:0.9rem;max-width:520px;">Define milestone draws on your jobs. Owner or third-party inspector verifies each draw before funds release.</p>
-    </div>
-  </div>
-  <div class="draw-body" id="drawBody">
-    <div class="draw-auth-gate" id="drawAuthGate">
-      <h3>Sign In to Access Draw Manager</h3>
-      <p>Track milestone-based payments and escrow releases on your active jobs.</p>
-      <button class="btn-primary" id="drawSignInBtn">Sign In</button>
-    </div>
-    <div id="drawContent" style="display:none">
-      <div class="draw-summary">
-        <div class="draw-stat"><div class="num" id="dsTotalDraws">0</div><div class="lbl">Total Draws</div></div>
-        <div class="draw-stat"><div class="num" id="dsApproved">0</div><div class="lbl">Approved</div></div>
-        <div class="draw-stat"><div class="num" id="dsPending">0</div><div class="lbl">Pending</div></div>
-        <div class="draw-stat"><div class="num" id="dsDisputed">0</div><div class="lbl">Disputed</div></div>
-      </div>
+<!-- NAV -->
+<nav id="main-nav" style="display:none">
+  <button class="active" onclick="switchTab('home')" id="nav-home">
+    <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home
+  </button>
+  <button onclick="switchTab('work')" id="nav-work">
+    <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>Find Work
+  </button>
+  <button onclick="switchTab('post')" id="nav-post">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Post Job
+  </button>
+  <button onclick="switchTab('draws')" id="nav-draws">
+    <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Draws
+  </button>
+  <button onclick="switchTab('profile')" id="nav-profile">
+    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile
+  </button>
+</nav>
 
-      <!-- New Draw Form -->
-      <div class="new-draw-form">
-        <h4>Add a New Draw</h4>
-        <div class="draw-form-grid">
-          <div class="draw-form-field">
-            <label>Milestone Name</label>
-            <input type="text" id="drawMilestone" placeholder="e.g. Framing Complete">
-          </div>
-          <div class="draw-form-field">
-            <label>% of Contract</label>
-            <input type="number" id="drawPct" min="1" max="100" placeholder="e.g. 25">
-          </div>
-          <div class="draw-form-field">
-            <label>Contract Value ($)</label>
-            <input type="number" id="drawContractVal" placeholder="e.g. 180000">
-          </div>
-          <div class="draw-form-field">
-            <label>Verifier</label>
-            <select id="drawVerifier">
-              <option value="owner">Owner / Homeowner</option>
-              <option value="inspector">Third-Party Inspector</option>
-            </select>
-          </div>
-        </div>
-        <div class="pct-warning" id="pctWarning">Percentage must be between 1 and 100.</div>
-        <button class="btn-primary btn-sm" id="addDrawBtn">Add Draw</button>
-      </div>
-
-      <div class="draw-toolbar">
-        <div class="draw-toolbar-title">Active Draws</div>
-        <button class="btn-ghost btn-sm" id="refreshDrawsBtn">Refresh</button>
-      </div>
-      <div class="draws-list" id="drawsList">
-        <div style="color:var(--steel);font-size:0.9rem;">Loading draws...</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ===================== SITE PHOTOS ===================== -->
-<div class="page-view" id="page-sitephotos">
-  <div class="cc-header">
-    <div class="cc-header-inner">
-      <div class="cc-eyebrow">Powered by CompanyCam</div>
-      <h2>Job Site Photos</h2>
-      <p>Every job documented. Before, during, and after — tied to the project, visible to the crew.</p>
-    </div>
-  </div>
-  <div class="cc-body">
-    <div class="cc-connect-banner" id="ccConnectBanner">
-      <h3>Connect CompanyCam</h3>
-      <p>Paste your CompanyCam API key to pull job site photos directly into TradeDeck.</p>
-      <input type="text" class="cc-api-input" id="ccApiKeyInput" placeholder="Paste CompanyCam API key here...">
-      <button class="btn-primary" id="ccConnectBtn">Connect</button>
-      <p style="margin-top:14px;font-size:0.78rem;color:var(--steel);">Find your key: app.companycam.com → Account → API</p>
-    </div>
-    <div id="ccConnected" style="display:none;">
-      <div class="cc-stats">
-        <div class="cc-stat"><div class="num" id="ccTotalPhotos">--</div><div class="lbl">Total Photos</div></div>
-        <div class="cc-stat"><div class="num" id="ccTotalProjects">--</div><div class="lbl">Projects</div></div>
-        <div class="cc-stat"><div class="num" id="ccThisWeek">--</div><div class="lbl">This Week</div></div>
-      </div>
-      <div class="cc-toolbar">
-        <select class="cc-job-select" id="ccJobSelect"><option value="">All Projects</option></select>
-        <button class="btn-ghost btn-sm" id="ccRefreshBtn">Refresh</button>
-        <button class="btn-ghost btn-sm" id="ccDisconnectBtn" style="border-color:rgba(255,85,85,0.4);color:rgba(255,85,85,0.8);">Disconnect</button>
-      </div>
-      <div class="cc-photos-grid" id="ccPhotosGrid"></div>
-      <div id="ccEmpty" style="display:none;text-align:center;padding:48px;color:var(--steel);">No photos yet. Photos added in CompanyCam appear here automatically.</div>
-    </div>
-  </div>
-</div>
-
-<!-- ===================== POST A JOB ===================== -->
-<div class="page-view" id="page-postjob">
-  <div style="max-width:600px;margin:80px auto;padding:0 40px;text-align:center;">
-    <div style="font-family:'Barlow Condensed',sans-serif;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--amber);margin-bottom:12px;">Post a Job</div>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:2.4rem;text-transform:uppercase;color:var(--white);margin-bottom:12px;">Ready to Post?</div>
-    <p style="color:var(--steel);margin-bottom:28px;line-height:1.65;">Describe the job in plain language. TradeDeck AI qualifies scope, confirms Utah location, and posts it live.</p>
-    <button class="btn-primary" id="postPageBtn">Open Job Post</button>
-  </div>
-</div>
-
-<!-- ===================== GC LEADS ===================== -->
-<div class="page-view" id="page-gcleads">
-  <div class="gcl-header">
-    <div class="gcl-header-inner">
-      <div class="gcl-eyebrow">Live Permit Data — Powered by PermitStack</div>
-      <h2>GC Lead Generator</h2>
-      <p>Real building permits pulled daily from Utah city and county portals.</p>
-    </div>
-  </div>
-  <div class="gcl-filters">
-    <div class="gcl-filters-inner">
-      <input type="text" class="fw-search" id="gclSearch" placeholder="Search address, trade, description...">
-      <select class="fw-select" id="gclTrade">
-        <option value="">All Trades</option>
-        <option>Roofing</option><option>Concrete</option><option>Framing</option>
-        <option>Electrical</option><option>Plumbing</option><option>HVAC</option>
-        <option>Excavation</option><option>Flooring</option><option>Siding</option>
-        <option>Painting</option><option>General</option>
-      </select>
-      <select class="fw-select" id="gclCity">
-        <option value="">All Cities</option>
-        <option>Park City</option><option>Heber City</option><option>Salt Lake City</option>
-        <option>Provo</option><option>Ogden</option><option>Kamas</option><option>Midway</option>
-      </select>
-      <button class="fw-clear" id="gclRefreshBtn">Refresh</button>
-      <button class="fw-clear" id="gclClearBtn">Clear</button>
-      <span class="fw-count" id="gclCount"></span>
-    </div>
-  </div>
-  <div class="gcl-body">
-    <div class="gcl-disclaimer">These are building permits from public records — not job postings. Each permit signals active construction activity. Use them to prospect for new clients or identify where GCs may need subs.</div>
-    <div class="gcl-stats">
-      <div class="gcl-stat"><div class="num" id="gclTotalCount">--</div><div class="lbl">Active Permits</div></div>
-      <div class="gcl-stat"><div class="num" id="gclTotalValue">--</div><div class="lbl">Est. Total Value</div></div>
-      <div class="gcl-stat"><div class="num">7</div><div class="lbl">Utah Cities</div></div>
-    </div>
-    <div class="gcl-grid" id="gclGrid"><div style="color:var(--steel);font-size:0.9rem;grid-column:1/-1;">Loading permit data...</div></div>
-    <div class="gcl-empty" id="gclEmpty" style="display:none;text-align:center;padding:48px;color:var(--steel);">No permits match. Try clearing your filters.</div>
-  </div>
-</div>
-
-<!-- ===================== PROFILE ===================== -->
-<div class="page-view" id="page-profile">
-  <div id="profileAuthGate" style="padding:80px 40px;text-align:center;">
-    <div class="profile-auth-gate">
-      <h3>Sign In to View Your Profile</h3>
-      <p>Manage your trade credentials, tier progress, and account settings.</p>
-      <button class="btn-primary" id="profileSignInBtn">Sign In</button>
-    </div>
-  </div>
-  <div id="profileContent" style="display:none;">
-    <div class="profile-header">
-      <div class="profile-header-inner">
-        <div class="profile-avatar" id="profileAvatar">?</div>
-        <div class="profile-info">
-          <div class="profile-name" id="profileName">Your Name</div>
-          <div class="profile-company" id="profileCompany"></div>
-          <div class="profile-meta" id="profileMeta"></div>
-          <div class="profile-tier-display">
-            <span class="tier-badge-lg" id="profileTierBadge">Tier 1 — Verified</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="profile-body">
-      <div class="profile-grid">
-        <div class="profile-card">
-          <h3>Account Info</h3>
-          <div class="profile-field-row"><label>Full Name</label><input type="text" id="pfName" placeholder="Your full name"></div>
-          <div class="profile-field-row"><label>Company</label><input type="text" id="pfCompany" placeholder="Company name"></div>
-          <div class="profile-field-row"><label>Phone</label><input type="text" id="pfPhone" placeholder="(801) 555-0000"></div>
-          <div class="profile-field-row"><label>Primary Trade</label>
-            <select id="pfTrade">
-              <option value="">Select trade</option>
-              <option>Framing</option><option>Concrete</option><option>Roofing</option>
-              <option>Electrical</option><option>Plumbing</option><option>HVAC</option>
-              <option>Excavation</option><option>Flooring</option><option>Siding</option>
-              <option>Finish Carpentry</option><option>Painting</option><option>General Contracting</option>
-            </select>
-          </div>
-          <button class="btn-primary btn-sm" id="saveProfileBtn">Save Changes</button>
-        </div>
-        <div class="profile-card">
-          <h3>Tier Progress</h3>
-          <div class="tier-progress">
-            <div class="tier-row"><span class="tier-num">1</span><span class="tier-name tier-active" id="t1">Verified</span><span class="tier-check" id="tc1">✓</span></div>
-            <div class="tier-row"><span class="tier-num">2</span><span class="tier-name tier-inactive" id="t2">Active</span><span class="tier-dot" id="tc2">○</span></div>
-            <div class="tier-row"><span class="tier-num">3</span><span class="tier-name tier-inactive" id="t3">Proven</span><span class="tier-dot" id="tc3">○</span></div>
-            <div class="tier-row"><span class="tier-num">4</span><span class="tier-name tier-inactive" id="t4">Trusted</span><span class="tier-dot" id="tc4">○</span></div>
-            <div class="tier-row"><span class="tier-num">5</span><span class="tier-name tier-inactive" id="t5">TradeDeck Pro</span><span class="tier-dot" id="tc5">○</span></div>
-          </div>
-          <p style="color:var(--steel);font-size:0.78rem;margin-top:16px;line-height:1.5;">Tier advances automatically based on jobs completed, timeline adherence, and site cleanliness sign-offs.</p>
-        </div>
-        <div class="profile-card">
-          <h3>Stats</h3>
-          <div class="profile-field-row"><label>Jobs Completed</label><div class="field-val" id="pfJobsCompleted">0</div></div>
-          <div class="profile-field-row"><label>Member Since</label><div class="field-val" id="pfMemberSince">--</div></div>
-          <div class="profile-field-row"><label>Email</label><div class="field-val" id="pfEmail">--</div></div>
-        </div>
-        <div class="profile-card">
-          <h3>Account Actions</h3>
-          <p style="color:var(--steel);font-size:0.82rem;margin-bottom:16px;line-height:1.5;">Signing out will end your current session. Your profile and jobs are saved.</p>
-          <button class="btn-ghost btn-sm" id="profileLogoutBtn" style="width:100%;margin-bottom:10px;">Sign Out</button>
-          <button class="btn-danger btn-sm" id="profileDeleteBtn" style="width:100%;">Delete Account</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ===================== AUTH MODAL ===================== -->
-<div class="modal-overlay" id="authModal">
-  <div class="modal-panel" style="position:relative;">
-    <button class="modal-close" id="authModalClose">&#x2715;</button>
-    <div class="modal-title">TradeDeck</div>
-    <div class="modal-sub">Sign in to post jobs, apply, and manage draws.</div>
-    <div class="modal-tabs">
-      <button class="modal-tab active" id="tabSignIn">Sign In</button>
-      <button class="modal-tab" id="tabSignUp">Create Account</button>
-    </div>
-    <!-- SIGN IN -->
-    <div id="signInForm">
-      <div class="auth-field"><label>Email</label><input type="email" id="siEmail" placeholder="you@example.com"></div>
-      <div class="auth-field"><label>Password</label><input type="password" id="siPassword" placeholder="••••••••"></div>
-      <div class="auth-error" id="siError"></div>
-      <button class="btn-primary" style="width:100%" id="siSubmit">Sign In</button>
-    </div>
-    <!-- SIGN UP -->
-    <div id="signUpForm" style="display:none">
-      <div class="auth-field"><label>Full Name</label><input type="text" id="suName" placeholder="Your full name"></div>
-      <div class="auth-field"><label>Email</label><input type="email" id="suEmail" placeholder="you@example.com"></div>
-      <div class="auth-field"><label>Password</label><input type="password" id="suPassword" placeholder="Min 6 characters"></div>
-      <div class="auth-error" id="suError"></div>
-      <div class="auth-success" id="suSuccess"></div>
-      <button class="btn-primary" style="width:100%" id="suSubmit">Create Account</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===================== INTAKE OVERLAY ===================== -->
-<div class="intake-overlay" id="intakeOverlay">
-  <div class="intake-panel">
-    <div class="intake-header">
-      <div class="intake-header-left">
-        <div class="intake-logo">TD</div>
-        <div>
-          <div class="intake-title">Post a Job</div>
-          <div class="intake-subtitle">Powered by Claude AI · Utah only</div>
-        </div>
-      </div>
-      <button class="intake-close" id="intakeCloseBtn">&#x2715;</button>
-    </div>
-    <div class="intake-messages" id="intakeMessages"></div>
-    <div class="intake-footer">
-      <div class="intake-input-row">
-        <textarea class="intake-input" id="intakeInput" placeholder="Describe the job..." rows="1"></textarea>
-        <button class="intake-send" id="intakeSendBtn">
-          <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
-      </div>
-      <div class="intake-disclaimer">TradeDeck AI · Utah contractors only · Jobs post live instantly</div>
-    </div>
-  </div>
-</div>
-
-<!-- TOAST -->
-<div class="toast" id="toast"></div>
+<div id="toast"></div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+const SUPABASE_URL = 'https://jlaajejpqjldpbinktln.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW5rdGxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMDg3MTksImV4cCI6MjEwMTc4NDcxOX0.tP-seLGoJnivrYmNhhTDmDJw4Uk92D95-zrwWB1G_S4';
 
-  /* ========== SUPABASE INIT ========== */
-  var SB_URL  = 'https://jlaajejpqjldpbinktln.supabase.co';
-  var SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW5rdGxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMDg3MTksImV4cCI6MjEwMTc4NDcxOX0.tP-seLGoJnivrYmNhhTDmDJw4Uk92D95-zrwWB1G_S4';
-  var sb      = supabase.createClient(SB_URL, SB_KEY);
-  var API     = 'https://tradedeck-api.onrender.com';
-  var currentUser = null;
-  var currentProfile = null;
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  /* ========== TOAST ========== */
-  function toast(msg, type) {
-    var t = document.getElementById('toast');
-    t.textContent = msg;
-    t.className = 'toast ' + (type||'');
-    t.classList.add('show');
-    setTimeout(function(){ t.classList.remove('show'); }, 3000);
+let STATE = {
+  user: null, profile: null,
+  jobs: [], kslJobs: [], draws: [],
+  workTab: 'open', county: 'all',
+  ratingJobId: null, rating: 0,
+  milestones: []
+};
+
+// ── TOAST ──────────────────────────────────────────────────────────────────
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 2500);
+}
+
+// ── AUTH ──────────────────────────────────────────────────────────────────
+let authMode = 'signin';
+function toggleAuth() {
+  authMode = authMode === 'signin' ? 'signup' : 'signin';
+  document.getElementById('auth-btn').textContent = authMode === 'signin' ? 'Sign In' : 'Create Account';
+  document.querySelector('.auth-toggle span').textContent = authMode === 'signin' ? 'Sign up' : 'Sign in';
+}
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+async function authSubmit() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pw = document.getElementById('auth-password').value;
+  showAuthError('');
+  if (!email || !pw) { showAuthError('Email and password required'); return; }
+  document.getElementById('auth-btn').textContent = '…';
+  let res;
+  try {
+    if (authMode === 'signup') res = await sb.auth.signUp({ email, password: pw });
+    else res = await sb.auth.signInWithPassword({ email, password: pw });
+  } catch(e) {
+    showAuthError(e.message);
+    document.getElementById('auth-btn').textContent = authMode === 'signin' ? 'Sign In' : 'Create Account';
+    return;
   }
-
-  /* ========== PAGE TABS ========== */
-  function showPage(id) {
-    document.querySelectorAll('.page-view').forEach(function(v){ v.classList.remove('active'); });
-    document.querySelectorAll('.page-tab').forEach(function(t){ t.classList.remove('active'); });
-    var page = document.getElementById('page-' + id);
-    if (page) page.classList.add('active');
-    var tab = document.querySelector('[data-page="' + id + '"]');
-    if (tab) tab.classList.add('active');
+  if (res.error) {
+    showAuthError(res.error.message);
+    document.getElementById('auth-btn').textContent = authMode === 'signin' ? 'Sign In' : 'Create Account';
+    return;
   }
-
-  document.querySelectorAll('.page-tab').forEach(function(tab) {
-    tab.addEventListener('click', function() {
-      var pg = this.dataset.page;
-      if (pg === 'postjob') { openIntake(); return; }
-      if (pg === 'gcleads') { showPage('gcleads'); loadGCLeads(false); return; }
-      if (pg === 'draws') { showPage('draws'); initDraws(); return; }
-      if (pg === 'profile') { showPage('profile'); initProfile(); return; }
-      if (pg === 'findwork') { showPage('findwork'); loadJobs(); return; }
-      showPage(pg);
-    });
-  });
-
-  document.getElementById('navLogo').addEventListener('click', function(){ showPage('home'); });
-  document.getElementById('heroFindWork').addEventListener('click', function(){ showPage('findwork'); loadJobs(); });
-  document.getElementById('heroPostBtn').addEventListener('click', openIntake);
-  document.getElementById('barPostBtn').addEventListener('click', openIntake);
-  document.getElementById('postPageBtn').addEventListener('click', openIntake);
-
-  /* ========== AUTH ========== */
-  function openAuthModal() {
-    document.getElementById('authModal').classList.add('active');
-    document.body.style.overflow = 'hidden';
+  if (authMode === 'signup' && !res.data?.session) {
+    showAuthError('');
+    document.getElementById('auth-wrap').innerHTML = '<h1>TradeDeck</h1><p style="color:var(--teal);margin-top:16px">Check your email to confirm your account, then sign in.</p>';
+    return;
   }
-  function closeAuthModal() {
-    document.getElementById('authModal').classList.remove('active');
-    document.body.style.overflow = '';
+  await bootApp(res.data.user);
+}
+
+async function bootApp(user) {
+  STATE.user = user;
+  document.getElementById('auth-wrap').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('main-nav').style.display = 'flex';
+
+  // Upsert profile
+  let { data: profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  if (error || !profile) {
+    const ins = await sb.from('profiles').insert({ id: user.id, email: user.email, tier: 1 }).select().single();
+    profile = ins.data || { id: user.id, email: user.email, tier: 1, full_name: '', trade_type: '', bio: '' };
   }
+  STATE.profile = profile;
 
-  document.getElementById('navSignIn').addEventListener('click', openAuthModal);
-  document.getElementById('authModalClose').addEventListener('click', closeAuthModal);
-  document.getElementById('drawSignInBtn').addEventListener('click', openAuthModal);
-  document.getElementById('profileSignInBtn').addEventListener('click', openAuthModal);
-  document.getElementById('authModal').addEventListener('click', function(e){ if(e.target===this) closeAuthModal(); });
+  await loadAll();
+  renderAll();
+}
 
-  document.getElementById('tabSignIn').addEventListener('click', function() {
-    this.classList.add('active');
-    document.getElementById('tabSignUp').classList.remove('active');
-    document.getElementById('signInForm').style.display = '';
-    document.getElementById('signUpForm').style.display = 'none';
-  });
-  document.getElementById('tabSignUp').addEventListener('click', function() {
-    this.classList.add('active');
-    document.getElementById('tabSignIn').classList.remove('active');
-    document.getElementById('signUpForm').style.display = '';
-    document.getElementById('signInForm').style.display = 'none';
-  });
+async function loadAll() {
+  const [j, k, d] = await Promise.allSettled([
+    sb.from('jobs').select('*').neq('source','ksl').eq('status','open').order('created_at',{ascending:false}).limit(50),
+    sb.from('jobs').select('*').eq('source','ksl').order('created_at',{ascending:false}).limit(100),
+    sb.from('draw_schedules').select('*, milestones(*)').limit(30)
+  ]);
+  STATE.jobs    = j.status==='fulfilled' ? (j.value.data||[]) : [];
+  STATE.kslJobs = k.status==='fulfilled' ? (k.value.data||[]) : [];
+  STATE.draws   = d.status==='fulfilled' ? (d.value.data||[]) : [];
+}
 
-  /* Sign In */
-  document.getElementById('siSubmit').addEventListener('click', async function() {
-    var email = document.getElementById('siEmail').value.trim();
-    var pass  = document.getElementById('siPassword').value;
-    var err   = document.getElementById('siError');
-    err.style.display = 'none';
-    if (!email || !pass) { err.textContent = 'Email and password required.'; err.style.display = 'block'; return; }
-    this.textContent = 'Signing in...'; this.disabled = true;
-    var result = await sb.auth.signInWithPassword({ email: email, password: pass });
-    this.textContent = 'Sign In'; this.disabled = false;
-    if (result.error) { err.textContent = result.error.message; err.style.display = 'block'; return; }
-    closeAuthModal();
-    toast('Welcome back!', 'success');
-  });
+async function signOut() {
+  await sb.auth.signOut();
+  location.reload();
+}
 
-  /* Sign Up */
-  document.getElementById('suSubmit').addEventListener('click', async function() {
-    var name  = document.getElementById('suName').value.trim();
-    var email = document.getElementById('suEmail').value.trim();
-    var pass  = document.getElementById('suPassword').value;
-    var err   = document.getElementById('suError');
-    var ok    = document.getElementById('suSuccess');
-    err.style.display = 'none'; ok.style.display = 'none';
-    if (!name || !email || !pass) { err.textContent = 'All fields required.'; err.style.display = 'block'; return; }
-    if (pass.length < 6) { err.textContent = 'Password must be at least 6 characters.'; err.style.display = 'block'; return; }
-    this.textContent = 'Creating...'; this.disabled = true;
-    var result = await sb.auth.signUp({ email: email, password: pass, options: { data: { full_name: name } } });
-    this.textContent = 'Create Account'; this.disabled = false;
-    if (result.error) { err.textContent = result.error.message; err.style.display = 'block'; return; }
-    ok.textContent = 'Account created! Check your email to confirm, then sign in.';
-    ok.style.display = 'block';
-  });
+// ── TABS ──────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-'+tab).classList.add('active');
+  document.getElementById('nav-'+tab).classList.add('active');
+}
+function workTab(tab, btn) {
+  STATE.workTab = tab; STATE.county = 'all';
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('county-tabs').style.display = tab==='ksl' ? 'flex' : 'none';
+  renderWork();
+}
+function closeOverlay(id) { document.getElementById(id).classList.remove('open'); }
 
-  /* Auth State */
-  sb.auth.onAuthStateChange(async function(event, session) {
-    if (session && session.user) {
-      currentUser = session.user;
-      await loadProfile();
-      updateNavAuth(true);
-      refreshDrawGate();
-      refreshProfileGate();
-    } else {
-      currentUser = null;
-      currentProfile = null;
-      updateNavAuth(false);
-      refreshDrawGate();
-      refreshProfileGate();
-    }
-  });
+// ── RENDER ALL ────────────────────────────────────────────────────────────
+function renderAll() { renderHome(); renderWork(); renderDraws(); renderProfile(); }
 
-  async function loadProfile() {
-    if (!currentUser) return;
-    var result = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
-    if (result.data) currentProfile = result.data;
+// ── HOME ──────────────────────────────────────────────────────────────────
+function renderHome() {
+  if (!STATE.profile) return;
+  const p = STATE.profile;
+  const tierNames = ['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
+  const tierEl = document.getElementById('home-tier');
+  tierEl.textContent = tierNames[p.tier] || 'Verified';
+  tierEl.style.display = 'inline-block';
+  const myJobs = STATE.jobs.filter(j => j.posted_by === STATE.user.id);
+  document.getElementById('home-content').innerHTML = `
+    <div class="card">
+      <div class="flex between"><span class="text-muted">Jobs Posted</span><strong>${myJobs.length}</strong></div>
+      <div class="flex between mt8"><span class="text-muted">Active Draws</span><strong>${STATE.draws.length}</strong></div>
+    </div>
+    <div class="card">
+      <h3>Quick Actions</h3>
+      <div class="flex gap8 mt8">
+        <button class="btn btn-primary btn-sm" onclick="switchTab('post')">Post a Job</button>
+        <button class="btn btn-outline btn-sm" onclick="switchTab('work')">Find Work</button>
+      </div>
+    </div>
+    ${STATE.jobs.slice(0,3).map(j=>`
+      <div class="card">
+        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-teal">${j.trade_type||'Trade'}</span></div>
+        <p>${j.location||''}</p>
+        <p>${j.budget||''}</p>
+      </div>`).join('')}
+  `;
+}
+
+// ── WORK ──────────────────────────────────────────────────────────────────
+const COUNTIES = ['All','Cache','Box Elder','Weber','Davis','Salt Lake','Utah','Wasatch','Summit','Duchesne','Uintah','Carbon','Emery','Grand','San Juan','Sevier','Piute','Garfield','Kane','Iron','Washington','Beaver','Millard','Juab','Sanpete','Tooele','Morgan','Rich'];
+const LEADS = [
+  {n:'PermitStack',d:'Utah building permits — new construction signals'},
+  {n:'KSL Classifieds',d:'FSBO and contractor listings'},
+  {n:'BuildZoom',d:'Permit and contractor history'},
+  {n:'Angi',d:'Homeowner requests in your area'},
+  {n:'Thumbtack',d:'Local project leads'},
+  {n:'Google Local Services',d:'LSA leads'},
+  {n:'HomeAdvisor',d:'Homeowner project matching'},
+  {n:'Houzz Pro',d:'Design-build and remodel leads'},
+  {n:'NextDoor',d:'Neighborhood contractor referrals'},
+  {n:'Facebook Marketplace',d:'Local contractor demand'},
+  {n:'Craigslist',d:'Gig and sub postings'},
+];
+
+function renderWork() {
+  const el = document.getElementById('work-content');
+  if (STATE.workTab === 'leads') {
+    el.innerHTML = LEADS.map(l=>`<div class="card"><h3>${l.n}</h3><p>${l.d}</p></div>`).join('');
+    return;
   }
-
-  function updateNavAuth(loggedIn) {
-    document.getElementById('navUser').style.display  = loggedIn ? 'flex' : 'none';
-    document.getElementById('navGuest').style.display = loggedIn ? 'none' : '';
-    if (loggedIn && currentProfile) {
-      var tierNames = ['','Verified','Active','Proven','Trusted','TD Pro'];
-      document.getElementById('navTier').textContent  = 'Tier ' + (currentProfile.tier||1);
-      document.getElementById('navEmail').textContent = currentUser.email;
-    }
+  if (STATE.workTab === 'ksl') {
+    const ctEl = document.getElementById('county-tabs');
+    ctEl.innerHTML = COUNTIES.map(c=>{
+      const val = c==='All' ? 'all' : c;
+      return `<button class="county-tab${STATE.county===val?' active':''}" onclick="filterCounty('${val}',this)">${c}</button>`;
+    }).join('');
+    const list = STATE.county==='all' ? STATE.kslJobs : STATE.kslJobs.filter(j=>j.county===STATE.county);
+    el.innerHTML = list.length ? list.map(j=>`
+      <div class="card">
+        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">KSL</span></div>
+        <p>${j.company||''} · ${j.location||''}</p>
+        <p style="margin-top:6px">${(j.description||'').slice(0,150)}${j.description?.length>150?'…':''}</p>
+        <p class="text-muted" style="margin-top:4px">${j.pay||''} · ${j.job_type||''}</p>
+      </div>`).join('') :
+      '<p class="text-muted" style="padding:20px 0">No KSL jobs in this area yet. Scraper pulls daily.</p>';
+    return;
   }
+  // Open jobs
+  el.innerHTML = STATE.jobs.length ? STATE.jobs.map(j=>`
+    <div class="card">
+      <div class="flex between"><h3>${j.title}</h3><span class="badge badge-teal">${j.trade_type||'Trade'}</span></div>
+      <p>${j.location||''}</p>
+      <p>${j.budget||''}</p>
+      <p class="text-muted" style="margin-top:6px;font-size:12px">${(j.description||'').slice(0,100)}${(j.description||'').length>100?'…':''}</p>
+      <div class="flex gap8 mt8">
+        <button class="btn btn-primary btn-sm" onclick="applyJob('${j.id}')">Apply</button>
+        <button class="btn btn-outline btn-sm" onclick="openRating('${j.id}')">Rate</button>
+      </div>
+    </div>`).join('') :
+    '<p class="text-muted" style="padding:20px 0">No open jobs yet. Post the first one.</p>';
+}
+function filterCounty(county, btn) {
+  STATE.county = county;
+  document.querySelectorAll('.county-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderWork();
+}
+async function applyJob(jobId) {
+  const { error } = await sb.from('applications').insert({ job_id: jobId, applicant_id: STATE.user.id, message: '' });
+  if (error && error.code === '23505') { toast('Already applied'); return; }
+  if (error) { toast('Error: '+error.message); return; }
+  toast('Applied!');
+}
 
-  async function signOut() {
-    await sb.auth.signOut();
-    toast('Signed out.', '');
-    showPage('home');
+// ── POST JOB ──────────────────────────────────────────────────────────────
+function addMilestone() {
+  STATE.milestones.push({ name:'', pct:0, verifier:'owner' });
+  renderMilestones();
+}
+function removeMilestone(i) { STATE.milestones.splice(i,1); renderMilestones(); }
+function renderMilestones() {
+  const el = document.getElementById('milestone-rows');
+  el.innerHTML = STATE.milestones.map((m,i)=>`
+    <div class="milestone-row">
+      <input placeholder="Milestone" value="${m.name}" oninput="STATE.milestones[${i}].name=this.value"/>
+      <input class="pct" type="number" placeholder="%" min="1" max="100" value="${m.pct||''}"
+        oninput="STATE.milestones[${i}].pct=+this.value;updatePct()"/>
+      <select style="width:100px;margin-bottom:0" onchange="STATE.milestones[${i}].verifier=this.value">
+        <option value="owner" ${m.verifier==='owner'?'selected':''}>Owner</option>
+        <option value="inspector" ${m.verifier==='inspector'?'selected':''}>Inspector</option>
+      </select>
+      <button class="btn btn-outline btn-sm" onclick="removeMilestone(${i})">✕</button>
+    </div>`).join('');
+  updatePct();
+}
+function updatePct() {
+  const total = STATE.milestones.reduce((s,m)=>s+(+m.pct||0),0);
+  const el = document.getElementById('pct-total');
+  if (!STATE.milestones.length) { el.textContent=''; return; }
+  el.textContent = `${total}% / 100%`;
+  el.style.color = total===100 ? '#50c878' : total>100 ? 'var(--danger)' : 'var(--muted)';
+}
+async function submitJob() {
+  const title = document.getElementById('post-title').value.trim();
+  if (!title) { toast('Job title required'); return; }
+  if (STATE.milestones.length) {
+    const total = STATE.milestones.reduce((s,m)=>s+(+m.pct||0),0);
+    if (total !== 100) { toast('Milestone % must total 100'); return; }
   }
-
-  document.getElementById('navLogout').addEventListener('click', signOut);
-  document.getElementById('profileLogoutBtn') && document.getElementById('profileLogoutBtn').addEventListener('click', signOut);
-
-  /* ========== PROFILE PAGE ========== */
-  function refreshProfileGate() {
-    document.getElementById('profileAuthGate').style.display  = currentUser ? 'none' : '';
-    document.getElementById('profileContent').style.display   = currentUser ? '' : 'none';
-  }
-
-  function initProfile() {
-    refreshProfileGate();
-    if (!currentUser || !currentProfile) return;
-    var p = currentProfile;
-    var initials = (p.full_name||currentUser.email||'?').charAt(0).toUpperCase();
-    document.getElementById('profileAvatar').textContent = initials;
-    document.getElementById('profileName').textContent   = p.full_name || 'Your Name';
-    document.getElementById('profileCompany').textContent = p.company || '';
-    document.getElementById('profileMeta').textContent   = (p.trade||'') + (p.phone ? ' · ' + p.phone : '');
-    var tierNames = ['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
-    document.getElementById('profileTierBadge').textContent = 'Tier ' + (p.tier||1) + ' — ' + (tierNames[p.tier||1]||'Verified');
-    document.getElementById('pfName').value     = p.full_name||'';
-    document.getElementById('pfCompany').value  = p.company||'';
-    document.getElementById('pfPhone').value    = p.phone||'';
-    document.getElementById('pfTrade').value    = p.trade||'';
-    document.getElementById('pfJobsCompleted').textContent = p.jobs_completed||0;
-    document.getElementById('pfEmail').textContent = currentUser.email;
-    var since = new Date(p.created_at);
-    document.getElementById('pfMemberSince').textContent = since.toLocaleDateString('en-US',{month:'short',year:'numeric'});
-    updateTierDisplay(p.tier||1);
-  }
-
-  function updateTierDisplay(tier) {
-    for (var i=1; i<=5; i++) {
-      var name = document.getElementById('t'+i);
-      var check = document.getElementById('tc'+i);
-      if (i <= tier) {
-        name.className = 'tier-name tier-active';
-        check.textContent = '✓'; check.className = 'tier-check';
-      } else {
-        name.className = 'tier-name tier-inactive';
-        check.textContent = '○'; check.className = 'tier-dot';
-      }
-    }
-  }
-
-  document.getElementById('saveProfileBtn').addEventListener('click', async function() {
-    if (!currentUser) return;
-    this.textContent = 'Saving...'; this.disabled = true;
-    var updates = {
-      full_name: document.getElementById('pfName').value.trim(),
-      company:   document.getElementById('pfCompany').value.trim(),
-      phone:     document.getElementById('pfPhone').value.trim(),
-      trade:     document.getElementById('pfTrade').value
-    };
-    var result = await sb.from('profiles').update(updates).eq('id', currentUser.id);
-    this.textContent = 'Save Changes'; this.disabled = false;
-    if (result.error) { toast('Save failed: ' + result.error.message, 'error'); return; }
-    await loadProfile();
-    initProfile();
-    toast('Profile saved.', 'success');
-  });
-
-  document.getElementById('profileDeleteBtn') && document.getElementById('profileDeleteBtn').addEventListener('click', function() {
-    if (confirm('Delete your TradeDeck account? This cannot be undone.')) {
-      toast('Contact support to complete account deletion.', '');
-    }
-  });
-
-  /* ========== JOBS — SUPABASE ========== */
-  async function loadJobs() {
-    var grid  = document.getElementById('jobsGrid');
-    var empty = document.getElementById('jobsEmpty');
-    grid.innerHTML = '<div style="color:var(--steel);font-size:0.9rem;grid-column:1/-1;">Loading jobs...</div>';
-
-    // Try Supabase first, fall back to Flask API
-    var result = await sb.from('jobs').select('*').eq('status','open').order('created_at',{ascending:false}).limit(50);
-    var jobs = [];
-    if (result.data && result.data.length > 0) {
-      jobs = result.data.map(function(j) {
-        var age = timeSince(j.created_at);
-        return { id:j.id, title:j.title, trade:j.trade, location:(j.city||'')+(j.state?', '+j.state:''), rate:j.rate, duration:j.duration, start_date:j.start_date, applicants:j.applicant_count||0, age:age, source:'sb' };
-      });
-    } else {
-      // Fallback to Flask
-      try {
-        var r = await fetch(API + '/api/jobs');
-        var d = await r.json();
-        jobs = (d.jobs||[]).map(function(j){ j.source='flask'; return j; });
-      } catch(e) {}
-    }
-
-    document.getElementById('statJobs').textContent = jobs.length;
-    renderJobs(jobs);
-    if (jobs.length > 0) loadHeroCard(jobs[0]);
-  }
-
-  function timeSince(dateStr) {
-    var d = new Date(dateStr);
-    var mins = Math.floor((Date.now() - d) / 60000);
-    if (mins < 60) return mins + 'm ago';
-    if (mins < 1440) return Math.floor(mins/60) + 'h ago';
-    return Math.floor(mins/1440) + 'd ago';
-  }
-
-  function renderJobs(jobs) {
-    var grid = document.getElementById('jobsGrid');
-    var empty = document.getElementById('jobsEmpty');
-    grid.innerHTML = '';
-    if (!jobs.length) { empty.style.display = 'block'; return; }
-    empty.style.display = 'none';
-    jobs.forEach(function(job) {
-      var card = document.createElement('div');
-      card.className = 'job-card';
-      card.dataset.trade    = job.trade||'';
-      card.dataset.location = job.location||'';
-      card.innerHTML =
-        '<div class="jc-head"><div><div class="jc-title">' + (job.title||'Untitled') + '</div>' +
-        '<div class="jc-meta">' + (job.location||'--') + ' · ' + (job.age||'--') + '</div></div>' +
-        '<span class="badge badge-open">Open</span></div>' +
-        '<div class="jc-fields">' +
-        '<div class="jc-field"><label>Trade</label><div class="jval">' + (job.trade||'--') + '</div></div>' +
-        '<div class="jc-field"><label>Duration</label><div class="jval">' + (job.duration||'--') + '</div></div>' +
-        '<div class="jc-field"><label>Rate</label><div class="jval">' + (job.rate||'--') + '</div></div>' +
-        '<div class="jc-field"><label>Start</label><div class="jval">' + (job.start_date||'--') + '</div></div>' +
-        '</div>' +
-        '<div class="jc-footer">' +
-        '<span class="bc-apply-count">' + (job.applicants||0) + ' applicant' + ((job.applicants||0)!==1?'s':'') + '</span>' +
-        '<button class="jc-apply-btn" data-job-id="' + job.id + '" data-source="' + (job.source||'flask') + '">Apply</button>' +
-        '</div>';
-      grid.appendChild(card);
-    });
-    grid.querySelectorAll('.jc-apply-btn').forEach(function(btn) {
-      btn.addEventListener('click', async function(e) {
-        e.stopPropagation();
-        if (!currentUser) { openAuthModal(); return; }
-        var id  = this.dataset.jobId;
-        var src = this.dataset.source;
-        var b   = this;
-        b.textContent = 'Applying...'; b.disabled = true;
-        if (src === 'sb') {
-          var res = await sb.from('applications').insert({ job_id:id, user_id:currentUser.id });
-          if (res.error && res.error.code !== '23505') {
-            b.textContent = 'Apply'; b.disabled = false;
-            toast('Could not apply. Try again.', 'error'); return;
-          }
-          await sb.from('jobs').update({ applicant_count: sb.rpc('increment', {}) }).eq('id', id);
-        } else {
-          await fetch(API + '/api/jobs/' + id + '/apply', { method:'POST' });
-        }
-        b.textContent = 'Applied ✓'; b.style.background = '#1A5C35'; b.style.color = '#4ADE80';
-        toast('Application submitted.', 'success');
-      });
-    });
-    applyJobFilters();
-  }
-
-  function loadHeroCard(job) {
-    document.getElementById('heroCard').innerHTML =
-      '<div class="bc-header"><div><div class="bc-title">' + (job.title||'Untitled') + '</div>' +
-      '<div class="bc-subtitle">' + (job.location||'Utah') + ' · ' + (job.age||'just posted') + '</div></div>' +
-      '<span class="badge badge-open">Open</span></div>' +
-      '<div class="bc-fields">' +
-      '<div class="bc-field"><label>Trade</label><div class="val">' + (job.trade||'--') + '</div></div>' +
-      '<div class="bc-field"><label>Duration</label><div class="val">' + (job.duration||'--') + '</div></div>' +
-      '<div class="bc-field"><label>Rate</label><div class="val">' + (job.rate||'--') + '</div></div>' +
-      '<div class="bc-field"><label>Crew</label><div class="val">' + (job.crew_size||'--') + '</div></div>' +
-      '</div><hr class="bc-divider">' +
-      '<div class="bc-footer"><span class="bc-apply-count">' + (job.applicants||0) + ' applicants</span>' +
-      '<button class="btn-primary" style="font-size:0.8rem;padding:8px 16px;" id="heroApplyBtn">Apply</button></div>';
-    document.getElementById('heroApplyBtn').addEventListener('click', function() {
-      if (!currentUser) { openAuthModal(); return; }
-      showPage('findwork'); loadJobs();
-    });
-  }
-
-  /* ========== FIND WORK SUB-TABS ========== */
-  function setSubTab(id) {
-    document.querySelectorAll('.fw-subtab').forEach(function(t){ t.classList.remove('active'); });
-    document.querySelectorAll('.fw-subview').forEach(function(v){ v.classList.remove('active'); });
-    document.querySelector('[data-sub="' + id + '"]').classList.add('active');
-    document.getElementById('sub-' + id).classList.add('active');
-    if (id === 'jobs') loadJobs();
-    else applySourceFilters();
-  }
-  document.querySelectorAll('.fw-subtab').forEach(function(t){ t.addEventListener('click', function(){ setSubTab(this.dataset.sub); }); });
-
-  /* ========== FILTERS ========== */
-  function activeSubTab() {
-    var t = document.querySelector('.fw-subtab.active');
-    return t ? t.dataset.sub : 'jobs';
-  }
-
-  function applyJobFilters() {
-    var search = document.getElementById('fwSearch').value.toLowerCase().trim();
-    var trade  = document.getElementById('fwTrade').value;
-    var cards  = document.querySelectorAll('#jobsGrid .job-card');
-    var vis = 0;
-    cards.forEach(function(card) {
-      var ok = (!search || card.innerText.toLowerCase().includes(search)) && (!trade || card.dataset.trade === trade);
-      card.style.display = ok ? '' : 'none';
-      if (ok) vis++;
-    });
-    document.getElementById('jobsEmpty').style.display = vis===0 ? 'block' : 'none';
-    document.getElementById('fwCount').textContent = vis + ' job' + (vis!==1?'s':'');
-  }
-
-  function applySourceFilters() {
-    var search = document.getElementById('fwSearch').value.toLowerCase().trim();
-    var cost   = document.getElementById('fwCost').value;
-    var items  = document.querySelectorAll('#leadSourcesList .ls-item');
-    var vis = 0;
-    items.forEach(function(item) {
-      var txt = (item.dataset.text||'') + ' ' + item.innerText.toLowerCase();
-      var ok  = (!search || txt.includes(search)) && (!cost || item.dataset.cost === cost);
-      item.style.display = ok ? '' : 'none';
-      if (ok) vis++;
-    });
-    document.querySelectorAll('.ls-section').forEach(function(sec) {
-      sec.style.display = Array.from(sec.querySelectorAll('.ls-item')).some(function(i){ return i.style.display!=='none'; }) ? '' : 'none';
-    });
-    document.getElementById('sourcesEmpty').style.display = vis===0 ? 'block' : 'none';
-    document.getElementById('fwCount').textContent = vis + ' source' + (vis!==1?'s':'');
-  }
-
-  ['fwSearch','fwTrade','fwCost'].forEach(function(id) {
-    var el = document.getElementById(id);
-    el.addEventListener('input', function(){ if(activeSubTab()==='jobs') applyJobFilters(); else applySourceFilters(); });
-    el.addEventListener('change', function(){ if(activeSubTab()==='jobs') applyJobFilters(); else applySourceFilters(); });
-  });
-
-  document.getElementById('fwClearBtn').addEventListener('click', function() {
-    document.getElementById('fwSearch').value='';
-    document.getElementById('fwTrade').value='';
-    document.getElementById('fwCost').value='';
-    if (activeSubTab()==='jobs') { loadJobs(); } else { applySourceFilters(); }
-  });
-
-  /* ========== DRAW MANAGER ========== */
-  function refreshDrawGate() {
-    document.getElementById('drawAuthGate').style.display  = currentUser ? 'none' : '';
-    document.getElementById('drawContent').style.display   = currentUser ? '' : 'none';
-  }
-
-  async function initDraws() {
-    refreshDrawGate();
-    if (!currentUser) return;
-    await loadDraws();
-  }
-
-  async function loadDraws() {
-    var list = document.getElementById('drawsList');
-    list.innerHTML = '<div style="color:var(--steel);font-size:0.9rem;">Loading draws...</div>';
-    var result = await sb.from('draws').select('*').eq('user_id', currentUser.id).order('created_at', {ascending:false});
-    var draws = result.data || [];
-    updateDrawStats(draws);
-    if (!draws.length) { list.innerHTML = '<div style="color:var(--steel);font-size:0.9rem;">No draws yet. Add your first draw above.</div>'; return; }
-    list.innerHTML = '';
-    draws.forEach(function(draw) { list.appendChild(buildDrawCard(draw)); });
-  }
-
-  function updateDrawStats(draws) {
-    document.getElementById('dsTotalDraws').textContent = draws.length;
-    document.getElementById('dsApproved').textContent   = draws.filter(function(d){ return d.status==='approved'; }).length;
-    document.getElementById('dsPending').textContent    = draws.filter(function(d){ return d.status==='pending'||d.status==='submitted'; }).length;
-    document.getElementById('dsDisputed').textContent   = draws.filter(function(d){ return d.status==='disputed'; }).length;
-  }
-
-  function buildDrawCard(draw) {
-    var card = document.createElement('div');
-    card.className = 'draw-card';
-    var statusClass = { pending:'status-pending', submitted:'status-submitted', approved:'status-approved', disputed:'status-disputed' }[draw.status] || 'status-pending';
-    var dollarAmt = draw.amount_dollars ? '$' + Number(draw.amount_dollars).toLocaleString() : '--';
-    var pctFill = draw.status === 'approved' ? 100 : draw.status === 'submitted' ? 50 : 0;
-    var actions = '';
-    if (draw.status === 'pending') {
-      actions = '<button class="draw-btn draw-btn-submit" data-id="' + draw.id + '" data-action="submitted">Submit for Verification</button>';
-    } else if (draw.status === 'submitted') {
-      actions = '<button class="draw-btn draw-btn-approve" data-id="' + draw.id + '" data-action="approved">Approve &amp; Release</button>' +
-                '<button class="draw-btn draw-btn-dispute" data-id="' + draw.id + '" data-action="disputed">Dispute</button>';
-    }
-    card.innerHTML =
-      '<div class="draw-card-head">' +
-        '<div><div class="draw-milestone">' + draw.milestone_name + '</div>' +
-        '<div class="draw-job">Verifier: ' + (draw.verifier_type==='inspector'?'Third-Party Inspector':'Owner / Homeowner') + '</div></div>' +
-        '<span class="draw-status-badge ' + statusClass + '">' + draw.status + '</span>' +
-      '</div>' +
-      '<div class="draw-fields">' +
-        '<div class="draw-field"><label>Percentage</label><div class="dval">' + draw.percentage + '%</div></div>' +
-        '<div class="draw-field"><label>Est. Amount</label><div class="dval">' + dollarAmt + '</div></div>' +
-        '<div class="draw-field"><label>Added</label><div class="dval">' + timeSince(draw.created_at) + '</div></div>' +
-      '</div>' +
-      '<div class="draw-progress"><div class="draw-progress-fill" style="width:' + pctFill + '%"></div></div>' +
-      (actions ? '<div class="draw-actions">' + actions + '</div>' : '') +
-      (draw.notes ? '<div style="font-size:0.8rem;color:var(--steel);margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);">' + draw.notes + '</div>' : '');
-
-    card.querySelectorAll('.draw-btn[data-action]').forEach(function(btn) {
-      btn.addEventListener('click', async function() {
-        var id     = this.dataset.id;
-        var action = this.dataset.action;
-        var notes  = action === 'disputed' ? (prompt('Dispute reason (optional):') || '') : '';
-        var updates = { status: action };
-        if (action === 'submitted') updates.submitted_at = new Date().toISOString();
-        if (action === 'approved')  updates.verified_at  = new Date().toISOString();
-        if (notes) updates.notes = notes;
-        var res = await sb.from('draws').update(updates).eq('id', id);
-        if (res.error) { toast('Update failed.', 'error'); return; }
-        toast(action === 'approved' ? 'Draw approved — funds released.' : action === 'disputed' ? 'Draw disputed — placed on hold.' : 'Submitted for verification.', action==='approved'?'success':'');
-        await loadDraws();
-      });
-    });
-    return card;
-  }
-
-  document.getElementById('addDrawBtn').addEventListener('click', async function() {
-    if (!currentUser) { openAuthModal(); return; }
-    var milestone = document.getElementById('drawMilestone').value.trim();
-    var pct       = parseInt(document.getElementById('drawPct').value);
-    var contract  = parseFloat(document.getElementById('drawContractVal').value);
-    var verifier  = document.getElementById('drawVerifier').value;
-    var warn      = document.getElementById('pctWarning');
-    warn.style.display = 'none';
-    if (!milestone) { toast('Enter a milestone name.', 'error'); return; }
-    if (!pct || pct < 1 || pct > 100) { warn.style.display = 'block'; return; }
-    var amount = contract && !isNaN(contract) ? (contract * pct / 100).toFixed(2) : null;
-    var res = await sb.from('draws').insert({ user_id:currentUser.id, milestone_name:milestone, percentage:pct, amount_dollars:amount, verifier_type:verifier, status:'pending' });
-    if (res.error) { toast('Could not add draw: ' + res.error.message, 'error'); return; }
-    document.getElementById('drawMilestone').value = '';
-    document.getElementById('drawPct').value = '';
-    document.getElementById('drawContractVal').value = '';
-    toast('Draw added.', 'success');
-    await loadDraws();
-  });
-
-  document.getElementById('refreshDrawsBtn').addEventListener('click', async function(){ await loadDraws(); });
-
-  /* ========== COMPANYCAM ========== */
-  var CC_KEY = 'td_cc_api_key';
-  var ccApiKey = '';
-  try { ccApiKey = localStorage.getItem(CC_KEY)||''; } catch(e){}
-
-  var mockProjects=[{id:'proj_001',name:'Park City Framing -- Lot 14'},{id:'proj_002',name:'Heber Concrete Flatwork'},{id:'proj_003',name:'Kamas Metal Roof'}];
-  var mockPhotos=[
-    {id:1,caption:'Foundation forms set',date:'Jul 22',tag:'Before',project:'proj_001'},
-    {id:2,caption:'First floor framing complete',date:'Jul 23',tag:'Progress',project:'proj_001'},
-    {id:3,caption:'Roof trusses delivered',date:'Jul 24',tag:'Progress',project:'proj_001'},
-    {id:4,caption:'Concrete pour -- driveway',date:'Jul 21',tag:'During',project:'proj_002'},
-    {id:5,caption:'Flatwork finished',date:'Jul 22',tag:'Progress',project:'proj_002'},
-    {id:6,caption:'Metal panels -- north face',date:'Jul 20',tag:'Progress',project:'proj_003'}
-  ];
-
-  function ccInit() {
-    if (ccApiKey) {
-      document.getElementById('ccConnectBanner').style.display='none';
-      document.getElementById('ccConnected').style.display='block';
-      ccLoadProjects();
+  const { data: job, error } = await sb.from('jobs').insert({
+    title,
+    trade_type: document.getElementById('post-trade').value,
+    location: document.getElementById('post-location').value,
+    description: document.getElementById('post-desc').value,
+    budget: document.getElementById('post-budget').value,
+    posted_by: STATE.user.id,
+    source: 'tradedeck',
+    status: 'open'
+  }).select().single();
+  if (error) { toast('Error: '+error.message); return; }
+  if (STATE.milestones.length && job) {
+    const budget = parseInt(document.getElementById('post-budget').value) || 0;
+    const { data: sched } = await sb.from('draw_schedules').insert({ job_id: job.id, contract_value: budget }).select().single();
+    if (sched) {
+      await sb.from('milestones').insert(STATE.milestones.map((m,i)=>({
+        schedule_id: sched.id, name: m.name, pct: m.pct,
+        order_num: i+1, verifier_type: m.verifier, status: 'pending'
+      })));
     }
   }
-  function ccLoadProjects() {
-    var sel = document.getElementById('ccJobSelect');
-    sel.innerHTML='<option value="">All Projects</option>';
-    mockProjects.forEach(function(p){ var o=document.createElement('option'); o.value=p.id; o.textContent=p.name; sel.appendChild(o); });
-    document.getElementById('ccTotalProjects').textContent = mockProjects.length;
-    ccLoadPhotos('');
+  STATE.milestones = [];
+  renderMilestones();
+  ['post-title','post-location','post-desc','post-budget'].forEach(id=>document.getElementById(id).value='');
+  await loadAll(); renderAll();
+  toast('Job posted!');
+  switchTab('work');
+}
+
+// ── DRAWS ─────────────────────────────────────────────────────────────────
+function renderDraws() {
+  const el = document.getElementById('draws-content');
+  if (!STATE.draws.length) {
+    el.innerHTML = '<p class="text-muted" style="padding:20px 0">No draw schedules yet. Add milestones when posting a job.</p>';
+    return;
   }
-  function ccLoadPhotos(pid) {
-    var grid=document.getElementById('ccPhotosGrid'), empty=document.getElementById('ccEmpty');
-    grid.innerHTML='';
-    var filtered=pid?mockPhotos.filter(function(p){return p.project===pid;}):mockPhotos;
-    if(!filtered.length){empty.style.display='block';return;}
-    empty.style.display='none';
-    document.getElementById('ccTotalPhotos').textContent=filtered.length;
-    document.getElementById('ccThisWeek').textContent=filtered.filter(function(p){return['Jul 22','Jul 23','Jul 24'].indexOf(p.date)>-1;}).length;
-    filtered.forEach(function(photo){
-      var c=document.createElement('div'); c.className='cc-photo-card';
-      c.innerHTML='<div class="cc-photo-img-placeholder">Photo '+photo.id+'</div><div class="cc-photo-meta"><div class="cc-photo-caption">'+photo.caption+'</div><div class="cc-photo-date">'+photo.date+'</div><span class="cc-photo-tag">'+photo.tag+'</span></div>';
-      grid.appendChild(c);
-    });
-  }
-  document.getElementById('ccConnectBtn').addEventListener('click',function(){
-    var key=document.getElementById('ccApiKeyInput').value.trim();
-    if(!key){alert('Paste your CompanyCam API key first.');return;}
-    ccApiKey=key; try{localStorage.setItem(CC_KEY,key);}catch(e){}
-    document.getElementById('ccConnectBanner').style.display='none';
-    document.getElementById('ccConnected').style.display='block';
-    ccLoadProjects();
+  el.innerHTML = STATE.draws.map(d => {
+    const ms = d.milestones || [];
+    const released = ms.filter(m=>m.status==='approved').reduce((s,m)=>s+(m.pct||0),0);
+    return `<div class="card">
+      <div class="flex between">
+        <h3>Draw Schedule</h3>
+        <span class="text-muted">$${(d.contract_value||0).toLocaleString()}</span>
+      </div>
+      <div class="escrow-bar"><div class="escrow-fill" style="width:${released}%"></div></div>
+      <p class="text-muted" style="font-size:12px">${released}% released</p>
+      ${ms.map(m=>`
+        <div class="flex between mt8" style="align-items:center;flex-wrap:wrap;gap:8px">
+          <span>${m.name} (${m.pct}%)</span>
+          <div class="flex gap8" style="align-items:center">
+            <span class="draw-status ${m.status}">${m.status}</span>
+            ${m.status==='pending' ? `<button class="btn btn-outline btn-sm" onclick="drawAction('${m.id}','submitted')">Submit</button>` : ''}
+            ${m.status==='submitted' ? `
+              <button class="btn btn-primary btn-sm" onclick="drawAction('${m.id}','approved')">Approve</button>
+              <button class="btn btn-danger btn-sm" onclick="drawAction('${m.id}','disputed')">Dispute</button>` : ''}
+          </div>
+        </div>`).join('')}
+    </div>`;
+  }).join('');
+}
+async function drawAction(id, status) {
+  await sb.from('milestones').update({ status }).eq('id', id);
+  await loadAll(); renderDraws();
+  toast(status.charAt(0).toUpperCase()+status.slice(1));
+}
+
+// ── PROFILE ───────────────────────────────────────────────────────────────
+function renderProfile() {
+  const el = document.getElementById('profile-content');
+  if (!STATE.profile) return;
+  const p = STATE.profile;
+  const tierNames = ['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
+  el.innerHTML = `
+    <div class="card">
+      <h3>${p.full_name||p.email}</h3>
+      <p class="text-muted">${p.trade_type||'No trade type set'}</p>
+      <div class="flex gap8 mt8" style="align-items:center">
+        ${[1,2,3,4,5].map(i=>`<div style="width:10px;height:10px;border-radius:50%;background:${i<=(p.tier||1)?'var(--teal)':'var(--border)'}"></div>`).join('')}
+        <span class="text-muted" style="font-size:12px">${tierNames[p.tier]||'Verified'}</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Edit Profile</h3>
+      <label>Full Name</label><input id="edit-name" value="${p.full_name||''}"/>
+      <label>Trade Type</label>
+      <select id="edit-trade">
+        ${['Framing','Concrete','Roofing','Electrical','Plumbing','HVAC','Drywall','Flooring','Excavation','Landscaping','General Contractor','Other']
+          .map(t=>`<option ${p.trade_type===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+      <label>Bio</label><textarea id="edit-bio">${p.bio||''}</textarea>
+      <button class="btn btn-primary btn-block" onclick="saveProfile()">Save Profile</button>
+    </div>
+    <button class="btn btn-outline btn-block mt8" onclick="signOut()">Sign Out</button>
+  `;
+}
+async function saveProfile() {
+  const u = {
+    full_name: document.getElementById('edit-name').value,
+    trade_type: document.getElementById('edit-trade').value,
+    bio: document.getElementById('edit-bio').value
+  };
+  const { error } = await sb.from('profiles').update(u).eq('id', STATE.user.id);
+  if (error) { toast('Error: '+error.message); return; }
+  STATE.profile = {...STATE.profile, ...u};
+  renderProfile();
+  toast('Saved!');
+}
+
+// ── RATINGS ───────────────────────────────────────────────────────────────
+function openRating(jobId) {
+  STATE.ratingJobId = jobId; STATE.rating = 0;
+  document.querySelectorAll('#star-picker span').forEach(s=>s.classList.remove('on'));
+  document.getElementById('review-text').value = '';
+  document.getElementById('rating-overlay').classList.add('open');
+}
+function setRating(n) {
+  STATE.rating = n;
+  document.querySelectorAll('#star-picker span').forEach((s,i)=>s.classList.toggle('on',i<n));
+}
+async function submitRating() {
+  if (!STATE.rating) { toast('Pick a star rating'); return; }
+  const { error } = await sb.from('reviews').insert({
+    job_id: STATE.ratingJobId,
+    reviewer_id: STATE.user.id,
+    rating: STATE.rating,
+    body: document.getElementById('review-text').value
   });
-  document.getElementById('ccJobSelect').addEventListener('change',function(){ccLoadPhotos(this.value);});
-  document.getElementById('ccRefreshBtn').addEventListener('click',ccLoadProjects);
-  document.getElementById('ccDisconnectBtn').addEventListener('click',function(){
-    ccApiKey=''; try{localStorage.removeItem(CC_KEY);}catch(e){}
-    document.getElementById('ccConnectBanner').style.display='block';
-    document.getElementById('ccConnected').style.display='none';
-    document.getElementById('ccApiKeyInput').value='';
-  });
-  ccInit();
+  if (error && error.code==='23505') { toast('Already rated'); closeOverlay('rating-overlay'); return; }
+  if (error) { toast('Error: '+error.message); return; }
+  toast('Rating submitted!');
+  closeOverlay('rating-overlay');
+}
 
-  /* ========== CLAUDE INTAKE ========== */
-  var intakeMsgs=[], intakeComplete=false;
-  var INTAKE_SYSTEM=`You are TradeDeck's job intake assistant. TradeDeck operates ONLY in Utah.\nCollect: trade needed, Utah city, job title, start date, duration, pay rate, crew size, scope description.\nBe brief. Ask 1-2 things at a time. Once you have all info, summarize and ask for confirmation.\nWhen confirmed, respond with ONLY valid JSON:\n{"action":"post_job","title":"...","trade":"...","city":"...","state":"UT","rate":"...","duration":"...","crew_size":"...","start_date":"...","description":"..."}\nIf location is outside Utah: {"action":"out_of_area","message":"..."}\nTalk like a contractor, not a chatbot.`;
-
-  function openIntake() {
-    intakeMsgs=[]; intakeComplete=false;
-    document.getElementById('intakeMessages').innerHTML='';
-    document.getElementById('intakeInput').value='';
-    document.getElementById('intakeOverlay').classList.add('active');
-    document.body.style.overflow='hidden';
-    addIntakeMsg('ai','What trade are you hiring, and what city in Utah?');
+// ── INIT ──────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session?.user) await bootApp(session.user);
+  } catch(e) {
+    document.getElementById('auth-wrap').innerHTML +=
+      `<div class="error-box" style="margin-top:16px">Connection error: ${e.message}</div>`;
   }
-  function closeIntake(){ document.getElementById('intakeOverlay').classList.remove('active'); document.body.style.overflow=''; }
-
-  function addIntakeMsg(role, content, isHtml) {
-    var msgs=document.getElementById('intakeMessages');
-    var div=document.createElement('div'); div.className='intake-msg '+role;
-    var av=document.createElement('div'); av.className='intake-msg-avatar'; av.textContent=role==='ai'?'TD':'You';
-    var bub=document.createElement('div'); bub.className='intake-msg-bubble';
-    if(isHtml){bub.innerHTML=content;}else{bub.textContent=content;}
-    div.appendChild(av); div.appendChild(bub); msgs.appendChild(div);
-    msgs.scrollTop=msgs.scrollHeight;
-    intakeMsgs.push({role:role==='ai'?'assistant':'user',content:content});
-  }
-
-  function showTyping() {
-    var msgs=document.getElementById('intakeMessages');
-    var div=document.createElement('div'); div.className='intake-msg ai'; div.id='intakeTyping';
-    var av=document.createElement('div'); av.className='intake-msg-avatar'; av.textContent='TD';
-    var t=document.createElement('div'); t.className='intake-typing'; t.innerHTML='<span></span><span></span><span></span>';
-    div.appendChild(av); div.appendChild(t); msgs.appendChild(div); msgs.scrollTop=msgs.scrollHeight;
-  }
-  function removeTyping(){ var t=document.getElementById('intakeTyping'); if(t)t.remove(); }
-
-  async function sendIntake() {
-    if(intakeComplete) return;
-    var input=document.getElementById('intakeInput');
-    var text=input.value.trim(); if(!text) return;
-    input.value=''; input.style.height='auto';
-    addIntakeMsg('user',text); showTyping();
-    try {
-      var r=await fetch(API+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:INTAKE_SYSTEM,messages:intakeMsgs.filter(function(m){return m.role!=='system';})})});
-      var d=await r.json(); removeTyping();
-      var reply=d.content&&d.content[0]?d.content[0].text:'Sorry, try again.';
-      var jsonMatch=reply.match(/\{[\s\S]*"action"[\s\S]*\}/);
-      if(jsonMatch){
-        try{
-          var parsed=JSON.parse(jsonMatch[0]);
-          if(parsed.action==='post_job'){intakeComplete=true;postIntakeJob(parsed);}
-          else if(parsed.action==='out_of_area'){addIntakeMsg('ai',parsed.message||'TradeDeck is currently Utah only.');}
-        }catch(e){addIntakeMsg('ai',reply);}
-      } else { addIntakeMsg('ai',reply); }
-    } catch(e){ removeTyping(); addIntakeMsg('ai','Connection issue. Try again.'); }
-  }
-
-  async function postIntakeJob(jobData) {
-    // Try Supabase if logged in, else Flask
-    var posted = false;
-    if (currentUser) {
-      var res = await sb.from('jobs').insert({ user_id:currentUser.id, title:jobData.title, trade:jobData.trade, city:jobData.city, state:'UT', rate:jobData.rate, duration:jobData.duration, crew_size:jobData.crew_size, start_date:jobData.start_date, description:jobData.description, status:'open', applicant_count:0 });
-      if (!res.error) posted = true;
-    }
-    if (!posted) {
-      try { await fetch(API+'/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(jobData)}); posted=true; } catch(e){}
-    }
-    var cardHtml='<div class="intake-posted-card"><div class="intake-posted-title">'+jobData.title+'</div><div class="intake-posted-fields"><div class="intake-posted-field"><label>Trade</label><div class="ipval">'+jobData.trade+'</div></div><div class="intake-posted-field"><label>City</label><div class="ipval">'+jobData.city+', UT</div></div><div class="intake-posted-field"><label>Rate</label><div class="ipval">'+(jobData.rate||'TBD')+'</div></div><div class="intake-posted-field"><label>Duration</label><div class="ipval">'+(jobData.duration||'TBD')+'</div></div></div><button class="intake-view-btn" id="intakeViewBtn">View in Find Work</button></div>';
-    addIntakeMsg('ai',(posted?'Your job is live. ':'Job queued — ')+' Subs in your trade and area will see it now.<br><br>'+cardHtml, true);
-    document.getElementById('intakeViewBtn').addEventListener('click',function(){ closeIntake(); showPage('findwork'); loadJobs(); });
-  }
-
-  document.getElementById('intakeInput').addEventListener('input',function(){ this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,120)+'px'; });
-  document.getElementById('intakeInput').addEventListener('keydown',function(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendIntake();} });
-  document.getElementById('intakeSendBtn').addEventListener('click',sendIntake);
-  document.getElementById('intakeCloseBtn').addEventListener('click',closeIntake);
-  document.getElementById('intakeOverlay').addEventListener('click',function(e){if(e.target===this)closeIntake();});
-
-  /* ========== GC LEADS ========== */
-  var allLeads=[];
-  function loadGCLeads(forceRefresh) {
-    var grid=document.getElementById('gclGrid'), empty=document.getElementById('gclEmpty');
-    grid.innerHTML='<div style="color:var(--steel);font-size:0.9rem;grid-column:1/-1;">Loading permit data...</div>';
-    var trade=document.getElementById('gclTrade').value, city=document.getElementById('gclCity').value;
-    var url=API+'/api/gc-leads'; var params=[];
-    if(trade) params.push('trade='+encodeURIComponent(trade));
-    if(city)  params.push('city='+encodeURIComponent(city));
-    if(params.length) url+='?'+params.join('&');
-    if(forceRefresh){
-      fetch(API+'/api/gc-leads/refresh',{method:'POST'}).then(function(){fetchLeads(url);}).catch(function(){fetchLeads(url);});
-    } else { fetchLeads(url); }
-  }
-  function fetchLeads(url){
-    fetch(url).then(function(r){return r.json();}).then(function(d){allLeads=d.leads||[];renderLeads(allLeads);}).catch(function(){document.getElementById('gclGrid').innerHTML='<div style="color:var(--steel);font-size:0.9rem;grid-column:1/-1;">Could not load permit data. Try refreshing.</div>';});
-  }
-  function renderLeads(leads){
-    var grid=document.getElementById('gclGrid'), empty=document.getElementById('gclEmpty');
-    var search=document.getElementById('gclSearch').value.toLowerCase().trim();
-    var filtered=leads.filter(function(l){if(!search)return true;return(l.address+' '+l.trade+' '+(l.description||'')+' '+(l.category||'')).toLowerCase().includes(search);});
-    grid.innerHTML='';
-    document.getElementById('gclCount').textContent=filtered.length+' permit'+(filtered.length!==1?'s':'');
-    document.getElementById('gclTotalCount').textContent=filtered.length;
-    var total=0; filtered.forEach(function(l){var v=parseFloat((l.est_value||'').replace(/[$,]/g,''));if(!isNaN(v))total+=v;});
-    document.getElementById('gclTotalValue').textContent=total>0?'$'+(total>=1000000?(total/1000000).toFixed(1)+'M':(total/1000).toFixed(0)+'K'):'--';
-    if(!filtered.length){empty.style.display='block';return;}
-    empty.style.display='none';
-    filtered.forEach(function(lead){
-      var card=document.createElement('div'); card.className='gcl-card';
-      card.innerHTML='<div class="gcl-head"><div><div class="gcl-address">'+(lead.address||'Address not listed')+'</div><div class="gcl-city">'+(lead.city||'')+', '+(lead.state||'UT')+'</div></div><span class="badge badge-permit">'+(lead.trade||'General')+'</span></div><div class="gcl-fields"><div class="gcl-field"><label>Category</label><div class="gval">'+(lead.category||'--')+'</div></div><div class="gcl-field"><label>Est. Value</label><div class="gval">'+(lead.est_value||'Not listed')+'</div></div><div class="gcl-field"><label>Permit Date</label><div class="gval">'+(lead.permit_date||'--')+'</div></div><div class="gcl-field"><label>Status</label><div class="gval">'+(lead.status||'Issued')+'</div></div></div>'+(lead.description?'<div class="gcl-desc">'+lead.description.substring(0,120)+(lead.description.length>120?'...':'')+'</div>':'')+'<div class="gcl-footer"><span class="gcl-permit">Permit #'+(lead.permit_number||'--')+'</span>'+(lead.contractor?'<span class="gcl-age">GC: '+lead.contractor+'</span>':'<span class="gcl-age">'+(lead.age||'')+'</span>')+'</div>';
-      grid.appendChild(card);
-    });
-  }
-  document.getElementById('gclRefreshBtn').addEventListener('click',function(){this.textContent='Refreshing...';var b=this;loadGCLeads(true);setTimeout(function(){b.textContent='Refresh';},3000);});
-  document.getElementById('gclClearBtn').addEventListener('click',function(){document.getElementById('gclSearch').value='';document.getElementById('gclTrade').value='';document.getElementById('gclCity').value='';renderLeads(allLeads);});
-  document.getElementById('gclSearch').addEventListener('input',function(){renderLeads(allLeads);});
-  document.getElementById('gclTrade').addEventListener('change',function(){loadGCLeads(false);});
-  document.getElementById('gclCity').addEventListener('change',function(){loadGCLeads(false);});
-
-  /* ========== INIT ========== */
-  loadJobs();
-});
+})();
 </script>
 </body>
 </html>
