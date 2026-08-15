@@ -1,1023 +1,878 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TradeDeck</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-// Load Stripe asynchronously and flag when ready
-window._stripeReady = false;
-(function(){
-  var s = document.createElement('script');
-  s.src = 'https://js.stripe.com/v3/';
-  s.onload = function(){ window._stripeReady = true; };
-  document.head.appendChild(s);
-})();
-</script>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#0A0A0A;--surface:#141414;--border:#222;
-  --teal:#0BBCD4;--text:#F0F0F0;--muted:#888;--danger:#e05555;
+:root{--bg:#0A0A0A;--card:#141414;--line:rgba(255,255,255,0.1);--steel:#888;--teal:#0BBCD4;--teal2:#0997AA;--white:#fff;--r:4px}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--white);min-height:100vh}
+
+/* NAV */
+nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--bg);position:sticky;top:0;z-index:100}
+.logo{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.4rem;color:var(--white);cursor:pointer}
+.logo span{color:var(--teal)}
+.btn{background:var(--teal);color:#000;border:none;padding:9px 20px;border-radius:var(--r);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.95rem;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;transition:background .15s}
+.btn:hover{background:var(--teal2)}
+.btn-ghost{background:none;border:1px solid var(--steel);color:var(--white);padding:9px 20px;border-radius:var(--r);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.95rem;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;transition:all .15s}
+.btn-ghost:hover{border-color:var(--white)}
+
+/* TABS */
+.tabs{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;border-bottom:1px solid var(--line);background:var(--bg);position:sticky;top:49px;z-index:99;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex-shrink:0;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:.07em;text-transform:uppercase;color:var(--steel);padding:13px 20px;border:none;background:none;border-bottom:3px solid transparent;cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap}
+.tab:hover{color:var(--white)}
+.tab.on{color:var(--teal);border-bottom-color:var(--teal)}
+.page{display:none}.page.on{display:block}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:18px;position:relative;overflow:hidden;transition:border-color .15s,transform .15s}
+.card:hover{border-color:rgba(255,255,255,.2);transform:translateY(-2px)}
+.card::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);background-size:24px 24px;pointer-events:none}
+.card-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.card-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;text-transform:uppercase;letter-spacing:.03em;line-height:1.2}
+.card-meta{color:var(--steel);font-size:.75rem;margin-top:3px}
+.card-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.cf label{display:block;font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin-bottom:2px}
+.cf .v{font-size:.82rem}
+.card-foot{display:flex;justify-content:space-between;align-items:center;border-top:1px dashed var(--line);padding-top:10px;margin-top:6px}
+.badge{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:2px;border:1.5px solid}
+.badge-green{color:#4ADE80;border-color:#4ADE80;background:rgba(74,222,128,.08)}
+.badge-teal{color:var(--teal);border-color:var(--teal);background:rgba(11,188,212,.08)}
+.badge-blue{color:#60A5FA;border-color:#60A5FA;background:rgba(96,165,250,.08)}
+.apply-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.75rem;letter-spacing:.05em;text-transform:uppercase;background:var(--teal);color:#000;border:none;padding:6px 13px;border-radius:var(--r);cursor:pointer}
+.apply-btn:hover{background:var(--teal2)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+
+/* FILTER BAR */
+.filters{background:var(--card);border-bottom:1px solid var(--line);padding:12px 20px;position:sticky;top:98px;z-index:90}
+.filter-row{max-width:1100px;margin:0 auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.fi{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);color:var(--white);font-family:'Inter',sans-serif;font-size:.82rem;padding:7px 11px;outline:none;appearance:none;cursor:pointer;min-width:120px}
+.fi:focus{border-color:var(--teal)}
+.fi::placeholder{color:rgba(255,255,255,.3)}
+.fi-search{flex:1;min-width:140px}
+.fc{color:var(--steel);font-size:.75rem;margin-left:auto;white-space:nowrap}
+.clr{background:none;border:1px solid var(--line);border-radius:var(--r);color:var(--steel);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.75rem;letter-spacing:.05em;text-transform:uppercase;padding:7px 12px;cursor:pointer}
+.clr:hover{color:var(--white);border-color:var(--steel)}
+
+/* SUBTABS */
+.subtabs{display:flex;border-bottom:1px solid var(--line);padding:0 20px;background:var(--card)}
+.subtab{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.8rem;letter-spacing:.07em;text-transform:uppercase;color:var(--steel);padding:12px 18px 10px;border:none;background:none;border-bottom:3px solid transparent;cursor:pointer;transition:all .15s;margin-bottom:-1px;white-space:nowrap}
+.subtab:hover{color:var(--white)}
+.subtab.on{color:var(--teal);border-bottom-color:var(--teal)}
+.subpage{display:none}.subpage.on{display:block}
+
+/* SECTIONS */
+.section{max-width:1100px;margin:0 auto;padding:24px 20px 60px}
+.section-hd{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(1.8rem,4vw,2.8rem);text-transform:uppercase;color:var(--white);line-height:1;margin-bottom:8px}
+.eyebrow{font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);margin-bottom:8px}
+.sub-hd{color:var(--steel);font-size:.875rem;max-width:500px;line-height:1.6;margin-bottom:0}
+.page-head{background:var(--card);border-bottom:1px solid var(--line);padding:36px 20px 28px}
+.page-head-inner{max-width:1100px;margin:0 auto}
+
+/* HERO */
+.hero{max-width:1100px;margin:0 auto;padding:50px 20px 36px;display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
+.hero h1{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(2.4rem,5vw,3.8rem);line-height:1;text-transform:uppercase;letter-spacing:.02em;margin-bottom:14px}
+.hero h1 em{font-style:normal;color:var(--teal)}
+.hero p{color:var(--steel);font-size:.9rem;line-height:1.65;margin-bottom:24px}
+.ctas{display:flex;gap:10px;flex-wrap:wrap}
+.cta-bar{background:var(--card);border-top:1px solid var(--line);padding:36px 20px;text-align:center}
+.cta-bar h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.8rem;text-transform:uppercase;margin-bottom:8px}
+.cta-bar p{color:var(--steel);margin-bottom:18px;font-size:.875rem}
+
+/* LEAD SOURCES */
+.ls-section{margin-bottom:24px}
+.ls-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);padding:7px 0;border-bottom:1px solid var(--line);margin-bottom:7px}
+.ls-item{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:11px 13px;margin-bottom:6px;transition:border-color .15s}
+.ls-item:hover{border-color:rgba(255,255,255,.2)}
+.ls-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;text-transform:uppercase;min-width:140px}
+.ls-desc{font-size:.78rem;color:var(--steel);flex:1;line-height:1.5}
+.ls-tags{display:flex;gap:5px;flex-wrap:wrap;margin-left:auto}
+.ls-tag{font-family:'Barlow Condensed',sans-serif;font-size:.6rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:2px 7px;border-radius:2px;border:1px solid;white-space:nowrap}
+.tag-free{color:#4ADE80;border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.05)}
+.tag-paid{color:var(--teal);border-color:rgba(11,188,212,.4);background:rgba(11,188,212,.05)}
+.tag-trade{color:var(--steel);border-color:rgba(255,255,255,.15)}
+.ls-link{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;color:var(--teal);text-decoration:none;padding:5px 10px;border:1px solid rgba(11,188,212,.3);border-radius:var(--r);white-space:nowrap;transition:all .15s}
+.ls-link:hover{background:var(--teal);color:#000}
+
+/* STATS */
+.stats{display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:13px 16px;flex:1;min-width:90px}
+.stat .n{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.5rem;color:var(--teal);line-height:1}
+.stat .l{font-size:.65rem;color:var(--steel);text-transform:uppercase;letter-spacing:.08em;margin-top:3px}
+
+/* COMPANYCAM */
+.cc-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.cc-photo{background:var(--card);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.cc-photo-ph{width:100%;aspect-ratio:4/3;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--steel);font-size:.72rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.cc-photo-meta{padding:9px 11px}
+.cc-photo-caption{font-size:.78rem;font-weight:500;margin-bottom:3px}
+.cc-photo-date{font-size:.68rem;color:var(--steel)}
+.cc-tag{display:inline-block;font-family:'Barlow Condensed',sans-serif;font-size:.6rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:2px;border:1px solid rgba(11,188,212,.4);color:var(--teal);margin-top:3px}
+
+/* CONNECT BANNER */
+.connect-box{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:28px;text-align:center;margin-bottom:20px}
+.connect-box h3{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;text-transform:uppercase;margin-bottom:8px}
+.connect-box p{color:var(--steel);font-size:.85rem;margin-bottom:14px}
+.api-input{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);color:var(--white);font-family:'Inter',sans-serif;font-size:.85rem;padding:9px 13px;outline:none;width:100%;max-width:380px;margin:0 auto 12px;display:block}
+.api-input:focus{border-color:var(--teal)}
+
+/* DISCLAIMER */
+.disclaimer{background:rgba(11,188,212,.05);border:1px solid rgba(11,188,212,.2);border-radius:var(--r);padding:10px 13px;margin-bottom:16px;font-size:.76rem;color:var(--teal);line-height:1.5}
+
+/* INTAKE OVERLAY */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;align-items:flex-end;justify-content:center}
+.overlay.on{display:flex}
+.intake-panel{background:var(--bg);border:1px solid rgba(255,255,255,.12);border-bottom:none;border-radius:12px 12px 0 0;width:100%;max-width:620px;height:85vh;display:flex;flex-direction:column}
+.intake-hd{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.intake-hd-left{display:flex;align-items:center;gap:8px}
+.intake-logo{width:26px;height:26px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;color:#000;font-family:'Barlow Condensed',sans-serif}
+.intake-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em}
+.intake-sub{font-size:.65rem;color:var(--steel);margin-top:1px}
+.intake-x{background:none;border:none;color:var(--steel);font-size:1.3rem;cursor:pointer;line-height:1;padding:4px 8px}
+.intake-x:hover{color:var(--white)}
+.msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px}
+.msg{display:flex;gap:7px;align-items:flex-start}
+.msg.user{flex-direction:row-reverse}
+.msg-av{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;font-family:'Barlow Condensed',sans-serif}
+.msg.ai .msg-av{background:var(--teal);color:#000}
+.msg.user .msg-av{background:#222;color:var(--steel)}
+.bubble{max-width:83%;padding:9px 12px;border-radius:12px;font-size:.85rem;line-height:1.55}
+.msg.ai .bubble{background:var(--card);border:1px solid var(--line);border-radius:4px 12px 12px 12px}
+.msg.user .bubble{background:var(--teal);color:#000;font-weight:500;border-radius:12px 4px 12px 12px}
+.typing{display:flex;gap:3px;padding:9px 12px;background:var(--card);border:1px solid var(--line);border-radius:4px 12px 12px 12px;width:48px}
+.typing span{width:5px;height:5px;background:var(--steel);border-radius:50%;animation:td 1.2s infinite}
+.typing span:nth-child(2){animation-delay:.2s}
+.typing span:nth-child(3){animation-delay:.4s}
+@keyframes td{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+.intake-ft{padding:11px 13px;border-top:1px solid var(--line);flex-shrink:0}
+.intake-row{display:flex;gap:7px;align-items:flex-end}
+.intake-in{flex:1;background:var(--card);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:var(--white);font-family:'Inter',sans-serif;font-size:.85rem;padding:9px 11px;outline:none;resize:none;max-height:90px;min-height:38px;line-height:1.4}
+.intake-in:focus{border-color:var(--teal)}
+.intake-in::placeholder{color:rgba(255,255,255,.25)}
+.intake-send{background:var(--teal);border:none;border-radius:8px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+.intake-send:hover{background:var(--teal2)}
+.intake-send svg{width:15px;height:15px;fill:none;stroke:#000;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.intake-note{font-size:.65rem;color:rgba(255,255,255,.2);text-align:center;margin-top:6px}
+.posted-card{background:var(--card);border:1px solid rgba(11,188,212,.25);border-radius:8px;padding:13px;margin-top:4px}
+.posted-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.9rem;text-transform:uppercase;margin-bottom:7px}
+.posted-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:9px}
+.pf label{display:block;font-size:.57rem;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin-bottom:2px}
+.pf .pv{font-size:.78rem}
+.view-btn{width:100%;background:var(--teal);color:#000;border:none;border-radius:5px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:.05em;text-transform:uppercase;padding:8px;cursor:pointer}
+.view-btn:hover{background:var(--teal2)}
+
+.empty{text-align:center;padding:48px 20px;color:var(--steel)}
+.empty-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.2rem;text-transform:uppercase;margin-bottom:6px}
+
+footer{border-top:1px solid var(--line);padding:24px 20px;display:flex;justify-content:space-between;align-items:center;max-width:1100px;margin:0 auto;flex-wrap:wrap;gap:10px}
+footer p{font-size:.75rem;color:var(--steel)}
+
+@media(max-width:700px){
+  .hero{grid-template-columns:1fr;padding:36px 16px 28px;gap:28px}
+  .filters,.subtabs{padding-left:14px;padding-right:14px}
+  .section{padding:20px 14px 48px}
+  .page-head{padding:28px 14px 20px}
+  .ls-item{flex-wrap:wrap}.ls-name{min-width:unset;width:100%}.ls-tags{margin-left:0}
 }
-body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh}
-
-nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--surface);border-top:1px solid var(--border);z-index:100}
-nav button{flex:1;padding:12px 4px 10px;background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
-nav button.active{color:var(--teal)}
-nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
-
-#app{padding:16px 16px 80px}
-.screen{display:none}.screen.active{display:block}
-
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
-.card h3{font-size:15px;margin-bottom:6px}
-.card p{font-size:13px;color:var(--muted);line-height:1.5}
-
-.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;border:none;cursor:pointer}
-.btn-primary{background:var(--teal);color:#000}
-.btn-outline{background:none;border:1px solid var(--border);color:var(--text)}
-.btn-danger{background:var(--danger);color:#fff}
-.btn-sm{padding:6px 12px;font-size:13px}
-.btn-block{width:100%;margin-top:8px}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-
-input,textarea,select{width:100%;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;margin-bottom:10px;outline:none}
-input:focus,textarea:focus,select:focus{border-color:var(--teal)}
-textarea{min-height:80px;resize:vertical}
-label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
-
-.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
-.badge-teal{background:rgba(11,188,212,.15);color:var(--teal)}
-.badge-ksl{background:rgba(255,180,0,.15);color:#ffb400}
-
-.tab-bar{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px}
-.tab-btn{white-space:nowrap;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--muted);font-size:13px;cursor:pointer}
-.tab-btn.active{background:var(--teal);color:#000;border-color:var(--teal)}
-
-.county-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px}
-.county-tab{white-space:nowrap;padding:4px 10px;border-radius:14px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0}
-.county-tab.active{background:var(--teal);color:#000;border-color:var(--teal)}
-
-.screen-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
-.screen-header h2{font-size:20px;font-weight:700}
-
-#auth-wrap{max-width:400px;margin:60px auto;padding:0 16px}
-#auth-wrap h1{font-size:26px;font-weight:800;margin-bottom:6px}
-#auth-wrap .sub{color:var(--muted);margin-bottom:24px;font-size:14px}
-.auth-toggle{font-size:13px;color:var(--muted);margin-top:12px;text-align:center}
-.auth-toggle span{color:var(--teal);cursor:pointer}
-
-.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:flex-end}
-.overlay.open{display:flex}
-.overlay-inner{background:var(--surface);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-height:90vh;overflow-y:auto}
-.overlay-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-.overlay-header h3{font-size:17px;font-weight:700}
-.close-btn{background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer}
-
-.milestone-row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
-.milestone-row input{margin-bottom:0}
-.milestone-row .pct{width:64px;flex-shrink:0}
-.draw-status{padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase}
-.draw-status.pending{background:rgba(255,180,0,.15);color:#ffb400}
-.draw-status.submitted{background:rgba(11,188,212,.15);color:var(--teal)}
-.draw-status.approved{background:rgba(80,200,120,.15);color:#50c878}
-.draw-status.disputed{background:rgba(224,85,85,.15);color:var(--danger)}
-
-.escrow-bar{background:var(--border);border-radius:4px;height:8px;margin:8px 0}
-.escrow-fill{background:var(--teal);height:100%;border-radius:4px}
-
-.stars{display:flex;gap:6px;font-size:28px;cursor:pointer;margin:10px 0}
-.stars span{color:var(--border)}
-.stars span.on{color:#ffb400}
-
-/* STRIPE CARD ELEMENT */
-.stripe-card-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px}
-.fee-notice{background:rgba(11,188,212,.08);border:1px solid rgba(11,188,212,.25);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.5}
-.fee-notice strong{color:var(--teal)}
-
-#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;display:none;z-index:999;white-space:nowrap}
-.error-box{background:rgba(224,85,85,.1);border:1px solid var(--danger);border-radius:8px;padding:12px;color:var(--danger);font-size:13px;margin-bottom:12px}
-.spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .7s linear infinite;margin:40px auto}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-/* MESSAGE BUBBLES */
-.bubble{max-width:75%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.4;word-break:break-word}
-.bubble-me{background:var(--teal);color:#000;align-self:flex-end;border-bottom-right-radius:4px}
-.bubble-them{background:var(--surface);border:1px solid var(--border);color:var(--text);align-self:flex-start;border-bottom-left-radius:4px}
-.bubble-time{font-size:10px;color:var(--muted);margin-top:2px;text-align:right}
-
-/* CONNECTION CARDS */
-.connect-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
-.connect-card .info h4{font-size:14px;margin-bottom:2px}
-.connect-card .info p{font-size:12px;color:var(--muted)}
-.connect-status{font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px}
-.connect-status.pending{background:rgba(255,180,0,.15);color:#ffb400}
-.connect-status.accepted{background:rgba(80,200,120,.15);color:#50c878}
-
-.mt8{margin-top:8px}.mt16{margin-top:16px}
-.flex{display:flex}.gap8{gap:8px}.between{justify-content:space-between}
-.text-muted{color:var(--muted);font-size:13px}
-.divider{border:none;border-top:1px solid var(--border);margin:16px 0}
 </style>
 </head>
 <body>
 
-<!-- AUTH -->
-<div id="auth-wrap">
-  <h1>TradeDeck</h1>
-  <p class="sub">The marketplace built for the trades.</p>
-  <div id="auth-error" class="error-box" style="display:none"></div>
-  <label>Email</label>
-  <input id="auth-email" type="email" placeholder="you@example.com"/>
-  <label>Password</label>
-  <input id="auth-password" type="password" placeholder="••••••••"/>
-  <button id="auth-btn" class="btn btn-primary btn-block" onclick="authSubmit()">Sign In</button>
-  <p class="auth-toggle">No account? <span onclick="toggleAuth()">Sign up</span></p>
-</div>
-
-<!-- MAIN APP -->
-<div id="app" style="display:none">
-
-  <div id="screen-home" class="screen active">
-    <div class="screen-header">
-      <h2>Home</h2>
-      <span id="home-tier" class="badge badge-teal" style="display:none"></span>
-    </div>
-    <div id="home-content"><div class="spinner"></div></div>
-  </div>
-
-  <div id="screen-work" class="screen">
-    <div class="screen-header"><h2>Find Work</h2></div>
-    <div class="tab-bar">
-      <button class="tab-btn active" onclick="workTab('open',this)">Open Jobs</button>
-      <button class="tab-btn" onclick="workTab('ksl',this)">KSL Jobs</button>
-      <button class="tab-btn" onclick="workTab('leads',this)">Lead Sources</button>
-    </div>
-    <div id="county-tabs" class="county-tabs" style="display:none"></div>
-    <div id="work-content"><div class="spinner"></div></div>
-  </div>
-
-  <div id="screen-post" class="screen">
-    <div class="screen-header"><h2>Post a Job</h2></div>
-    <div class="card">
-      <label>Job Title</label>
-      <input id="post-title" placeholder="e.g. Framing crew needed — 2,800 sq ft"/>
-      <label>Trade Type</label>
-      <select id="post-trade">
-        <option>Framing</option><option>Concrete</option><option>Roofing</option>
-        <option>Electrical</option><option>Plumbing</option><option>HVAC</option>
-        <option>Drywall</option><option>Flooring</option><option>Excavation</option>
-        <option>Landscaping</option><option>General Contractor</option><option>Other</option>
-      </select>
-      <label>Location / County</label>
-      <input id="post-location" placeholder="e.g. Francis, Summit County"/>
-      <label>Description</label>
-      <textarea id="post-desc" placeholder="Scope, timeline, crew size…"></textarea>
-      <label>Budget</label>
-      <input id="post-budget" placeholder="e.g. $8,500 or negotiable"/>
-      <label>Posted by</label>
-      <select id="post-role">
-        <option value="contractor">Contractor</option>
-        <option value="homeowner">Homeowner</option>
-      </select>
-      <hr class="divider"/>
-      <h3 style="margin-bottom:12px">Draw Schedule <span class="text-muted" style="font-size:12px;font-weight:400">(optional)</span></h3>
-      <div id="milestone-rows"></div>
-      <div class="flex gap8 mt8" style="align-items:center">
-        <button class="btn btn-outline btn-sm" onclick="addMilestone()">+ Add Milestone</button>
-        <span id="pct-total" class="text-muted"></span>
-      </div>
-      <button class="btn btn-primary btn-block mt16" onclick="initiatePostJob()">Post Job — $20 fee</button>
-    </div>
-  </div>
-
-  <div id="screen-draws" class="screen">
-    <div class="screen-header"><h2>Draw Manager</h2></div>
-    <div id="draws-content"><div class="spinner"></div></div>
-  </div>
-
-  <div id="screen-messages" class="screen">
-    <div class="screen-header">
-      <h2>Messages</h2>
-      <span id="msg-unread-badge" class="badge badge-teal" style="display:none"></span>
-    </div>
-    <div id="messages-content"><div class="spinner"></div></div>
-  </div>
-
-  <div id="screen-profile" class="screen">
-    <div class="screen-header"><h2>Profile</h2></div>
-    <div id="profile-content"><div class="spinner"></div></div>
-  </div>
-
-</div>
-
-<!-- PAYMENT OVERLAY -->
-<div class="overlay" id="payment-overlay">
-  <div class="overlay-inner">
-    <div class="overlay-header">
-      <h3 id="payment-title">Platform Fee</h3>
-      <button class="close-btn" onclick="closeOverlay('payment-overlay')">×</button>
-    </div>
-    <div class="fee-notice">
-      <strong>$20.00 platform fee</strong><br>
-      <span id="payment-desc">One-time fee charged at the moment of acceptance.</span>
-    </div>
-    <label>Card Details</label>
-    <div class="stripe-card-wrap" id="card-element"></div>
-    <div id="card-error" class="error-box" style="display:none"></div>
-    <button id="pay-btn" class="btn btn-primary btn-block" onclick="submitPayment()">Pay $20 & Confirm</button>
-  </div>
-</div>
-
-<!-- CONNECT REQUEST OVERLAY -->
-<div class="overlay" id="connect-overlay">
-  <div class="overlay-inner">
-    <div class="overlay-header">
-      <h3>Request to Connect</h3>
-      <button class="close-btn" onclick="closeOverlay('connect-overlay')">×</button>
-    </div>
-    <p style="font-size:14px;color:var(--muted);margin-bottom:16px">
-      Send a connection request to <strong id="connect-target-name" style="color:var(--text)"></strong>. 
-      They must accept before either of you can message each other.
-    </p>
-    <textarea id="connect-message" placeholder="Optional intro message…" style="min-height:60px"></textarea>
-    <button class="btn btn-primary btn-block" onclick="submitConnectRequest()">Send Request</button>
-  </div>
-</div>
-
-<!-- THREAD OVERLAY -->
-<div class="overlay" id="thread-overlay" style="align-items:stretch">
-  <div class="overlay-inner" style="border-radius:0;max-height:100vh;display:flex;flex-direction:column;padding:0">
-    <div class="overlay-header" style="padding:16px;border-bottom:1px solid var(--border);margin-bottom:0">
-      <h3 id="thread-title">Conversation</h3>
-      <button class="close-btn" onclick="closeOverlay('thread-overlay')">×</button>
-    </div>
-    <div id="thread-messages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px"></div>
-    <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px">
-      <input id="thread-input" placeholder="Message…" style="margin-bottom:0;flex:1" onkeydown="if(event.key==='Enter')sendMessage()"/>
-      <button class="btn btn-primary btn-sm" onclick="sendMessage()">Send</button>
-    </div>
-  </div>
-</div>
-
-<!-- RATING OVERLAY -->
-<div class="overlay" id="rating-overlay">
-  <div class="overlay-inner">
-    <div class="overlay-header">
-      <h3>Rate this Job</h3>
-      <button class="close-btn" onclick="closeOverlay('rating-overlay')">×</button>
-    </div>
-    <div class="stars" id="star-picker">
-      <span onclick="setRating(1)">★</span><span onclick="setRating(2)">★</span>
-      <span onclick="setRating(3)">★</span><span onclick="setRating(4)">★</span>
-      <span onclick="setRating(5)">★</span>
-    </div>
-    <textarea id="review-text" placeholder="Optional: share your experience…"></textarea>
-    <button class="btn btn-primary btn-block" onclick="submitRating()">Submit</button>
-  </div>
-</div>
-
-<nav id="main-nav" style="display:none">
-  <button class="active" onclick="switchTab('home')" id="nav-home">
-    <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home
-  </button>
-  <button onclick="switchTab('work')" id="nav-work">
-    <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>Find Work
-  </button>
-  <button onclick="switchTab('post')" id="nav-post">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Post Job
-  </button>
-  <button onclick="switchTab('draws')" id="nav-draws">
-    <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Draws
-  </button>
-  <button onclick="switchTab('messages')" id="nav-messages">
-    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-    <span id="nav-msg-label">Messages</span>
-  </button>
-  <button onclick="switchTab('profile')" id="nav-profile">
-    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile
-  </button>
+<nav>
+  <div class="logo" id="navLogo">Trade<span>Deck</span></div>
+  <button class="btn" id="navPost">Post a Job</button>
 </nav>
 
-<div id="toast"></div>
+<div class="tabs" id="tabBar">
+  <button class="tab on" data-page="home">Home</button>
+  <button class="tab" data-page="findwork">Find Work</button>
+  <button class="tab" data-page="gcleads">GC Leads</button>
+  <button class="tab" data-page="sitephotos">Site Photos</button>
+  <button class="tab" data-page="postjob">Post a Job</button>
+</div>
+
+<!-- HOME -->
+<div class="page on" id="page-home">
+  <div class="hero">
+    <div>
+      <div class="eyebrow">The Trade Marketplace</div>
+      <h1>Hire the Trade.<br><em>Find</em> the Work.</h1>
+      <p>Twenty years. Every nail. Every pour. Every roof. TradeDeck connects contractors and subs who know the difference between a shortcut and a standard.</p>
+      <div class="ctas">
+        <button class="btn" id="heroPost">Post a Job</button>
+        <button class="btn-ghost" id="heroFind">Find Work</button>
+      </div>
+    </div>
+    <div class="card" id="heroCard" style="min-height:180px;">
+      <div style="color:var(--steel);font-size:.85rem;">Loading latest job...</div>
+    </div>
+  </div>
+  <div class="cta-bar">
+    <h2>The Crew Doesn't Find Itself.</h2>
+    <p>Post a job in under 2 minutes. Subs in your trade and region see it immediately.</p>
+    <button class="btn" id="ctaPost">Post a Job -- It's Free</button>
+  </div>
+  <footer>
+    <div class="logo">Trade<span>Deck</span></div>
+    <p>&copy; 2026 TradeDeck &middot; tradedeckapp.com</p>
+    <p>For the trade. By the trade.</p>
+  </footer>
+</div>
+
+<!-- FIND WORK -->
+<div class="page" id="page-findwork">
+  <div class="page-head">
+    <div class="page-head-inner">
+      <div class="eyebrow">Find Work</div>
+      <div class="section-hd">Jobs &amp; Lead Sources</div>
+      <p class="sub-hd">Open jobs posted by GCs, live leads from across the web, and every channel where work gets posted.</p>
+    </div>
+  </div>
+  <div class="subtabs" id="subtabBar">
+    <button class="subtab on" data-sub="jobs">Open Jobs</button>
+    <button class="subtab" data-sub="liveleads">Live Leads</button>
+    <button class="subtab" data-sub="sources">Lead Sources</button>
+  </div>
+  <div class="filters" id="filterBar">
+    <div class="filter-row">
+      <input type="text" class="fi fi-search" id="fSearch" placeholder="Search...">
+      <select class="fi" id="fTrade">
+        <option value="">All Trades</option>
+        <option>Framing</option><option>Concrete</option><option>Roofing</option>
+        <option>Electrical</option><option>Plumbing</option><option>HVAC</option>
+        <option>Excavation</option><option>Flooring</option><option>Siding</option>
+        <option>Finish Carpentry</option><option>Painting</option><option>General</option>
+      </select>
+      <select class="fi" id="fSource" style="display:none;">
+        <option value="">All Sources</option>
+        <option>Indeed</option><option>Craigslist</option><option>SAM.gov</option><option>ZipRecruiter</option>
+      </select>
+      <select class="fi" id="fCost" style="display:none;">
+        <option value="">All Costs</option>
+        <option value="free">Free</option><option value="paid">Paid</option>
+      </select>
+      <button class="clr" id="fClear">Clear</button>
+      <span class="fc" id="fCount"></span>
+    </div>
+  </div>
+
+  <!-- OPEN JOBS -->
+  <div class="subpage on" id="sub-jobs">
+    <div class="section">
+      <div class="grid" id="jobsGrid"><div style="color:var(--steel);font-size:.875rem;grid-column:1/-1">Loading jobs...</div></div>
+      <div class="empty" id="jobsEmpty" style="display:none"><div class="empty-title">No Jobs Match</div><p>Try adjusting your filters.</p></div>
+    </div>
+  </div>
+
+  <!-- LIVE LEADS -->
+  <div class="subpage" id="sub-liveleads">
+    <div class="section">
+      <div class="stats">
+        <div class="stat"><div class="n" id="llCount">--</div><div class="l">Live Leads</div></div>
+        <div class="stat"><div class="n">4</div><div class="l">Sources</div></div>
+        <div class="stat"><div class="n">Daily</div><div class="l">Auto-Refresh</div></div>
+        <button class="clr" id="llRefresh" style="align-self:center;">Refresh</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
+        <span class="badge badge-green">Indeed</span>
+        <span class="badge badge-teal">Craigslist</span>
+        <span class="badge badge-blue">SAM.gov</span>
+        <span class="badge" style="color:var(--steel);border-color:var(--steel);">ZipRecruiter (key pending)</span>
+      </div>
+      <div class="grid" id="llGrid"><div style="color:var(--steel);font-size:.875rem;grid-column:1/-1">Loading live leads from Indeed, Craigslist, SAM.gov...</div></div>
+      <div class="empty" id="llEmpty" style="display:none"><div class="empty-title">No Leads Found</div><p>Try refreshing or clearing filters.</p></div>
+    </div>
+  </div>
+
+  <!-- LEAD SOURCES -->
+  <div class="subpage" id="sub-sources">
+    <div class="section">
+      <div id="sourcesList">
+        <div class="ls-section"><div class="ls-title">Boots on the Ground</div>
+          <div class="ls-item" data-cost="free" data-text="jobsite truck crew outreach"><div class="ls-name">Jobsite Cold Outreach</div><div class="ls-desc">Drive active job sites. Write down names from sub trucks. Highest close rate in the trades.</div><div class="ls-tags"><span class="ls-tag tag-free">Free</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://tradedeckapp.com" target="_blank">Post on TradeDeck</a></div>
+          <div class="ls-item" data-cost="free" data-text="lumber yard supply house home depot 84 lumber"><div class="ls-name">Lumber Yards</div><div class="ls-desc">Counter staff know every GC in the market. Drop cards, build relationships.</div><div class="ls-tags"><span class="ls-tag tag-free">Free</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://www.84lumber.com" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="free" data-text="equipment rental united sunbelt crews active"><div class="ls-name">Equipment Rental Yards</div><div class="ls-desc">Anyone renting gear is working a job right now. Leave cards at the counter.</div><div class="ls-tags"><span class="ls-tag tag-free">Free</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://www.unitedrentals.com" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="free" data-text="permit city county public record planning"><div class="ls-name">City Permit Records</div><div class="ls-desc">Building permits are public record. Find the job before the GC needs you.</div><div class="ls-tags"><span class="ls-tag tag-free">Free</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://www.utah.gov" target="_blank">Utah.gov</a></div>
+        </div>
+        <div class="ls-section"><div class="ls-title">Digital -- Free</div>
+          <div class="ls-item" data-cost="free" data-text="google business profile local seo search"><div class="ls-name">Google Business Profile</div><div class="ls-desc">Most important free tool. Fill every field, add 20+ project photos, post weekly.</div><div class="ls-tags"><span class="ls-tag tag-free">Free</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://business.google.com" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="free" data-text="planhub subcontractor bids invitations GC"><div class="ls-name">PlanHub</div><div class="ls-desc">Free sub plan. 400,000+ subs. Set your trade and area and bid invitations come to you.</div><div class="ls-tags"><span class="ls-tag tag-free">Free Tier</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://planhub.com" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="free" data-text="lookingforsubs directory GC zip listing"><div class="ls-name">LookingForSubs.com</div><div class="ls-desc">GCs search by ZIP and trade. Free listing. Gets you in front of GCs who are stuck.</div><div class="ls-tags"><span class="ls-tag tag-free">Free</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://lookingforsubs.com" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="free" data-text="linkedin professional network GC outreach"><div class="ls-name">LinkedIn</div><div class="ls-desc">Search "General Contractor Utah" and direct message. Best for GC decision-makers.</div><div class="ls-tags"><span class="ls-tag tag-free">Free</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://linkedin.com" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="free" data-text="facebook groups local contractors utah trades"><div class="ls-name">Facebook Groups</div><div class="ls-desc">Search "[Trade] Contractors [City]". Post openings, engage as a member -- no ads.</div><div class="ls-tags"><span class="ls-tag tag-free">Free</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://facebook.com/groups" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="free" data-text="sam.gov federal government contract bid utah"><div class="ls-name">SAM.gov</div><div class="ls-desc">Federal construction notices. Free to search. Primary source for public work.</div><div class="ls-tags"><span class="ls-tag tag-free">Free</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://sam.gov" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="free" data-text="buildingconnected autodesk GC sub bid invitation profile"><div class="ls-name">BuildingConnected</div><div class="ls-desc">Free sub profile. GCs using Autodesk invite subs from this directory.</div><div class="ls-tags"><span class="ls-tag tag-free">Free Profile</span><span class="ls-tag tag-trade">Commercial</span></div><a class="ls-link" href="https://app.buildingconnected.com" target="_blank">Visit</a></div>
+        </div>
+        <div class="ls-section"><div class="ls-title">Digital -- Paid</div>
+          <div class="ls-item" data-cost="paid" data-text="google LSA local services ads pay per lead verified"><div class="ls-name">Google LSA</div><div class="ls-desc">Google-verified badge, $20-150/lead. Best for urgent residential. First caller wins.</div><div class="ls-tags"><span class="ls-tag tag-paid">$20-150/lead</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://ads.google.com/local-services-ads" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="paid" data-text="thumbtack lead generation pay per lead homeowner"><div class="ls-name">Thumbtack</div><div class="ls-desc">$2-50/lead. AI matching. Build a strong profile with reviews to rank above competitors.</div><div class="ls-tags"><span class="ls-tag tag-paid">$2-50/lead</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://thumbtack.com" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="paid" data-text="angi angies list homeowner subscription reviews"><div class="ls-name">Angi</div><div class="ls-desc">$100-400/mo. Best for contractors who collect reviews consistently.</div><div class="ls-tags"><span class="ls-tag tag-paid">$100-400/mo</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://angi.com" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="paid" data-text="construct-a-lead commercial project intelligence pre-bid verified"><div class="ls-name">Construct-A-Lead</div><div class="ls-desc">Human-verified commercial projects 6-18 months before bids. $2,395/yr state plan.</div><div class="ls-tags"><span class="ls-tag tag-paid">From $2,395/yr</span><span class="ls-tag tag-trade">Commercial</span></div><a class="ls-link" href="https://constructalead.com" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="paid" data-text="constructconnect bid management commercial GC sub"><div class="ls-name">ConstructConnect</div><div class="ls-desc">Largest North American commercial bid database. Get in front of GCs before sub lists close.</div><div class="ls-tags"><span class="ls-tag tag-paid">Subscription</span><span class="ls-tag tag-trade">Commercial</span></div><a class="ls-link" href="https://constructconnect.com" target="_blank">Visit</a></div>
+        </div>
+        <div class="ls-section"><div class="ls-title">Associations</div>
+          <div class="ls-item" data-cost="paid" data-text="AGC associated general contractors utah chapter"><div class="ls-name">AGC Utah</div><div class="ls-desc">One chapter event beats a month of cold outreach for GC connections.</div><div class="ls-tags"><span class="ls-tag tag-paid">Membership</span><span class="ls-tag tag-trade">GC Network</span></div><a class="ls-link" href="https://agcutah.com" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="paid" data-text="NAHB home builders association utah residential wasatch"><div class="ls-name">Home Builders Assoc. Utah</div><div class="ls-desc">Directly aligned with Wasatch Back custom home market. Best for residential trades.</div><div class="ls-tags"><span class="ls-tag tag-paid">Membership</span><span class="ls-tag tag-trade">Residential</span></div><a class="ls-link" href="https://www.utahnahb.org" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="free" data-text="union hall IBEW electrician plumber carpenter trades"><div class="ls-name">Local Union Halls</div><div class="ls-desc">IBEW, UA, Carpenters -- union halls post work boards for licensed members.</div><div class="ls-tags"><span class="ls-tag tag-free">Free</span><span class="ls-tag tag-trade">Licensed Trades</span></div><a class="ls-link" href="https://www.ibew.org" target="_blank">IBEW</a></div>
+        </div>
+        <div class="ls-section"><div class="ls-title">Job Boards</div>
+          <div class="ls-item" data-cost="free" data-text="indeed job board find work employment construction crew"><div class="ls-name">Indeed</div><div class="ls-desc">GCs post sub positions constantly. Search trade + city and set daily email alerts.</div><div class="ls-tags"><span class="ls-tag tag-free">Free to Search</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://indeed.com" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="free" data-text="ziprecruiter job board contractor AI matching construction"><div class="ls-name">ZipRecruiter</div><div class="ls-desc">AI matching with quality filtering. Set trade and location and let alerts come to you.</div><div class="ls-tags"><span class="ls-tag tag-free">Free to Search</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://ziprecruiter.com" target="_blank">Visit</a></div>
+          <div class="ls-item" data-cost="free" data-text="KSL classifieds utah jobs trades local contractor"><div class="ls-name">KSL Jobs</div><div class="ls-desc">Utah-specific classifieds. Huge local reach for trades. Search skilled trades section daily.</div><div class="ls-tags"><span class="ls-tag tag-free">Free to Search</span><span class="ls-tag tag-trade">All Trades</span></div><a class="ls-link" href="https://jobs.ksl.com" target="_blank">Visit</a></div>
+        </div>
+      </div>
+      <div class="empty" id="sourcesEmpty" style="display:none"><div class="empty-title">No Sources Match</div><p>Try clearing filters.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- GC LEADS -->
+<div class="page" id="page-gcleads">
+  <div class="page-head">
+    <div class="page-head-inner">
+      <div class="eyebrow">Live Permit Data -- PermitStack</div>
+      <div class="section-hd">GC Lead Generator</div>
+      <p class="sub-hd">Real building permits from Utah city and county portals, refreshed daily.</p>
+    </div>
+  </div>
+  <div class="filters">
+    <div class="filter-row">
+      <input type="text" class="fi fi-search" id="gSearch" placeholder="Search address, trade...">
+      <select class="fi" id="gTrade"><option value="">All Trades</option><option>Roofing</option><option>Concrete</option><option>Framing</option><option>Electrical</option><option>Plumbing</option><option>HVAC</option><option>Excavation</option><option>General</option></select>
+      <select class="fi" id="gCity"><option value="">All Cities</option><option>Park City</option><option>Heber City</option><option>Salt Lake City</option><option>Provo</option><option>Ogden</option><option>Kamas</option></select>
+      <button class="clr" id="gRefresh">Refresh</button>
+      <button class="clr" id="gClear">Clear</button>
+      <span class="fc" id="gCount"></span>
+    </div>
+  </div>
+  <div class="section">
+    <div class="disclaimer">These are building permits from public records -- not job postings. Each permit signals active construction where a GC may need subs.</div>
+    <div class="stats">
+      <div class="stat"><div class="n" id="gTotal">--</div><div class="l">Active Permits</div></div>
+      <div class="stat"><div class="n" id="gValue">--</div><div class="l">Est. Total Value</div></div>
+      <div class="stat"><div class="n">7</div><div class="l">Utah Cities</div></div>
+    </div>
+    <div class="grid" id="gclGrid"><div style="color:var(--steel);font-size:.875rem;grid-column:1/-1">Loading permit data...</div></div>
+    <div class="empty" id="gclEmpty" style="display:none"><div class="empty-title">No Permits Match</div><p>Try clearing filters or refreshing.</p></div>
+  </div>
+</div>
+
+<!-- SITE PHOTOS -->
+<div class="page" id="page-sitephotos">
+  <div class="page-head">
+    <div class="page-head-inner">
+      <div class="eyebrow">Powered by CompanyCam</div>
+      <div class="section-hd">Job Site Photos</div>
+      <p class="sub-hd">Every job documented. Before, during, and after.</p>
+    </div>
+  </div>
+  <div class="section">
+    <div class="connect-box" id="ccBanner">
+      <h3>Connect CompanyCam</h3>
+      <p>Paste your CompanyCam API key to pull job site photos into TradeDeck.</p>
+      <input type="text" class="api-input" id="ccKey" placeholder="Paste API key here...">
+      <button class="btn" id="ccConnect">Connect</button>
+      <p style="margin-top:12px;font-size:.73rem;color:var(--steel);">app.companycam.com -- Account -- API</p>
+    </div>
+    <div id="ccConnected" style="display:none;">
+      <div class="stats">
+        <div class="stat"><div class="n" id="ccPhotos">--</div><div class="l">Photos</div></div>
+        <div class="stat"><div class="n" id="ccProjects">--</div><div class="l">Projects</div></div>
+        <div class="stat"><div class="n" id="ccWeek">--</div><div class="l">This Week</div></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <select class="fi" id="ccProject"><option value="">All Projects</option></select>
+        <button class="clr" id="ccRefresh">Refresh</button>
+        <button class="clr" id="ccDisconnect" style="border-color:rgba(255,100,100,.4);color:rgba(255,150,150,.8);">Disconnect</button>
+      </div>
+      <div class="cc-photos" id="ccGrid"></div>
+      <div class="empty" id="ccEmpty" style="display:none"><div class="empty-title">No Photos Yet</div><p>Photos added in CompanyCam appear here.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- POST A JOB (placeholder, opens intake) -->
+<div class="page" id="page-postjob"></div>
+
+<!-- INTAKE OVERLAY -->
+<div class="overlay" id="intakeOverlay">
+  <div class="intake-panel">
+    <div class="intake-hd">
+      <div class="intake-hd-left">
+        <div class="intake-logo">TD</div>
+        <div><div class="intake-title">Post a Job</div><div class="intake-sub">Claude AI &middot; Utah only</div></div>
+      </div>
+      <button class="intake-x" id="intakeX">&#x2715;</button>
+    </div>
+    <div class="msgs" id="msgList"></div>
+    <div class="intake-ft">
+      <div class="intake-row">
+        <textarea class="intake-in" id="intakeIn" placeholder="Describe the job..." rows="1"></textarea>
+        <button class="intake-send" id="intakeSend"><svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+      </div>
+      <div class="intake-note">TradeDeck AI &middot; Utah contractors only &middot; Jobs post live instantly</div>
+    </div>
+  </div>
+</div>
 
 <script>
-const SUPABASE_URL = 'https://jlaajejpqjldpbinktln.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW5rdGxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMDg3MTksImV4cCI6MjEwMTc4NDcxOX0.tP-seLGoJnivrYmNhhTDmDJw4Uk92D95-zrwWB1G_S4';
-const STRIPE_PK = 'pk_test_51TLWkTDNZcAJj6Kyd84RVIQ0qPO1iHP109ccBL4P9OQvShE21T291c4BhhtC8Z6CEYQKqmtjj2b6UZQe1n1CusGC00KNY7CwAl';
-const API_URL = 'https://tradedeck-api.onrender.com';
-const FEE_CENTS = 2000; // $20.00
+(function() {
+  var API = 'https://tradedeck-api.onrender.com';
 
-const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-let _stripe = null;
-let cardElement = null;
-let stripeElements = null;
-function getStripe() {
-  if (!_stripe) {
-    if (typeof Stripe === 'undefined') throw new Error('Stripe.js not loaded yet — try again in a moment');
-    _stripe = Stripe(STRIPE_PK);
+  /* ======= TABS ======= */
+  var currentPage = 'home';
+  var currentSub = 'jobs';
+
+  function showPage(id) {
+    document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('on'); });
+    document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('on'); });
+    var p = document.getElementById('page-' + id);
+    var t = document.querySelector('[data-page="' + id + '"]');
+    if (p) p.classList.add('on');
+    if (t) t.classList.add('on');
+    currentPage = id;
   }
-  return _stripe;
-}
 
-let STATE = {
-  user: null, profile: null,
-  jobs: [], kslJobs: [], draws: [],
-  workTab: 'open', county: 'all',
-  ratingJobId: null, rating: 0,
-  milestones: [],
-  // payment context
-  pendingAction: null, // { type, data, onSuccess }
-};
+  function showSub(id) {
+    document.querySelectorAll('.subpage').forEach(function(p){ p.classList.remove('on'); });
+    document.querySelectorAll('.subtab').forEach(function(t){ t.classList.remove('on'); });
+    var p = document.getElementById('sub-' + id);
+    var t = document.querySelector('[data-sub="' + id + '"]');
+    if (p) p.classList.add('on');
+    if (t) t.classList.add('on');
+    currentSub = id;
+    // Show/hide relevant filters
+    document.getElementById('fSource').style.display = id === 'liveleads' ? '' : 'none';
+    document.getElementById('fCost').style.display = id === 'sources' ? '' : 'none';
+    // Load data
+    if (id === 'jobs') loadJobs();
+    if (id === 'liveleads') loadLiveLeads();
+    if (id === 'sources') filterSources();
+  }
 
-// ── STRIPE SETUP ──────────────────────────────────────────────────────────
-function initStripeElement() {
-  if (cardElement) { cardElement.destroy(); cardElement = null; }
-  stripeElements = getStripe().elements();
-  cardElement = stripeElements.create('card', {
-    style: {
-      base: {
-        color: '#F0F0F0',
-        fontFamily: 'system-ui, sans-serif',
-        fontSize: '15px',
-        '::placeholder': { color: '#666' },
-        backgroundColor: '#141414',
-      },
-      invalid: { color: '#e05555' }
-    }
-  });
-  cardElement.mount('#card-element');
-  cardElement.on('change', e => {
-    const el = document.getElementById('card-error');
-    el.textContent = e.error ? e.error.message : '';
-    el.style.display = e.error ? 'block' : 'none';
-  });
-}
-
-// ── PAYMENT FLOW ──────────────────────────────────────────────────────────
-// pendingAction types: 'apply' | 'hire' | 'post_job'
-function openPayment(title, desc, action) {
-  STATE.pendingAction = action;
-  document.getElementById('payment-title').textContent = title;
-  document.getElementById('payment-desc').textContent = desc;
-  document.getElementById('card-error').style.display = 'none';
-  document.getElementById('pay-btn').disabled = false;
-  document.getElementById('pay-btn').textContent = 'Pay $20 & Confirm';
-  document.getElementById('payment-overlay').classList.add('open');
-  setTimeout(initStripeElement, 100);
-}
-
-async function submitPayment() {
-  const btn = document.getElementById('pay-btn');
-  btn.disabled = true;
-  btn.textContent = 'Processing…';
-
-  try {
-    // 1. Create PaymentIntent on backend
-    const res = await fetch(`${API_URL}/api/payments/intent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount: FEE_CENTS,
-        user_id: STATE.user.id,
-        action_type: STATE.pendingAction.type,
-        metadata: STATE.pendingAction.data
-      })
+  // Tab clicks
+  document.querySelectorAll('.tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      var page = this.dataset.page;
+      if (page === 'postjob') { openIntake(); return; }
+      showPage(page);
+      if (page === 'findwork') { showSub('jobs'); loadJobs(); }
+      if (page === 'gcleads') { loadGCLeads(); }
     });
-    const { client_secret, error: apiErr } = await res.json();
-    if (apiErr) throw new Error(apiErr);
+  });
 
-    // 2. Confirm card payment
-    const { paymentIntent, error: stripeErr } = await getStripe().confirmCardPayment(client_secret, {
-      payment_method: { card: cardElement }
-    });
-    if (stripeErr) throw new Error(stripeErr.message);
-    if (paymentIntent.status !== 'succeeded') throw new Error('Payment did not complete');
+  // Subtab clicks
+  document.querySelectorAll('.subtab').forEach(function(tab) {
+    tab.addEventListener('click', function() { showSub(this.dataset.sub); });
+  });
 
-    // 3. Run the actual action
-    await STATE.pendingAction.onSuccess(paymentIntent.id);
+  // Nav buttons
+  document.getElementById('navLogo').addEventListener('click', function(){ showPage('home'); });
+  document.getElementById('navPost').addEventListener('click', openIntake);
+  document.getElementById('heroPost').addEventListener('click', openIntake);
+  document.getElementById('ctaPost').addEventListener('click', openIntake);
+  document.getElementById('heroFind').addEventListener('click', function(){
+    showPage('findwork');
+    showSub('jobs');
+    loadJobs();
+  });
 
-    closeOverlay('payment-overlay');
-    toast('Payment confirmed — action complete!');
-  } catch(e) {
-    const el = document.getElementById('card-error');
-    el.textContent = e.message;
-    el.style.display = 'block';
-    btn.disabled = false;
-    btn.textContent = 'Pay $20 & Confirm';
-  }
-}
-
-// ── TOAST / UTILS ─────────────────────────────────────────────────────────
-function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.style.display = 'block';
-  setTimeout(() => el.style.display = 'none', 2800);
-}
-function closeOverlay(id) { document.getElementById(id).classList.remove('open'); }
-function switchTab(tab) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById('screen-'+tab).classList.add('active');
-  document.getElementById('nav-'+tab).classList.add('active');
-}
-
-// ── AUTH ──────────────────────────────────────────────────────────────────
-let authMode = 'signin';
-function toggleAuth() {
-  authMode = authMode==='signin' ? 'signup' : 'signin';
-  document.getElementById('auth-btn').textContent = authMode==='signin' ? 'Sign In' : 'Create Account';
-  document.querySelector('.auth-toggle span').textContent = authMode==='signin' ? 'Sign up' : 'Sign in';
-}
-function showAuthError(msg) {
-  const el = document.getElementById('auth-error');
-  el.textContent = msg; el.style.display = msg ? 'block' : 'none';
-}
-async function authSubmit() {
-  const email = document.getElementById('auth-email').value.trim();
-  const pw = document.getElementById('auth-password').value;
-  showAuthError('');
-  if (!email||!pw) { showAuthError('Email and password required'); return; }
-  document.getElementById('auth-btn').textContent = '…';
-  let res;
-  try {
-    res = authMode==='signup'
-      ? await sb.auth.signUp({email,password:pw})
-      : await sb.auth.signInWithPassword({email,password:pw});
-  } catch(e) { showAuthError(e.message); document.getElementById('auth-btn').textContent = authMode==='signin'?'Sign In':'Create Account'; return; }
-  if (res.error) { showAuthError(res.error.message); document.getElementById('auth-btn').textContent = authMode==='signin'?'Sign In':'Create Account'; return; }
-  if (authMode==='signup' && !res.data?.session) {
-    document.getElementById('auth-wrap').innerHTML = '<h1>TradeDeck</h1><p style="color:var(--teal);margin-top:16px">Check your email to confirm, then sign in.</p>';
-    return;
-  }
-  await bootApp(res.data.user);
-}
-
-async function bootApp(user) {
-  STATE.user = user;
-  document.getElementById('auth-wrap').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  document.getElementById('main-nav').style.display = 'flex';
-  let { data: profile } = await sb.from('profiles').select('*').eq('id',user.id).single();
-  if (!profile) {
-    const ins = await sb.from('profiles').insert({id:user.id,email:user.email,tier:1}).select().single();
-    profile = ins.data || {id:user.id,email:user.email,tier:1,full_name:'',trade_type:'',bio:''};
-  }
-  STATE.profile = profile;
-  await loadAll();
-  renderAll();
-}
-async function loadAll() {
-  const [j,k,d,c] = await Promise.allSettled([
-    sb.from('jobs').select('*').neq('source','ksl').eq('status','open').order('created_at',{ascending:false}).limit(50),
-    sb.from('jobs').select('*').eq('source','ksl').order('created_at',{ascending:false}).limit(100),
-    sb.from('draw_schedules').select('*, milestones(*)').limit(30),
-    sb.from('connection_requests')
-      .select('*, sender:profiles!connection_requests_sender_id_fkey(id,full_name,email,trade_type), receiver:profiles!connection_requests_receiver_id_fkey(id,full_name,email,trade_type)')
-      .or(`sender_id.eq.${STATE.user.id},receiver_id.eq.${STATE.user.id}`)
-      .order('created_at',{ascending:false})
-  ]);
-  STATE.jobs        = j.status==='fulfilled' ? (j.value.data||[]) : [];
-  STATE.kslJobs     = k.status==='fulfilled' ? (k.value.data||[]) : [];
-  STATE.draws       = d.status==='fulfilled' ? (d.value.data||[]) : [];
-  STATE.connections = c.status==='fulfilled' ? (c.value.data||[]) : [];
-}
-async function signOut() { await sb.auth.signOut(); location.reload(); }
-
-// ── RENDER ────────────────────────────────────────────────────────────────
-function renderAll() { renderHome(); renderWork(); renderDraws(); renderMessages(); renderProfile(); }
-
-function renderHome() {
-  if (!STATE.profile) return;
-  const p = STATE.profile;
-  const tierNames = ['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
-  const tierEl = document.getElementById('home-tier');
-  tierEl.textContent = tierNames[p.tier]||'Verified';
-  tierEl.style.display = 'inline-block';
-  const myJobs = STATE.jobs.filter(j=>j.posted_by===STATE.user.id);
-  document.getElementById('home-content').innerHTML = `
-    <div class="card">
-      <div class="flex between"><span class="text-muted">Jobs Posted</span><strong>${myJobs.length}</strong></div>
-      <div class="flex between mt8"><span class="text-muted">Active Draws</span><strong>${STATE.draws.length}</strong></div>
-    </div>
-    <div class="card">
-      <h3>Quick Actions</h3>
-      <div class="flex gap8 mt8">
-        <button class="btn btn-primary btn-sm" onclick="switchTab('post')">Post a Job</button>
-        <button class="btn btn-outline btn-sm" onclick="switchTab('work')">Find Work</button>
-      </div>
-    </div>
-    ${STATE.jobs.slice(0,3).map(j=>`
-      <div class="card">
-        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-teal">${j.trade_type||'Trade'}</span></div>
-        <p>${j.location||''}</p><p>${j.budget||''}</p>
-      </div>`).join('')}`;
-}
-
-const COUNTIES = ['All','Cache','Box Elder','Weber','Davis','Salt Lake','Utah','Wasatch','Summit','Duchesne','Uintah','Carbon','Emery','Grand','San Juan','Sevier','Piute','Garfield','Kane','Iron','Washington','Beaver','Millard','Juab','Sanpete','Tooele','Morgan','Rich'];
-const LEADS = [
-  {n:'PermitStack',d:'Utah building permits — new construction signals'},
-  {n:'KSL Classifieds',d:'FSBO and contractor listings'},
-  {n:'BuildZoom',d:'Permit and contractor history'},
-  {n:'Angi',d:'Homeowner requests in your area'},
-  {n:'Thumbtack',d:'Local project leads'},
-  {n:'Google Local Services',d:'LSA leads'},
-  {n:'HomeAdvisor',d:'Homeowner project matching'},
-  {n:'Houzz Pro',d:'Design-build and remodel leads'},
-  {n:'NextDoor',d:'Neighborhood contractor referrals'},
-  {n:'Facebook Marketplace',d:'Local contractor demand'},
-  {n:'Craigslist',d:'Gig and sub postings'},
-];
-
-function workTab(tab, btn) {
-  STATE.workTab = tab; STATE.county = 'all';
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('county-tabs').style.display = tab==='ksl' ? 'flex' : 'none';
-  renderWork();
-}
-function filterCounty(county, btn) {
-  STATE.county = county;
-  document.querySelectorAll('.county-tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  renderWork();
-}
-function renderWork() {
-  const el = document.getElementById('work-content');
-  if (STATE.workTab==='leads') {
-    el.innerHTML = LEADS.map(l=>`<div class="card"><h3>${l.n}</h3><p>${l.d}</p></div>`).join('');
-    return;
-  }
-  if (STATE.workTab==='ksl') {
-    document.getElementById('county-tabs').innerHTML = COUNTIES.map(c=>{
-      const val = c==='All'?'all':c;
-      return `<button class="county-tab${STATE.county===val?' active':''}" onclick="filterCounty('${val}',this)">${c}</button>`;
-    }).join('');
-    const list = STATE.county==='all' ? STATE.kslJobs : STATE.kslJobs.filter(j=>j.county===STATE.county);
-    el.innerHTML = list.length ? list.map(j=>`
-      <div class="card">
-        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">KSL</span></div>
-        <p>${j.company||''} · ${j.location||''}</p>
-        <p style="margin-top:6px">${(j.description||'').slice(0,150)}${(j.description||'').length>150?'…':''}</p>
-        <p class="text-muted" style="margin-top:4px">${j.pay||''} · ${j.job_type||''}</p>
-        <button class="btn btn-primary btn-sm mt8" onclick="initiateApply('${j.id}','${(j.title||'').replace(/'/g,"\\'")}')">Apply — $20 fee</button>
-      </div>`).join('') :
-      '<p class="text-muted" style="padding:20px 0">No KSL jobs in this area yet.</p>';
-    return;
-  }
-  el.innerHTML = STATE.jobs.length ? STATE.jobs.map(j=>`
-    <div class="card">
-      <div class="flex between"><h3>${j.title}</h3><span class="badge badge-teal">${j.trade_type||'Trade'}</span></div>
-      <p>${j.location||''}</p><p>${j.budget||''}</p>
-      <p class="text-muted" style="margin-top:6px;font-size:12px">${(j.description||'').slice(0,100)}${(j.description||'').length>100?'…':''}</p>
-      <div class="flex gap8 mt8" style="flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="initiateApply('${j.id}','${(j.title||'').replace(/'/g,"\\'")}')">Apply — $20</button>
-        <button class="btn btn-outline btn-sm" onclick="initiateHire('${j.id}','${(j.title||'').replace(/'/g,"\\'")}')">Hire — $20</button>
-        ${j.posted_by && j.posted_by !== STATE.user.id ? `<button class="btn btn-outline btn-sm" onclick="initiateConnect('${j.posted_by}','${(j.title||'Job Poster').replace(/'/g,"\\'")}')">Connect</button>` : ''}
-        <button class="btn btn-outline btn-sm" onclick="openRating('${j.id}')">Rate</button>
-      </div>
-    </div>`).join('') :
-    '<p class="text-muted" style="padding:20px 0">No open jobs yet.</p>';
-}
-
-// ── FEE-GATED ACTIONS ─────────────────────────────────────────────────────
-
-// Worker applies to a job → worker pays $20
-function initiateApply(jobId, jobTitle) {
-  openPayment(
-    'Worker Application Fee',
-    `A $20 platform fee is charged when you apply to "${jobTitle}". This keeps TradeDeck spam-free and worker-serious.`,
-    {
-      type: 'worker_apply',
-      data: { job_id: jobId },
-      onSuccess: async (paymentIntentId) => {
-        const { error } = await sb.from('applications').insert({
-          job_id: jobId,
-          applicant_id: STATE.user.id,
-          message: '',
-          fee_payment_intent: paymentIntentId
-        });
-        if (error && error.code==='23505') { toast('Already applied'); return; }
-        if (error) throw new Error(error.message);
-        await loadAll(); renderAll();
-      }
-    }
-  );
-}
-
-// Contractor hires someone → contractor pays $20
-function initiateHire(jobId, jobTitle) {
-  openPayment(
-    'Contractor Hire Fee',
-    `A $20 platform fee is charged when you hire for "${jobTitle}". Confirms the engagement is live.`,
-    {
-      type: 'contractor_hire',
-      data: { job_id: jobId },
-      onSuccess: async (paymentIntentId) => {
-        await sb.from('jobs').update({
-          status: 'filled',
-          hire_payment_intent: paymentIntentId,
-          hired_by: STATE.user.id
-        }).eq('id', jobId);
-        await loadAll(); renderAll();
-        toast('Job marked as hired!');
-      }
-    }
-  );
-}
-
-// Homeowner or contractor posts a job → poster pays $20
-function initiatePostJob() {
-  const title = document.getElementById('post-title').value.trim();
-  if (!title) { toast('Job title required'); return; }
-  if (STATE.milestones.length) {
-    const total = STATE.milestones.reduce((s,m)=>s+(+m.pct||0),0);
-    if (total!==100) { toast('Milestone % must total 100'); return; }
-  }
-  const role = document.getElementById('post-role').value;
-  const roleLabel = role==='homeowner' ? 'Homeowner' : 'Contractor';
-  openPayment(
-    `${roleLabel} Job Post Fee`,
-    `A $20 platform fee is charged to post "${title}". Your listing goes live immediately after payment.`,
-    {
-      type: 'job_post',
-      data: { role },
-      onSuccess: async (paymentIntentId) => {
-        const budget = document.getElementById('post-budget').value;
-        const { data: job, error } = await sb.from('jobs').insert({
-          title,
-          trade_type: document.getElementById('post-trade').value,
-          location: document.getElementById('post-location').value,
-          description: document.getElementById('post-desc').value,
-          budget,
-          posted_by: STATE.user.id,
-          posted_by_role: role,
-          source: 'tradedeck',
-          status: 'open',
-          post_payment_intent: paymentIntentId
-        }).select().single();
-        if (error) throw new Error(error.message);
-        if (STATE.milestones.length && job) {
-          const val = parseInt(budget)||0;
-          const { data: sched } = await sb.from('draw_schedules').insert({job_id:job.id,contract_value:val}).select().single();
-          if (sched) {
-            await sb.from('milestones').insert(STATE.milestones.map((m,i)=>({
-              schedule_id:sched.id,name:m.name,pct:m.pct,
-              order_num:i+1,verifier_type:m.verifier,status:'pending'
-            })));
-          }
+  /* ======= HERO CARD ======= */
+  function loadHeroCard() {
+    fetch(API + '/api/jobs')
+      .then(function(r){ return r.json(); })
+      .then(function(d) {
+        var el = document.getElementById('heroCard');
+        if (!d.jobs || !d.jobs.length) {
+          el.innerHTML = '<div style="color:var(--steel);font-size:.85rem;">No open jobs yet.</div>';
+          return;
         }
-        STATE.milestones=[];
-        renderMilestones();
-        ['post-title','post-location','post-desc','post-budget'].forEach(id=>document.getElementById(id).value='');
-        await loadAll(); renderAll();
-        switchTab('work');
-      }
-    }
-  );
-}
-
-// ── MILESTONES ────────────────────────────────────────────────────────────
-function addMilestone() {
-  STATE.milestones.push({name:'',pct:0,verifier:'owner'});
-  renderMilestones();
-}
-function removeMilestone(i) { STATE.milestones.splice(i,1); renderMilestones(); }
-function renderMilestones() {
-  const el = document.getElementById('milestone-rows');
-  el.innerHTML = STATE.milestones.map((m,i)=>`
-    <div class="milestone-row">
-      <input placeholder="Milestone" value="${m.name}" oninput="STATE.milestones[${i}].name=this.value"/>
-      <input class="pct" type="number" placeholder="%" min="1" max="100" value="${m.pct||''}"
-        oninput="STATE.milestones[${i}].pct=+this.value;updatePct()"/>
-      <select style="width:100px;margin-bottom:0" onchange="STATE.milestones[${i}].verifier=this.value">
-        <option value="owner" ${m.verifier==='owner'?'selected':''}>Owner</option>
-        <option value="inspector" ${m.verifier==='inspector'?'selected':''}>Inspector</option>
-      </select>
-      <button class="btn btn-outline btn-sm" onclick="removeMilestone(${i})">✕</button>
-    </div>`).join('');
-  updatePct();
-}
-function updatePct() {
-  const total = STATE.milestones.reduce((s,m)=>s+(+m.pct||0),0);
-  const el = document.getElementById('pct-total');
-  if (!STATE.milestones.length) { el.textContent=''; return; }
-  el.textContent = `${total}% / 100%`;
-  el.style.color = total===100?'#50c878':total>100?'var(--danger)':'var(--muted)';
-}
-
-// ── DRAWS ─────────────────────────────────────────────────────────────────
-function renderDraws() {
-  const el = document.getElementById('draws-content');
-  if (!STATE.draws.length) {
-    el.innerHTML='<p class="text-muted" style="padding:20px 0">No draw schedules yet.</p>';
-    return;
-  }
-  el.innerHTML = STATE.draws.map(d=>{
-    const ms = d.milestones||[];
-    const released = ms.filter(m=>m.status==='approved').reduce((s,m)=>s+(m.pct||0),0);
-    return `<div class="card">
-      <div class="flex between"><h3>Draw Schedule</h3><span class="text-muted">$${(d.contract_value||0).toLocaleString()}</span></div>
-      <div class="escrow-bar"><div class="escrow-fill" style="width:${released}%"></div></div>
-      <p class="text-muted" style="font-size:12px">${released}% released</p>
-      ${ms.map(m=>`
-        <div class="flex between mt8" style="align-items:center;flex-wrap:wrap;gap:8px">
-          <span>${m.name} (${m.pct}%)</span>
-          <div class="flex gap8" style="align-items:center">
-            <span class="draw-status ${m.status}">${m.status}</span>
-            ${m.status==='pending'?`<button class="btn btn-outline btn-sm" onclick="drawAction('${m.id}','submitted')">Submit</button>`:''}
-            ${m.status==='submitted'?`
-              <button class="btn btn-primary btn-sm" onclick="drawAction('${m.id}','approved')">Approve</button>
-              <button class="btn btn-danger btn-sm" onclick="drawAction('${m.id}','disputed')">Dispute</button>`:''}
-          </div>
-        </div>`).join('')}
-    </div>`;
-  }).join('');
-}
-async function drawAction(id, status) {
-  await sb.from('milestones').update({status}).eq('id',id);
-  await loadAll(); renderDraws();
-  toast(status.charAt(0).toUpperCase()+status.slice(1));
-}
-
-// ── PROFILE ───────────────────────────────────────────────────────────────
-function renderProfile() {
-  const el = document.getElementById('profile-content');
-  if (!STATE.profile) return;
-  const p = STATE.profile;
-  const tierNames=['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
-  el.innerHTML=`
-    <div class="card">
-      <h3>${p.full_name||p.email}</h3>
-      <p class="text-muted">${p.trade_type||'No trade type set'}</p>
-      <div class="flex gap8 mt8" style="align-items:center">
-        ${[1,2,3,4,5].map(i=>`<div style="width:10px;height:10px;border-radius:50%;background:${i<=(p.tier||1)?'var(--teal)':'var(--border)'}"></div>`).join('')}
-        <span class="text-muted" style="font-size:12px">${tierNames[p.tier]||'Verified'}</span>
-      </div>
-    </div>
-    <div class="card">
-      <h3>Edit Profile</h3>
-      <label>Full Name</label><input id="edit-name" value="${p.full_name||''}"/>
-      <label>Trade Type</label>
-      <select id="edit-trade">
-        ${['Framing','Concrete','Roofing','Electrical','Plumbing','HVAC','Drywall','Flooring','Excavation','Landscaping','General Contractor','Other']
-          .map(t=>`<option ${p.trade_type===t?'selected':''}>${t}</option>`).join('')}
-      </select>
-      <label>Bio</label><textarea id="edit-bio">${p.bio||''}</textarea>
-      <button class="btn btn-primary btn-block" onclick="saveProfile()">Save Profile</button>
-    </div>
-    <button class="btn btn-outline btn-block mt8" onclick="signOut()">Sign Out</button>`;
-}
-async function saveProfile() {
-  const u = {
-    full_name: document.getElementById('edit-name').value,
-    trade_type: document.getElementById('edit-trade').value,
-    bio: document.getElementById('edit-bio').value
-  };
-  const { error } = await sb.from('profiles').update(u).eq('id',STATE.user.id);
-  if (error) { toast('Error: '+error.message); return; }
-  STATE.profile = {...STATE.profile,...u};
-  renderProfile(); toast('Saved!');
-}
-
-// ── RATINGS ───────────────────────────────────────────────────────────────
-function openRating(jobId) {
-  STATE.ratingJobId=jobId; STATE.rating=0;
-  document.querySelectorAll('#star-picker span').forEach(s=>s.classList.remove('on'));
-  document.getElementById('review-text').value='';
-  document.getElementById('rating-overlay').classList.add('open');
-}
-function setRating(n) {
-  STATE.rating=n;
-  document.querySelectorAll('#star-picker span').forEach((s,i)=>s.classList.toggle('on',i<n));
-}
-async function submitRating() {
-  if (!STATE.rating) { toast('Pick a star rating'); return; }
-  const { error } = await sb.from('reviews').insert({
-    job_id:STATE.ratingJobId,reviewer_id:STATE.user.id,
-    rating:STATE.rating,body:document.getElementById('review-text').value
-  });
-  if (error&&error.code==='23505') { toast('Already rated'); closeOverlay('rating-overlay'); return; }
-  if (error) { toast('Error: '+error.message); return; }
-  toast('Rating submitted!'); closeOverlay('rating-overlay');
-}
-
-// ── MESSAGING ─────────────────────────────────────────────────────────────
-// STATE additions
-STATE.connections = [];       // all connection records for this user
-STATE.activeThreadId = null;  // current open conversation id
-STATE.activeThreadOther = {}; // {id, full_name, email}
-STATE.pendingConnectTarget = null;
-
-async function loadConnections() {
-  // Requests where I am sender or receiver
-  const { data } = await sb
-    .from('connection_requests')
-    .select('*, sender:profiles!connection_requests_sender_id_fkey(id,full_name,email,trade_type), receiver:profiles!connection_requests_receiver_id_fkey(id,full_name,email,trade_type)')
-    .or(`sender_id.eq.${STATE.user.id},receiver_id.eq.${STATE.user.id}`)
-    .order('created_at', { ascending: false });
-  STATE.connections = data || [];
-}
-
-async function loadMessages(conversationId) {
-  const { data } = await sb
-    .from('messages')
-    .select('*')
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true });
-  return data || [];
-}
-
-function renderMessages() {
-  const el = document.getElementById('messages-content');
-  if (!STATE.connections.length) {
-    el.innerHTML = `
-      <div class="card">
-        <h3>No connections yet</h3>
-        <p>Find a job or a worker, then tap <strong>Connect</strong> to request messaging access. Both sides must accept before chatting.</p>
-      </div>`;
-    return;
+        var j = d.jobs[0];
+        el.innerHTML =
+          '<div class="card-head"><div><div class="card-title">' + j.title + '</div>' +
+          '<div class="card-meta">' + j.location + ' &middot; ' + j.age + '</div></div>' +
+          '<span class="badge badge-green">Open</span></div>' +
+          '<div class="card-fields">' +
+          '<div class="cf"><label>Trade</label><div class="v">' + j.trade + '</div></div>' +
+          '<div class="cf"><label>Duration</label><div class="v">' + (j.duration||'--') + '</div></div>' +
+          '<div class="cf"><label>Rate</label><div class="v">' + (j.rate||'--') + '</div></div>' +
+          '<div class="cf"><label>Start</label><div class="v">' + (j.start_date||'--') + '</div></div>' +
+          '</div>' +
+          '<div class="card-foot"><span style="color:var(--steel);font-size:.75rem;">' + j.applicants + ' applicant' + (j.applicants!==1?'s':'') + '</span>' +
+          '<button class="apply-btn" data-id="' + j.id + '" id="heroApply">Apply</button></div>';
+        document.getElementById('heroApply').addEventListener('click', function(){
+          var b = this;
+          fetch(API + '/api/jobs/' + this.dataset.id + '/apply', {method:'POST'})
+            .then(function(){ b.textContent='Applied'; b.style.background='#4ADE80'; b.disabled=true; });
+        });
+      })
+      .catch(function(){
+        document.getElementById('heroCard').innerHTML = '<div style="color:var(--steel);font-size:.85rem;">Could not load. Refresh to try again.</div>';
+      });
   }
 
-  const pending = STATE.connections.filter(c => c.status === 'pending');
-  const accepted = STATE.connections.filter(c => c.status === 'accepted');
-
-  let html = '';
-
-  if (pending.length) {
-    html += `<h3 style="font-size:13px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Pending (${pending.length})</h3>`;
-    html += pending.map(c => {
-      const isReceiver = c.receiver_id === STATE.user.id;
-      const other = isReceiver ? c.sender : c.receiver;
-      const awaitingMe = isReceiver && c.status === 'pending';
-      return `<div class="connect-card">
-        <div class="info">
-          <h4>${other?.full_name || other?.email || 'Unknown'}</h4>
-          <p>${other?.trade_type || ''}</p>
-          ${c.intro_message ? `<p style="margin-top:4px;font-style:italic">"${c.intro_message.slice(0,60)}"</p>` : ''}
-        </div>
-        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-          <span class="connect-status pending">${awaitingMe ? 'Accept?' : 'Waiting'}</span>
-          ${awaitingMe ? `<button class="btn btn-primary btn-sm" onclick="acceptConnection('${c.id}')">Accept</button>` : ''}
-        </div>
-      </div>`;
-    }).join('');
+  /* ======= OPEN JOBS ======= */
+  function loadJobs() {
+    var grid = document.getElementById('jobsGrid');
+    var empty = document.getElementById('jobsEmpty');
+    grid.innerHTML = '<div style="color:var(--steel);font-size:.875rem;grid-column:1/-1">Loading jobs...</div>';
+    var trade = document.getElementById('fTrade').value;
+    var url = API + '/api/jobs' + (trade ? '?trade=' + encodeURIComponent(trade) : '');
+    fetch(url)
+      .then(function(r){ return r.json(); })
+      .then(function(d) {
+        grid.innerHTML = '';
+        var jobs = d.jobs || [];
+        var s = document.getElementById('fSearch').value.toLowerCase().trim();
+        if (s) jobs = jobs.filter(function(j){ return (j.title+j.trade+j.location+j.description).toLowerCase().includes(s); });
+        document.getElementById('fCount').textContent = jobs.length + ' job' + (jobs.length!==1?'s':'');
+        if (!jobs.length) { empty.style.display='block'; return; }
+        empty.style.display = 'none';
+        jobs.forEach(function(j) {
+          var c = document.createElement('div');
+          c.className = 'card';
+          c.innerHTML =
+            '<div class="card-head"><div><div class="card-title">' + j.title + '</div>' +
+            '<div class="card-meta">' + j.location + ' &middot; ' + j.age + '</div></div>' +
+            '<span class="badge badge-green">Open</span></div>' +
+            '<div class="card-fields">' +
+            '<div class="cf"><label>Trade</label><div class="v">' + j.trade + '</div></div>' +
+            '<div class="cf"><label>Duration</label><div class="v">' + (j.duration||'--') + '</div></div>' +
+            '<div class="cf"><label>Rate</label><div class="v">' + (j.rate||'--') + '</div></div>' +
+            '<div class="cf"><label>Start</label><div class="v">' + (j.start_date||'--') + '</div></div>' +
+            '</div>' +
+            '<div class="card-foot"><span style="color:var(--steel);font-size:.75rem;">' + j.applicants + ' applicant' + (j.applicants!==1?'s':'') + '</span>' +
+            '<button class="apply-btn" data-id="' + j.id + '">Apply</button></div>';
+          c.querySelector('.apply-btn').addEventListener('click', function(e){
+            e.stopPropagation();
+            var b = this;
+            fetch(API + '/api/jobs/' + b.dataset.id + '/apply', {method:'POST'})
+              .then(function(){ b.textContent='Applied'; b.style.background='#4ADE80'; b.disabled=true; });
+          });
+          grid.appendChild(c);
+        });
+      })
+      .catch(function(){ grid.innerHTML = '<div style="color:var(--steel);font-size:.875rem;grid-column:1/-1">Could not load jobs.</div>'; });
   }
 
-  if (accepted.length) {
-    html += `<h3 style="font-size:13px;color:var(--muted);margin:16px 0 10px;text-transform:uppercase;letter-spacing:.05em">Conversations (${accepted.length})</h3>`;
-    html += accepted.map(c => {
-      const other = c.sender_id === STATE.user.id ? c.receiver : c.sender;
-      return `<div class="connect-card" onclick="openThread('${c.conversation_id}','${other?.id}','${(other?.full_name||other?.email||'').replace(/'/g,"\\'")}')">
-        <div class="info">
-          <h4>${other?.full_name || other?.email || 'Unknown'}</h4>
-          <p>${other?.trade_type || ''}</p>
-        </div>
-        <span class="connect-status accepted">Open →</span>
-      </div>`;
-    }).join('');
+  /* ======= LIVE LEADS ======= */
+  var cachedLeads = [];
+
+  function loadLiveLeads() {
+    var grid = document.getElementById('llGrid');
+    var empty = document.getElementById('llEmpty');
+    grid.innerHTML = '<div style="color:var(--steel);font-size:.875rem;grid-column:1/-1">Fetching from Indeed, Craigslist, SAM.gov...</div>';
+    var params = [];
+    var trade = document.getElementById('fTrade').value;
+    var source = document.getElementById('fSource').value;
+    if (trade) params.push('trade=' + encodeURIComponent(trade));
+    if (source) params.push('source=' + encodeURIComponent(source));
+    var url = API + '/api/live-leads' + (params.length ? '?' + params.join('&') : '');
+    fetch(url)
+      .then(function(r){ return r.json(); })
+      .then(function(d) {
+        cachedLeads = d.leads || [];
+        renderLeads(cachedLeads);
+      })
+      .catch(function(){
+        grid.innerHTML = '<div style="color:var(--steel);font-size:.875rem;grid-column:1/-1">Could not load. Backend may be warming up (30 sec). Try refreshing.</div>';
+      });
   }
 
-  el.innerHTML = html;
-
-  // Unread badge
-  const unread = pending.filter(c => c.receiver_id === STATE.user.id).length;
-  const badge = document.getElementById('msg-unread-badge');
-  const navLabel = document.getElementById('nav-msg-label');
-  if (unread > 0) {
-    badge.textContent = unread;
-    badge.style.display = 'inline-block';
-    navLabel.textContent = `Msgs (${unread})`;
-  } else {
-    badge.style.display = 'none';
-    navLabel.textContent = 'Messages';
-  }
-}
-
-// Initiate connect from any job card
-function initiateConnect(targetUserId, targetName) {
-  STATE.pendingConnectTarget = { id: targetUserId, name: targetName };
-  document.getElementById('connect-target-name').textContent = targetName;
-  document.getElementById('connect-message').value = '';
-  document.getElementById('connect-overlay').classList.add('open');
-}
-
-async function submitConnectRequest() {
-  const target = STATE.pendingConnectTarget;
-  if (!target) return;
-
-  // Check if connection already exists
-  const existing = STATE.connections.find(c =>
-    (c.sender_id === STATE.user.id && c.receiver_id === target.id) ||
-    (c.receiver_id === STATE.user.id && c.sender_id === target.id)
-  );
-  if (existing) {
-    toast('Connection already exists');
-    closeOverlay('connect-overlay');
-    return;
+  function renderLeads(leads) {
+    var grid = document.getElementById('llGrid');
+    var empty = document.getElementById('llEmpty');
+    var s = document.getElementById('fSearch').value.toLowerCase().trim();
+    if (s) leads = leads.filter(function(l){ return (l.title+l.location+l.description+l.trade).toLowerCase().includes(s); });
+    document.getElementById('llCount').textContent = leads.length;
+    document.getElementById('fCount').textContent = leads.length + ' lead' + (leads.length!==1?'s':'');
+    grid.innerHTML = '';
+    if (!leads.length) { empty.style.display='block'; return; }
+    empty.style.display = 'none';
+    leads.forEach(function(l) {
+      var c = document.createElement('div');
+      c.className = 'card';
+      var bc = l.source==='SAM.gov' ? 'badge-blue' : l.source==='Indeed' ? 'badge-green' : 'badge-teal';
+      c.innerHTML =
+        '<div class="card-head"><div><div class="card-title">' + (l.title||'Untitled') + '</div>' +
+        '<div class="card-meta">' + (l.location||'Utah') + ' &middot; ' + l.age + '</div></div>' +
+        '<span class="badge ' + bc + '">' + l.source + '</span></div>' +
+        '<div class="card-fields">' +
+        '<div class="cf"><label>Trade</label><div class="v">' + (l.trade||'General') + '</div></div>' +
+        '<div class="cf"><label>Company</label><div class="v">' + (l.company||'Not listed') + '</div></div>' +
+        '</div>' +
+        (l.description ? '<div style="font-size:.76rem;color:var(--steel);line-height:1.5;margin-bottom:9px;border-top:1px dashed var(--line);padding-top:8px;">' + l.description.substring(0,100) + (l.description.length>100?'...':'') + '</div>' : '') +
+        '<div class="card-foot"><span style="color:var(--steel);font-size:.72rem;">' + (l.posted_date||'') + '</span>' +
+        (l.url ? '<a href="' + l.url + '" target="_blank" class="apply-btn" style="text-decoration:none;">View Job</a>' : '') +
+        '</div>';
+      grid.appendChild(c);
+    });
   }
 
-  // Create conversation first
-  const { data: convo } = await sb.from('conversations').insert({}).select().single();
-  if (!convo) { toast('Error creating conversation'); return; }
-
-  // Add both members
-  await sb.from('conversation_members').insert([
-    { conversation_id: convo.id, user_id: STATE.user.id },
-    { conversation_id: convo.id, user_id: target.id }
-  ]);
-
-  // Create connection request
-  const { error } = await sb.from('connection_requests').insert({
-    sender_id: STATE.user.id,
-    receiver_id: target.id,
-    conversation_id: convo.id,
-    intro_message: document.getElementById('connect-message').value,
-    status: 'pending'
+  document.getElementById('llRefresh').addEventListener('click', function(){
+    var b = this; b.textContent = 'Refreshing...';
+    fetch(API + '/api/live-leads/refresh', {method:'POST'})
+      .then(function(){ loadLiveLeads(); b.textContent = 'Refresh'; })
+      .catch(function(){ b.textContent = 'Refresh'; });
   });
 
-  if (error) { toast('Error: ' + error.message); return; }
-  closeOverlay('connect-overlay');
-  await loadConnections();
-  renderMessages();
-  toast('Connection request sent!');
-}
-
-async function acceptConnection(requestId) {
-  await sb.from('connection_requests').update({ status: 'accepted' }).eq('id', requestId);
-  await loadConnections();
-  renderMessages();
-  toast('Connected! You can now message each other.');
-}
-
-async function openThread(conversationId, otherId, otherName) {
-  STATE.activeThreadId = conversationId;
-  STATE.activeThreadOther = { id: otherId, name: otherName };
-  document.getElementById('thread-title').textContent = otherName;
-  document.getElementById('thread-messages').innerHTML = '<div class="spinner"></div>';
-  document.getElementById('thread-overlay').classList.add('open');
-
-  // Mark as read
-  await sb.from('conversation_members')
-    .update({ last_read_at: new Date().toISOString() })
-    .eq('conversation_id', conversationId)
-    .eq('user_id', STATE.user.id);
-
-  await renderThread();
-
-  // Realtime subscription
-  sb.channel('thread-'+conversationId)
-    .on('postgres_changes', {
-      event: 'INSERT', schema: 'public', table: 'messages',
-      filter: `conversation_id=eq.${conversationId}`
-    }, () => renderThread())
-    .subscribe();
-}
-
-async function renderThread() {
-  const msgs = await loadMessages(STATE.activeThreadId);
-  const el = document.getElementById('thread-messages');
-  if (!msgs.length) {
-    el.innerHTML = '<p class="text-muted" style="text-align:center;padding:20px">No messages yet. Say hello!</p>';
-    return;
+  /* ======= LEAD SOURCES ======= */
+  function filterSources() {
+    var s = document.getElementById('fSearch').value.toLowerCase().trim();
+    var cost = document.getElementById('fCost').value;
+    var items = document.querySelectorAll('.ls-item');
+    var vis = 0;
+    items.forEach(function(item){
+      var ok = (!s || ((item.dataset.text||'')+' '+item.innerText.toLowerCase()).includes(s)) &&
+               (!cost || item.dataset.cost === cost);
+      item.style.display = ok ? '' : 'none';
+      if (ok) vis++;
+    });
+    document.querySelectorAll('.ls-section').forEach(function(sec){
+      sec.style.display = Array.from(sec.querySelectorAll('.ls-item')).some(function(i){ return i.style.display!=='none'; }) ? '' : 'none';
+    });
+    document.getElementById('sourcesEmpty').style.display = vis===0 ? 'block' : 'none';
+    document.getElementById('fCount').textContent = vis + ' source' + (vis!==1?'s':'');
   }
-  el.innerHTML = msgs.map(m => {
-    const mine = m.sender_id === STATE.user.id;
-    const time = new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return `<div style="display:flex;flex-direction:column;align-items:${mine ? 'flex-end' : 'flex-start'}">
-      <div class="bubble ${mine ? 'bubble-me' : 'bubble-them'}">${m.body}</div>
-      <span class="bubble-time">${time}</span>
-    </div>`;
-  }).join('');
-  el.scrollTop = el.scrollHeight;
-}
 
-async function sendMessage() {
-  const input = document.getElementById('thread-input');
-  const body = input.value.trim();
-  if (!body || !STATE.activeThreadId) return;
-  input.value = '';
-  await sb.from('messages').insert({
-    conversation_id: STATE.activeThreadId,
-    sender_id: STATE.user.id,
-    body
+  /* ======= FILTERS ======= */
+  document.getElementById('fSearch').addEventListener('input', function(){
+    if (currentSub==='jobs') loadJobs();
+    else if (currentSub==='liveleads') renderLeads(cachedLeads);
+    else filterSources();
   });
-  await renderThread();
-}
+  document.getElementById('fTrade').addEventListener('change', function(){
+    if (currentSub==='jobs') loadJobs();
+    else if (currentSub==='liveleads') loadLiveLeads();
+  });
+  document.getElementById('fSource').addEventListener('change', loadLiveLeads);
+  document.getElementById('fCost').addEventListener('change', filterSources);
+  document.getElementById('fClear').addEventListener('click', function(){
+    document.getElementById('fSearch').value = '';
+    document.getElementById('fTrade').value = '';
+    document.getElementById('fSource').value = '';
+    document.getElementById('fCost').value = '';
+    if (currentSub==='jobs') loadJobs();
+    else if (currentSub==='liveleads') loadLiveLeads();
+    else filterSources();
+  });
 
-// ── INIT ──────────────────────────────────────────────────────────────────
-(async()=>{
-  try {
-    const {data:{session}} = await sb.auth.getSession();
-    if (session?.user) await bootApp(session.user);
-  } catch(e) {
-    document.getElementById('auth-wrap').innerHTML +=
-      `<div class="error-box" style="margin-top:16px">Connection error: ${e.message}</div>`;
+  /* ======= GC LEADS ======= */
+  var cachedGCLeads = [];
+
+  function loadGCLeads() {
+    var grid = document.getElementById('gclGrid');
+    grid.innerHTML = '<div style="color:var(--steel);font-size:.875rem;grid-column:1/-1">Loading permit data...</div>';
+    var params = [];
+    var trade = document.getElementById('gTrade').value;
+    var city = document.getElementById('gCity').value;
+    if (trade) params.push('trade='+encodeURIComponent(trade));
+    if (city) params.push('city='+encodeURIComponent(city));
+    fetch(API + '/api/gc-leads' + (params.length?'?'+params.join('&'):''))
+      .then(function(r){ return r.json(); })
+      .then(function(d){ cachedGCLeads = d.leads||[]; renderGCLeads(cachedGCLeads); })
+      .catch(function(){ document.getElementById('gclGrid').innerHTML='<div style="color:var(--steel);font-size:.875rem;grid-column:1/-1">Could not load permits.</div>'; });
   }
+
+  function renderGCLeads(leads) {
+    var grid = document.getElementById('gclGrid');
+    var empty = document.getElementById('gclEmpty');
+    var s = document.getElementById('gSearch').value.toLowerCase().trim();
+    if (s) leads = leads.filter(function(l){ return (l.address+l.trade+l.description+l.category).toLowerCase().includes(s); });
+    var total = 0;
+    leads.forEach(function(l){ var v=parseFloat((l.est_value||'').replace(/[$,]/g,'')); if(!isNaN(v)) total+=v; });
+    document.getElementById('gTotal').textContent = leads.length;
+    document.getElementById('gValue').textContent = total>0?('$'+(total>=1000000?(total/1000000).toFixed(1)+'M':(total/1000).toFixed(0)+'K')):'--';
+    document.getElementById('gCount').textContent = leads.length + ' permit' + (leads.length!==1?'s':'');
+    grid.innerHTML = '';
+    if (!leads.length) { empty.style.display='block'; return; }
+    empty.style.display = 'none';
+    leads.forEach(function(l){
+      var c = document.createElement('div');
+      c.className = 'card';
+      c.innerHTML =
+        '<div class="card-head"><div><div class="card-title">'+(l.address||'Address not listed')+'</div>' +
+        '<div class="card-meta">'+l.city+', '+l.state+'</div></div>' +
+        '<span class="badge badge-blue">'+(l.trade||'General')+'</span></div>' +
+        '<div class="card-fields">' +
+        '<div class="cf"><label>Category</label><div class="v">'+(l.category||'--')+'</div></div>' +
+        '<div class="cf"><label>Est. Value</label><div class="v">'+(l.est_value||'Not listed')+'</div></div>' +
+        '<div class="cf"><label>Permit Date</label><div class="v">'+(l.permit_date||'--')+'</div></div>' +
+        '<div class="cf"><label>Status</label><div class="v">'+(l.status||'Issued')+'</div></div>' +
+        '</div>' +
+        (l.description?'<div style="font-size:.74rem;color:var(--steel);line-height:1.5;margin-bottom:8px;border-top:1px dashed var(--line);padding-top:7px;">'+l.description.substring(0,110)+(l.description.length>110?'...':'')+'</div>':'') +
+        '<div class="card-foot"><span style="font-size:.68rem;color:var(--steel);">Permit #'+(l.permit_number||'--')+'</span>' +
+        (l.contractor?'<span style="font-size:.68rem;color:var(--steel);">GC: '+l.contractor+'</span>':'<span style="font-size:.68rem;color:var(--steel);">'+l.age+'</span>') +
+        '</div>';
+      grid.appendChild(c);
+    });
+  }
+
+  document.getElementById('gSearch').addEventListener('input', function(){ renderGCLeads(cachedGCLeads); });
+  document.getElementById('gTrade').addEventListener('change', loadGCLeads);
+  document.getElementById('gCity').addEventListener('change', loadGCLeads);
+  document.getElementById('gRefresh').addEventListener('click', function(){
+    var b=this; b.textContent='Refreshing...';
+    fetch(API+'/api/gc-leads/refresh',{method:'POST'}).then(function(){ loadGCLeads(); b.textContent='Refresh'; }).catch(function(){ b.textContent='Refresh'; });
+  });
+  document.getElementById('gClear').addEventListener('click', function(){
+    document.getElementById('gSearch').value='';
+    document.getElementById('gTrade').value='';
+    document.getElementById('gCity').value='';
+    renderGCLeads(cachedGCLeads);
+  });
+
+  /* ======= COMPANYCAM ======= */
+  var CC = 'td_cc';
+  var ccKey = '';
+  try { ccKey = localStorage.getItem(CC)||''; } catch(e){}
+  var mockProjects = [{id:'p1',name:'Park City Framing -- Lot 14'},{id:'p2',name:'Heber Concrete Flatwork'},{id:'p3',name:'Kamas Metal Roof'}];
+  var mockPhotos = [
+    {id:1,caption:'Foundation forms set',date:'Jul 22',tag:'Before',project:'p1'},
+    {id:2,caption:'First floor framing complete',date:'Jul 23',tag:'Progress',project:'p1'},
+    {id:3,caption:'Roof trusses delivered',date:'Jul 24',tag:'Progress',project:'p1'},
+    {id:4,caption:'Concrete pour',date:'Jul 21',tag:'During',project:'p2'},
+    {id:5,caption:'Flatwork finished',date:'Jul 22',tag:'Progress',project:'p2'},
+    {id:6,caption:'Metal panels -- north face',date:'Jul 20',tag:'Progress',project:'p3'}
+  ];
+
+  function ccInit(){
+    if(ccKey){ document.getElementById('ccBanner').style.display='none'; document.getElementById('ccConnected').style.display='block'; ccLoadProjects(); }
+  }
+  function ccLoadProjects(){
+    var sel=document.getElementById('ccProject');
+    sel.innerHTML='<option value="">All Projects</option>';
+    mockProjects.forEach(function(p){ var o=document.createElement('option'); o.value=p.id; o.textContent=p.name; sel.appendChild(o); });
+    document.getElementById('ccProjects').textContent=mockProjects.length;
+    ccLoadPhotos('');
+  }
+  function ccLoadPhotos(projectId){
+    var grid=document.getElementById('ccGrid');
+    var empty=document.getElementById('ccEmpty');
+    grid.innerHTML='';
+    var filtered=projectId?mockPhotos.filter(function(p){return p.project===projectId;}):mockPhotos;
+    if(!filtered.length){empty.style.display='block';return;}
+    empty.style.display='none';
+    document.getElementById('ccPhotos').textContent=filtered.length;
+    document.getElementById('ccWeek').textContent=filtered.filter(function(p){return['Jul 22','Jul 23','Jul 24'].indexOf(p.date)>-1;}).length;
+    filtered.forEach(function(p){
+      var c=document.createElement('div'); c.className='cc-photo';
+      c.innerHTML='<div class="cc-photo-ph">Photo '+p.id+'</div><div class="cc-photo-meta"><div class="cc-photo-caption">'+p.caption+'</div><div class="cc-photo-date">'+p.date+'</div><span class="cc-tag">'+p.tag+'</span></div>';
+      grid.appendChild(c);
+    });
+  }
+  document.getElementById('ccConnect').addEventListener('click',function(){
+    var k=document.getElementById('ccKey').value.trim();
+    if(!k){alert('Paste your CompanyCam API key.');return;}
+    ccKey=k; try{localStorage.setItem(CC,k);}catch(e){}
+    document.getElementById('ccBanner').style.display='none'; document.getElementById('ccConnected').style.display='block'; ccLoadProjects();
+  });
+  document.getElementById('ccProject').addEventListener('change',function(){ccLoadPhotos(this.value);});
+  document.getElementById('ccRefresh').addEventListener('click',ccLoadProjects);
+  document.getElementById('ccDisconnect').addEventListener('click',function(){
+    ccKey=''; try{localStorage.removeItem(CC);}catch(e){}
+    document.getElementById('ccBanner').style.display='block'; document.getElementById('ccConnected').style.display='none'; document.getElementById('ccKey').value='';
+  });
+  ccInit();
+
+  /* ======= INTAKE ======= */
+  var intakeMsgs = [];
+  var intakeDone = false;
+  var SYS = 'You are TradeDeck job intake AI. TradeDeck operates ONLY in Utah. Collect: trade, Utah city (decline non-Utah politely), job title, timeframe, duration, pay rate, crew size, brief description. Ask 1-2 things at a time. Be brief, direct, talk like a contractor. When all info collected and confirmed, output ONLY this JSON: {"action":"post_job","title":"...","trade":"...","city":"...","state":"UT","rate":"...","duration":"...","crew_size":"...","start_date":"...","description":"..."}. If outside Utah output ONLY: {"action":"out_of_area","message":"..."}';
+
+  function openIntake(){
+    intakeMsgs=[]; intakeDone=false;
+    document.getElementById('msgList').innerHTML='';
+    document.getElementById('intakeIn').value='';
+    document.getElementById('intakeOverlay').classList.add('on');
+    document.body.style.overflow='hidden';
+    addMsg('ai','What trade are you hiring, and what city in Utah?');
+  }
+  function closeIntake(){
+    document.getElementById('intakeOverlay').classList.remove('on');
+    document.body.style.overflow='';
+  }
+  function addMsg(role,content,isHtml){
+    var list=document.getElementById('msgList');
+    var d=document.createElement('div'); d.className='msg '+role;
+    var av=document.createElement('div'); av.className='msg-av'; av.textContent=role==='ai'?'TD':'You';
+    var b=document.createElement('div'); b.className='bubble';
+    if(isHtml){b.innerHTML=content;}else{b.textContent=content;}
+    d.appendChild(av); d.appendChild(b); list.appendChild(d);
+    list.scrollTop=list.scrollHeight;
+    intakeMsgs.push({role:role==='ai'?'assistant':'user',content:content});
+  }
+  function showTyping(){
+    var list=document.getElementById('msgList');
+    var d=document.createElement('div'); d.className='msg ai'; d.id='typing';
+    var av=document.createElement('div'); av.className='msg-av'; av.textContent='TD';
+    var t=document.createElement('div'); t.className='typing'; t.innerHTML='<span></span><span></span><span></span>';
+    d.appendChild(av); d.appendChild(t); list.appendChild(d); list.scrollTop=list.scrollHeight;
+  }
+  function removeTyping(){ var t=document.getElementById('typing'); if(t) t.remove(); }
+
+  function sendMsg(){
+    if(intakeDone) return;
+    var inp=document.getElementById('intakeIn');
+    var text=inp.value.trim(); if(!text) return;
+    inp.value=''; inp.style.height='auto';
+    addMsg('user',text);
+    showTyping();
+    var msgs=intakeMsgs.filter(function(m){return m.role!=='system';});
+    fetch(API+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({system:SYS,messages:msgs})})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        removeTyping();
+        var reply=d.content&&d.content[0]?d.content[0].text:'Something went wrong.';
+        var m=reply.match(/\{[\s\S]*"action"[\s\S]*\}/);
+        if(m){
+          try{
+            var p=JSON.parse(m[0]);
+            if(p.action==='post_job'){intakeDone=true;postJob(p);}
+            else if(p.action==='out_of_area'){addMsg('ai',p.message||'TradeDeck is currently Utah only.');}
+          }catch(e){addMsg('ai',reply);}
+        }else{addMsg('ai',reply);}
+      })
+      .catch(function(){removeTyping();addMsg('ai','Connection issue. Try again.');});
+  }
+
+  function postJob(data){
+    fetch(API+'/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+      .then(function(r){return r.json();})
+      .then(function(){
+        var card='<div class="posted-card"><div class="posted-title">'+data.title+'</div>' +
+          '<div class="posted-fields">' +
+          '<div class="pf"><label>Trade</label><div class="pv">'+data.trade+'</div></div>' +
+          '<div class="pf"><label>Location</label><div class="pv">'+data.city+', UT</div></div>' +
+          '<div class="pf"><label>Rate</label><div class="pv">'+(data.rate||'TBD')+'</div></div>' +
+          '<div class="pf"><label>Duration</label><div class="pv">'+(data.duration||'TBD')+'</div></div>' +
+          '</div><button class="view-btn" id="viewJobBtn">View in Find Work</button></div>';
+        addMsg('ai','Your job is live. Subs in your area will see it now.<br><br>'+card,true);
+        document.getElementById('viewJobBtn').addEventListener('click',function(){
+          closeIntake(); showPage('findwork'); showSub('jobs'); loadJobs();
+        });
+        loadHeroCard();
+      })
+      .catch(function(){addMsg('ai','Could not post job. Try again.');intakeDone=false;});
+  }
+
+  document.getElementById('intakeIn').addEventListener('input',function(){
+    this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,90)+'px';
+  });
+  document.getElementById('intakeIn').addEventListener('keydown',function(e){
+    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}
+  });
+  document.getElementById('intakeSend').addEventListener('click',sendMsg);
+  document.getElementById('intakeX').addEventListener('click',closeIntake);
+  document.getElementById('intakeOverlay').addEventListener('click',function(e){if(e.target===this)closeIntake();});
+
+  /* ======= INIT ======= */
+  loadHeroCard();
+
 })();
 </script>
 </body>
