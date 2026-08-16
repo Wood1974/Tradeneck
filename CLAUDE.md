@@ -1,0 +1,124 @@
+# CLAUDE.md — tradedeck (frontend, repo: Wood1974/Tradeneck)
+
+Guidance for Claude Code (or any agent) working in this repo. This is the
+**frontend** of TradeDeck — a marketplace app connecting homeowners,
+general contractors, and workers, built around full transparency, a
+verified trust/tier system, and milestone-based escrow.
+
+This file reflects the **actual repo contents as of Aug 2026**, verified by
+reading the code directly — not carried over from planning notes, which
+had drifted significantly from what's actually committed. If you're
+picking this project back up, read this whole file before assuming
+anything is built.
+
+## Product context
+
+TradeDeck lets subs and contractors hire and be hired directly — benchmarked
+against heypros.com with the explicit goal of doing it better. Core
+principles baked into every feature decision:
+
+- **Full transparency**: homeowners see both contractor and worker tiers,
+  contractors see worker tiers, workers see contractor tiers. Direct
+  contact between parties, no platform gatekeeping of communication.
+- **Trust is earned from objective on-platform data**, not popularity:
+  jobs completed, timeline adherence, cost variance vs. bid, and site
+  cleanliness sign-offs.
+- **Reviews are optional and never prompted.** A three-question binary
+  close-out (on time? clean? would hire again?) silently feeds the tier
+  score; a written review is opt-in and carries elevated weight.
+
+## What's actually in this repo (verified)
+
+- `index.html` — sign-in / sign-up page only. Uses Supabase Auth directly
+  (`@supabase/supabase-js@2` from jsDelivr), project `jlaajejpqjldpbinktln`.
+  Handles email+password sign-in, magic link, and sign-up with a role
+  picker (contractor / worker / property owner). On success it redirects
+  to `app.html`.
+- `_headers` — Netlify response headers, sets a Content-Security-Policy for
+  the whole site.
+- `app.html` — **added in this session.** Previously this file didn't
+  exist anywhere in git, so every successful sign-in 404'd. It was built
+  by porting `tradedeck-newest.html` (which was sitting, unused, in the
+  `tradedeck-api` repo — see that repo's notes) into this repo, adding a
+  Supabase session guard (redirects back to `index.html` if not signed in,
+  or on sign-out) and a sign-out control in the nav. **The rest of that
+  page's functionality (Find Work, Post a Job, Site Photos/CompanyCam) is
+  UI-only** — it renders mock/static content and is not yet wired to
+  Supabase or to the `tradedeck-api` backend for real data. Treat it as a
+  working shell, not a finished app.
+- CSP note: `_headers` and `app.html`'s own CSP meta tag were both updated
+  to allow `fonts.googleapis.com`/`fonts.gstatic.com` (Google Fonts, used
+  by `app.html`) and `tradedeck-api.onrender.com` (the backend's `/api/jobs`
+  call in the hero section) in addition to the existing Supabase allowance.
+  If you add a new external call from either file, you must add its host
+  to **both** `_headers` and the CSP meta tag, or Netlify's CSP header will
+  silently block it in production (a local `file://` test won't catch
+  this — CSP host-matching behaves differently there; test over http(s)).
+
+## What's described elsewhere but NOT in this repo (verified absent)
+
+- No `tradedeck-app.html` mobile rebuild, no `draw_manager_frontend.html`,
+  no `tradedeck-pitch.html` marketing page, no Draw Manager UI, no Profile
+  tab. If earlier notes mention these as "built," they either never got
+  committed, exist uncommitted on a local machine, or were lost — confirm
+  with the project owner before assuming any of it exists.
+- No Stripe Connect / escrow / draw code anywhere in the frontend.
+
+## Backend & data
+
+- Auth + data: **Supabase** project `jlaajejpqjldpbinktln` ("Tradedeck").
+  The anon key is hardcoded in `index.html` and `app.html` (safe — it's
+  meant to be public, protected by RLS — never put the service role key
+  here).
+- `tradedeck_schema.sql` (profiles, jobs, applications, draws, plus a
+  `draw-photos` storage bucket) was reconstructed fresh this session — the
+  originally-referenced file couldn't be found in either repo — and
+  verified by actually running it against a local Postgres instance
+  (idempotent, no errors). **It has not yet been run against the real
+  Supabase project.** Until it is, none of these tables exist there, and
+  none of `app.html`'s Supabase calls (once you wire them up) will work.
+- Separate Flask API backend lives in the sibling repo **tradedeck-api**
+  (tradedeck-api.onrender.com) — uses its **own independent SQLite-backed
+  auth system**, completely disconnected from Supabase Auth. See that
+  repo's CLAUDE.md — this dual-auth situation is a real architectural
+  problem to resolve before going further, not a documentation gap.
+
+## Key features described in the product plan (not yet implemented in code)
+
+These are real, well-specified plans — worth preserving — but confirmed
+**not yet built** in either repo as of this writing:
+
+- Verification stack (identity → background check → license cross-check →
+  COI upload/parse → quarterly monitoring).
+- Five-tier ranking (Verified → Active → Proven → Trusted → TradeDeck Pro)
+  computed from jobs completed, timeline adherence, cost variance, and
+  cleanliness sign-offs. The `tradedeck_schema.sql` `profiles` table has
+  columns for this, but nothing writes to them yet.
+- Draw/escrow system with milestone schedule, dual verification
+  (owner/inspector), and Stripe Connect payouts. Schema exists (`draws`
+  table); no application code exists yet in either repo.
+- KSL Jobs scraper writing external listings into the `jobs` table
+  (`source='ksl'`) — built as a separate standalone project (not part of
+  either repo), delivered this session, not yet calibrated against live
+  KSL markup or run.
+
+## Deployment
+
+- Hosted on Netlify: `calm-cupcake-a213bb.netlify.app`, custom domain
+  `tradedeckapp.com`.
+- DNS via GoDaddy: `A @ → 75.2.60.5` (Netlify), `CNAME www →
+  calm-cupcake-a213bb.netlify.app`.
+
+## Conventions / working notes
+
+- Solo-founder project (Joshua), iterating fast across many chat sessions
+  — expect drift between what's described as "done" in notes and what's
+  actually committed. **Verify against the code, not the history, before
+  building on top of a feature.**
+- Hero copy (approved, don't rewrite without asking): *"Twenty years. Every
+  nail. Every pour. Every roof. From foundation to ridge cap, I've built
+  it, fixed it, and stood behind it — with hands that know the difference
+  between a shortcut and a standard."*
+- Keep secrets (Supabase service role key, Stripe secret key, Anthropic API
+  key) out of this repo — those belong in the backend's environment
+  config only.
