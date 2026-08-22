@@ -221,6 +221,66 @@ footer p{font-size:0.8rem;color:var(--steel)}
 .nav-user-email{font-size:0.8rem;color:var(--steel)}
 .btn-signout{background:none;border:1px solid rgba(139,155,180,0.3);color:var(--steel);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.78rem;letter-spacing:0.06em;text-transform:uppercase;padding:8px 14px;border-radius:var(--radius);cursor:pointer;transition:all 0.15s}
 .btn-signout:hover{border-color:var(--white);color:var(--white)}
+/* DRAW MANAGER */
+.dm-job-card{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:24px;margin-bottom:20px}
+.dm-job-head{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+.dm-job-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.15rem;text-transform:uppercase;color:var(--white);letter-spacing:0.03em}
+.dm-job-meta{color:var(--steel);font-size:0.78rem;margin-top:3px}
+.dm-contract-value{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.3rem;color:var(--amber)}
+.dm-setup-banner{background:var(--navy);border:1px dashed rgba(139,155,180,0.35);border-radius:6px;padding:18px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-top:14px}
+.dm-setup-banner p{color:var(--steel);font-size:0.85rem;margin:0}
+.dm-milestones{margin-top:18px;display:flex;flex-direction:column;gap:10px}
+.dm-milestone{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;background:var(--navy);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.dm-milestone-main{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dm-milestone-name{font-size:0.9rem;color:var(--concrete);font-weight:500}
+.dm-milestone-pct{font-family:'Barlow Condensed',sans-serif;font-weight:700;color:var(--steel);font-size:0.8rem}
+.dm-milestone-verifier{font-size:0.72rem;color:var(--steel);text-transform:uppercase;letter-spacing:0.06em}
+.dm-status{font-family:'Barlow Condensed',sans-serif;font-size:0.68rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:4px 10px;border-radius:2px;border:1px solid;white-space:nowrap}
+.dm-status-pending{color:var(--steel);border-color:rgba(139,155,180,0.4);background:rgba(139,155,180,0.06)}
+.dm-status-submitted{color:var(--amber);border-color:rgba(245,166,35,0.4);background:rgba(245,166,35,0.06)}
+.dm-status-approved{color:#4ADE80;border-color:rgba(74,222,128,0.4);background:rgba(74,222,128,0.06)}
+.dm-status-disputed{color:#F87171;border-color:rgba(248,113,113,0.4);background:rgba(248,113,113,0.06)}
+.dm-actions{display:flex;gap:8px;align-items:center}
+.dm-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.75rem;letter-spacing:0.06em;text-transform:uppercase;border:none;padding:7px 14px;border-radius:var(--radius);cursor:pointer;transition:background 0.15s,opacity 0.15s}
+.dm-btn-submit{background:var(--amber);color:var(--navy)}
+.dm-btn-submit:hover{background:var(--amber-dk)}
+.dm-btn-approve{background:#4ADE80;color:var(--navy)}
+.dm-btn-approve:hover{opacity:0.85}
+.dm-btn-dispute{background:transparent;color:#F87171;border:1px solid rgba(248,113,113,0.4)}
+.dm-btn-dispute:hover{background:rgba(248,113,113,0.08)}
+.dm-btn:disabled{opacity:0.4;cursor:default}
+.dm-empty{text-align:center;padding:60px 20px;color:var(--steel)}
+.dm-milestone-input-row{display:grid;grid-template-columns:1fr 70px 150px 1fr 28px;gap:8px;align-items:center;margin-bottom:10px}
+.dm-milestone-input-row input,.dm-milestone-input-row select{background:var(--slate);border:1px solid rgba(139,155,180,0.3);border-radius:var(--radius);color:var(--concrete);font-family:'Inter',sans-serif;font-size:0.82rem;padding:8px 10px;outline:none}
+.dm-milestone-input-row input:focus,.dm-milestone-input-row select:focus{border-color:var(--amber)}
+.dm-mi-remove{background:none;border:none;color:var(--steel);cursor:pointer;font-size:1rem;padding:4px}
+.dm-mi-remove:hover{color:#F87171}
+@media(max-width:768px){
+  .dm-milestone-input-row{grid-template-columns:1fr;gap:6px}
+}
+/* ADMIN */
+.adm-subtabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:24px}
+.adm-subtab{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.85rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--steel);padding:10px 18px;cursor:pointer;border:none;background:none;border-bottom:2px solid transparent}
+.adm-subtab:hover{color:var(--white)}
+.adm-subtab.active{color:var(--amber);border-bottom-color:var(--amber)}
+.adm-subview{display:none}
+.adm-subview.active{display:block}
+.adm-table{width:100%;border-collapse:collapse}
+.adm-table th{text-align:left;font-family:'Barlow Condensed',sans-serif;font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);padding:8px 12px;border-bottom:1px solid var(--line)}
+.adm-table td{padding:10px 12px;border-bottom:1px solid var(--line);font-size:0.85rem;color:var(--concrete);vertical-align:middle}
+.adm-table tr:hover td{background:rgba(139,155,180,0.04)}
+.adm-badge{font-family:'Barlow Condensed',sans-serif;font-size:0.65rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:3px 9px;border-radius:2px;border:1px solid}
+.adm-badge-admin{color:var(--amber);border-color:rgba(245,166,35,0.4);background:rgba(245,166,35,0.06)}
+.adm-badge-user{color:var(--steel);border-color:rgba(139,155,180,0.3);background:transparent}
+.adm-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase;border:none;padding:6px 12px;border-radius:var(--radius);cursor:pointer;margin-right:6px}
+.adm-btn-grant{background:var(--amber);color:var(--navy)}
+.adm-btn-revoke{background:transparent;color:#F87171;border:1px solid rgba(248,113,113,0.4)}
+.adm-btn-delete{background:transparent;color:#F87171;border:1px solid rgba(248,113,113,0.4)}
+.adm-select{background:var(--slate);border:1px solid rgba(139,155,180,0.3);border-radius:var(--radius);color:var(--concrete);font-family:'Inter',sans-serif;font-size:0.8rem;padding:5px 8px}
+.adm-empty{text-align:center;padding:40px 20px;color:var(--steel)}
+@media(max-width:768px){
+  .adm-table{display:block;overflow-x:auto;white-space:nowrap}
+}
 </style>
 </head>
 <body>
@@ -242,7 +302,9 @@ footer p{font-size:0.8rem;color:var(--steel)}
   <button class="page-tab active" data-page="home">Home</button>
   <button class="page-tab" data-page="findwork">Find Work</button>
   <button class="page-tab" data-page="sitephotos">Site Photos</button>
+  <button class="page-tab" data-page="drawmanager">Draw Manager</button>
   <button class="page-tab" data-page="postjob">Post a Job</button>
+  <button class="page-tab" data-page="admin" id="adminTabBtn" style="display:none;">Admin</button>
 </div>
 
 <!-- HOME -->
@@ -587,6 +649,44 @@ footer p{font-size:0.8rem;color:var(--steel)}
   </div>
 </div>
 
+<!-- DRAW MANAGER -->
+<div class="page-view" id="page-drawmanager">
+  <div class="cc-header">
+    <div class="cc-header-inner">
+      <div class="cc-eyebrow">Milestone Escrow</div>
+      <h2>Draw Manager</h2>
+      <p>Contract value broken into milestones. Submit, verify, and release draws -- every step logged.</p>
+    </div>
+  </div>
+  <div class="cc-body">
+    <div id="dmBody">
+      <div style="text-align:center;padding:60px 20px;color:var(--steel);">Loading...</div>
+    </div>
+  </div>
+</div>
+
+<!-- DRAW MANAGER SETUP OVERLAY -->
+<div class="flow-overlay" id="dmSetupOverlay">
+  <div class="flow-panel">
+    <div class="flow-header">
+      <div class="flow-title" id="dmSetupTitle">Set Up Draw Schedule</div>
+      <button class="flow-close" id="dmSetupCloseBtn">&#x2715;</button>
+    </div>
+    <div class="flow-body" style="padding-top:24px;">
+      <div class="field-group">
+        <label>Total Contract Value ($)</label>
+        <input type="number" id="dmContractValue" placeholder="45000" min="0" step="1">
+      </div>
+      <div id="dmMilestoneRows"></div>
+      <button class="btn-ghost" id="dmAddMilestoneBtn" type="button" style="font-size:0.8rem;padding:9px 16px;margin-top:6px;">+ Add Milestone</button>
+      <div id="dmSetupError" style="color:#F87171;font-size:0.82rem;margin-top:14px;display:none;"></div>
+      <div class="flow-footer" style="border-top:none;margin-top:24px;padding-top:0;justify-content:flex-end;">
+        <button class="btn-primary" id="dmSetupSubmitBtn">Create Draw Schedule</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- POST A JOB -->
 <div class="page-view" id="page-postjob">
   <div style="max-width:600px;margin:80px auto;padding:0 40px;text-align:center;">
@@ -594,6 +694,29 @@ footer p{font-size:0.8rem;color:var(--steel)}
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:2.4rem;text-transform:uppercase;color:var(--white);margin-bottom:12px;">Ready to Post?</div>
     <p style="color:var(--steel);margin-bottom:28px;line-height:1.65;">Fill out the form and your job goes live immediately.</p>
     <button class="btn-primary" id="postPageBtn">Open Job Post Form</button>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div class="page-view" id="page-admin">
+  <div class="cc-header">
+    <div class="cc-header-inner">
+      <div class="cc-eyebrow">Administrator</div>
+      <h2>Platform Control</h2>
+      <p>Full visibility and control across every user and job on TradeDeck. Changes here are immediate and bypass normal restrictions -- there's no undo.</p>
+    </div>
+  </div>
+  <div class="cc-body">
+    <div class="adm-subtabs">
+      <button class="adm-subtab active" data-adm="users">Users</button>
+      <button class="adm-subtab" data-adm="jobs">Jobs</button>
+    </div>
+    <div class="adm-subview active" id="adm-users">
+      <div id="admUsersBody"><div style="text-align:center;padding:40px 20px;color:var(--steel);">Loading...</div></div>
+    </div>
+    <div class="adm-subview" id="adm-jobs">
+      <div id="admJobsBody"><div style="text-align:center;padding:40px 20px;color:var(--steel);">Loading...</div></div>
+    </div>
   </div>
 </div>
 
@@ -727,6 +850,19 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON);
   document.getElementById('navUser').style.display = 'flex';
   document.getElementById('navUserEmail').textContent = session.user.email;
   document.getElementById('auth-loading-overlay').style.display = 'none';
+
+  /* Admin check -- purely cosmetic (shows/hides the tab). Real
+     enforcement is the "Admins have full access" RLS policies in
+     Supabase; nothing here grants any actual permission. */
+  window.isAdmin = false;
+  try {
+    var profRes = await db.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
+    if (profRes.data && profRes.data.is_admin) {
+      window.isAdmin = true;
+      var tabBtn = document.getElementById('adminTabBtn');
+      if (tabBtn) tabBtn.style.display = '';
+    }
+  } catch (e) { /* not admin, or profiles row missing -- tab stays hidden */ }
 })();
 
 db.auth.onAuthStateChange((event) => {
@@ -749,45 +885,111 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
 document.addEventListener('DOMContentLoaded', function() {
 
-  var API = 'https://tradedeck-api.onrender.com';
+  /* --- JOBS (Supabase-native; the Flask API's jobs were placeholder
+     data and are no longer used by the frontend) --- */
+  function dbAgeLabel(dateStr) {
+    if (!dateStr) return '--';
+    var then = new Date(dateStr).getTime();
+    if (isNaN(then)) return '--';
+    var days = Math.floor((Date.now() - then) / 86400000);
+    if (days <= 0) return 'Today';
+    if (days === 1) return '1 day ago';
+    if (days < 30) return days + ' days ago';
+    var months = Math.floor(days / 30);
+    return months + (months === 1 ? ' month ago' : ' months ago');
+  }
+
+  /* Fetches every open job plus, for the visible jobs, an applicant
+     count and whether the signed-in user already applied -- one round
+     trip for the counts/status instead of one per job card. */
+  async function dbFetchOpenJobs() {
+    var sessionRes = await db.auth.getSession();
+    var uid = sessionRes.data.session ? sessionRes.data.session.user.id : null;
+
+    var jobsRes = await db.from('jobs').select('*').eq('status', 'open').order('created_at', { ascending: false });
+    if (jobsRes.error) throw jobsRes.error;
+    var jobs = jobsRes.data || [];
+    var jobIds = jobs.map(function(j){ return j.id; });
+
+    var appliedIds = {};
+    var counts = {};
+    if (jobIds.length) {
+      /* "Did I already apply" -- only ever looks at MY OWN applications
+         (applications RLS only lets you see your own rows or ones on a
+         job you posted, so this can't leak anyone else's). */
+      if (uid) {
+        var mineRes = await db.from('applications').select('job_id').eq('applicant_id', uid).in('job_id', jobIds);
+        (mineRes.data || []).forEach(function(a){ appliedIds[a.job_id] = true; });
+      }
+      /* Applicant counts come from a SECURITY DEFINER RPC that returns
+         totals only, never who applied -- browsing Find Work shouldn't
+         expose other people's applications, just "how many". */
+      var countsRes = await db.rpc('job_application_counts', { p_job_ids: jobIds });
+      if (!countsRes.error) {
+        (countsRes.data || []).forEach(function(row){ counts[row.job_id] = row.applicant_count; });
+      }
+    }
+
+    jobs.forEach(function(j) {
+      j.applicants = counts[j.id] || 0;
+      j.alreadyApplied = !!appliedIds[j.id];
+      j.age = dbAgeLabel(j.created_at);
+    });
+    return { jobs: jobs, uid: uid };
+  }
+
+  async function dbApplyToJob(jobId, uid, btn) {
+    if (!uid) { alert('Please sign in again to apply.'); return; }
+    btn.disabled = true;
+    var existing = await db.from('applications').select('id').eq('job_id', jobId).eq('applicant_id', uid).maybeSingle();
+    if (existing.data) {
+      btn.textContent = 'Applied'; btn.style.background = '#4ADE80';
+      return;
+    }
+    var res = await db.from('applications').insert({ job_id: jobId, applicant_id: uid, status: 'pending' });
+    if (res.error) {
+      alert('Could not submit your application. ' + res.error.message);
+      btn.disabled = false;
+      return;
+    }
+    btn.textContent = 'Applied';
+    btn.style.background = '#4ADE80';
+  }
 
   /* --- HERO CARD --- */
-  function loadHeroCard() {
-    fetch(API + '/api/jobs')
-      .then(function(r){ return r.json(); })
-      .then(function(data) {
-        if (!data.jobs || data.jobs.length === 0) {
-          document.getElementById('heroCard').innerHTML = '<div style="color:var(--steel);font-size:0.85rem;">No open jobs yet -- be the first to post.</div>';
-          return;
-        }
-        var job = data.jobs[0];
-        document.getElementById('heroCard').innerHTML =
-          '<div class="bc-header">' +
-            '<div><div class="bc-title">' + job.title + '</div>' +
-            '<div class="bc-subtitle">' + job.location + ' &middot; ' + job.age + '</div></div>' +
-            '<span class="badge badge-open">Open</span>' +
-          '</div>' +
-          '<div class="bc-fields">' +
-            '<div class="bc-field"><label>Trade</label><div class="val">' + job.trade + '</div></div>' +
-            '<div class="bc-field"><label>Duration</label><div class="val">' + (job.duration||'--') + '</div></div>' +
-            '<div class="bc-field"><label>Rate</label><div class="val">' + (job.rate||'--') + '</div></div>' +
-            '<div class="bc-field"><label>Start</label><div class="val">' + (job.start_date||'--') + '</div></div>' +
-          '</div>' +
-          '<hr class="bc-divider">' +
-          '<div class="bc-footer">' +
-            '<span class="bc-apply-count">' + job.applicants + ' applicant' + (job.applicants!==1?'s':'') + '</span>' +
-            '<button class="btn-primary" style="font-size:0.8rem;padding:8px 16px;" id="heroApplyBtn" data-job-id="' + job.id + '">Apply</button>' +
-          '</div>';
-        document.getElementById('heroApplyBtn').addEventListener('click', function() {
-          var id = this.dataset.jobId;
-          var btn = this;
-          fetch(API + '/api/jobs/' + id + '/apply', { method:'POST' })
-            .then(function(){ btn.textContent='Applied'; btn.style.background='#4ADE80'; btn.disabled=true; });
-        });
-      })
-      .catch(function(){
-        document.getElementById('heroCard').innerHTML = '<div style="color:var(--steel);font-size:0.85rem;">Could not load job. Try refreshing.</div>';
-      });
+  async function loadHeroCard() {
+    try {
+      var result = await dbFetchOpenJobs();
+      var jobs = result.jobs, uid = result.uid;
+      if (!jobs.length) {
+        document.getElementById('heroCard').innerHTML = '<div style="color:var(--steel);font-size:0.85rem;">No open jobs yet -- be the first to post.</div>';
+        return;
+      }
+      var job = jobs[0];
+      document.getElementById('heroCard').innerHTML =
+        '<div class="bc-header">' +
+          '<div><div class="bc-title">' + job.title + '</div>' +
+          '<div class="bc-subtitle">' + (job.location || '--') + ' &middot; ' + job.age + '</div></div>' +
+          '<span class="badge badge-open">Open</span>' +
+        '</div>' +
+        '<div class="bc-fields">' +
+          '<div class="bc-field"><label>Trade</label><div class="val">' + (job.trade_type || '--') + '</div></div>' +
+          '<div class="bc-field"><label>Pay</label><div class="val">' + (job.pay || '--') + '</div></div>' +
+          '<div class="bc-field"><label>Job Type</label><div class="val">' + (job.job_type || '--') + '</div></div>' +
+          '<div class="bc-field"><label>Start</label><div class="val">' + (job.posted_date || '--') + '</div></div>' +
+        '</div>' +
+        '<hr class="bc-divider">' +
+        '<div class="bc-footer">' +
+          '<span class="bc-apply-count">' + job.applicants + ' applicant' + (job.applicants!==1?'s':'') + '</span>' +
+          (job.posted_by === uid
+            ? '<span style="color:var(--steel);font-size:0.8rem;">Your job post</span>'
+            : '<button class="btn-primary" style="font-size:0.8rem;padding:8px 16px;' + (job.alreadyApplied ? 'background:#4ADE80;' : '') + '" id="heroApplyBtn"' + (job.alreadyApplied ? ' disabled' : '') + '>' + (job.alreadyApplied ? 'Applied' : 'Apply') + '</button>') +
+        '</div>';
+      var heroBtn = document.getElementById('heroApplyBtn');
+      if (heroBtn) heroBtn.addEventListener('click', function(){ dbApplyToJob(job.id, uid, heroBtn); });
+    } catch (e) {
+      document.getElementById('heroCard').innerHTML = '<div style="color:var(--steel);font-size:0.85rem;">Could not load job. Try refreshing.</div>';
+    }
   }
 
   loadHeroCard();
@@ -805,6 +1007,8 @@ document.addEventListener('DOMContentLoaded', function() {
     tab.addEventListener('click', function(){
       if (this.dataset.page === 'postjob') { openFlow(); return; }
       showPage(this.dataset.page);
+      if (this.dataset.page === 'drawmanager') { loadDrawManager(); }
+      if (this.dataset.page === 'admin') { loadAdmin(); }
     });
   });
 
@@ -812,50 +1016,51 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('heroFindWork').addEventListener('click', function(){ showPage('findwork'); });
   document.getElementById('postPageBtn').addEventListener('click', openFlow);
 
-  /* --- JOBS API --- */
-  function loadJobs() {
+  /* --- JOBS (Supabase-native) --- */
+  async function loadJobs() {
     var grid = document.getElementById('jobsGrid');
     var empty = document.getElementById('jobsEmpty');
     grid.innerHTML = '<div style="color:var(--steel);font-size:0.9rem;grid-column:1/-1;">Loading jobs...</div>';
-    fetch(API + '/api/jobs')
-      .then(function(r){ return r.json(); })
-      .then(function(data) {
-        grid.innerHTML = '';
-        if (!data.jobs || data.jobs.length === 0) { empty.style.display = 'block'; return; }
-        empty.style.display = 'none';
-        data.jobs.forEach(function(job) {
-          var card = document.createElement('div');
-          card.className = 'job-card';
-          card.dataset.trade = job.trade;
-          card.dataset.location = job.location;
-          card.innerHTML =
-            '<div class="jc-head"><div><div class="jc-title">' + job.title + '</div>' +
-            '<div class="jc-meta">' + job.location + ' &middot; ' + job.age + '</div></div>' +
-            '<span class="badge badge-open">Open</span></div>' +
-            '<div class="jc-fields">' +
-            '<div class="jc-field"><label>Trade</label><div class="jval">' + job.trade + '</div></div>' +
-            '<div class="jc-field"><label>Duration</label><div class="jval">' + (job.duration||'--') + '</div></div>' +
-            '<div class="jc-field"><label>Rate</label><div class="jval">' + (job.rate||'--') + '</div></div>' +
-            '<div class="jc-field"><label>Start</label><div class="jval">' + (job.start_date||'--') + '</div></div>' +
-            '</div>' +
-            '<div class="jc-footer">' +
-            '<span class="bc-apply-count">' + job.applicants + ' applicant' + (job.applicants!==1?'s':'') + '</span>' +
-            '<button class="jc-apply-btn" data-job-id="' + job.id + '">Apply</button>' +
-            '</div>';
-          grid.appendChild(card);
+    try {
+      var result = await dbFetchOpenJobs();
+      var jobs = result.jobs, uid = result.uid;
+      grid.innerHTML = '';
+      if (!jobs.length) { empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+      jobs.forEach(function(job) {
+        var card = document.createElement('div');
+        card.className = 'job-card';
+        card.dataset.trade = job.trade_type || '';
+        card.dataset.location = job.location || '';
+        var isOwnJob = job.posted_by === uid;
+        card.innerHTML =
+          '<div class="jc-head"><div><div class="jc-title">' + job.title + '</div>' +
+          '<div class="jc-meta">' + (job.location || '--') + ' &middot; ' + job.age + '</div></div>' +
+          '<span class="badge badge-open">Open</span></div>' +
+          '<div class="jc-fields">' +
+          '<div class="jc-field"><label>Trade</label><div class="jval">' + (job.trade_type || '--') + '</div></div>' +
+          '<div class="jc-field"><label>Job Type</label><div class="jval">' + (job.job_type || '--') + '</div></div>' +
+          '<div class="jc-field"><label>Pay</label><div class="jval">' + (job.pay || '--') + '</div></div>' +
+          '<div class="jc-field"><label>Start</label><div class="jval">' + (job.posted_date || '--') + '</div></div>' +
+          '</div>' +
+          '<div class="jc-footer">' +
+          '<span class="bc-apply-count">' + job.applicants + ' applicant' + (job.applicants!==1?'s':'') + '</span>' +
+          (isOwnJob
+            ? '<span style="color:var(--steel);font-size:0.78rem;">Your job post</span>'
+            : '<button class="jc-apply-btn" data-job-id="' + job.id + '"' + (job.alreadyApplied ? ' disabled style="background:#4ADE80;"' : '') + '>' + (job.alreadyApplied ? 'Applied' : 'Apply') + '</button>') +
+          '</div>';
+        grid.appendChild(card);
+      });
+      grid.querySelectorAll('.jc-apply-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          dbApplyToJob(this.dataset.jobId, uid, this);
         });
-        grid.querySelectorAll('.jc-apply-btn').forEach(function(btn) {
-          btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            var id = this.dataset.jobId;
-            var b = this;
-            fetch(API + '/api/jobs/' + id + '/apply', { method:'POST' })
-              .then(function(){ b.textContent='Applied'; b.style.background='#4ADE80'; b.disabled=true; });
-          });
-        });
-        applyFilters();
-      })
-      .catch(function(){ grid.innerHTML='<div style="color:var(--steel);font-size:0.9rem;grid-column:1/-1;">Could not load jobs. Try refreshing.</div>'; });
+      });
+      applyFilters();
+    } catch (e) {
+      grid.innerHTML = '<div style="color:var(--steel);font-size:0.9rem;grid-column:1/-1;">Could not load jobs. Try refreshing.</div>';
+    }
   }
 
   /* --- FIND WORK SUB-TABS --- */
@@ -961,28 +1166,48 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('pvDesc').textContent=document.getElementById('jobDesc').value||'(No description)';
   }
 
-  function submitPost() {
-    var payload={
-      title:document.getElementById('jobTitle').value||'Untitled Job',
-      trade:selectedTrade||'General',
-      city:document.getElementById('city').value||'Unknown',
-      state:document.getElementById('stateSelect').value||'UT',
-      rate:document.getElementById('payRate').value,
-      duration:document.getElementById('duration').value,
-      crew_size:document.getElementById('crewSize').value,
-      start_date:document.getElementById('startDate').value,
-      description:document.getElementById('jobDesc').value
+  async function submitPost() {
+    var city = document.getElementById('city').value || '';
+    var state = document.getElementById('stateSelect').value || '';
+    var duration = document.getElementById('duration').value || '';
+    var crewSize = document.getElementById('crewSize').value || '';
+    var freeText = document.getElementById('jobDesc').value || '';
+
+    /* duration and crew size don't have their own columns in the real
+       Supabase jobs table -- fold them into the description, clearly
+       labeled, rather than silently dropping them. */
+    var descParts = [];
+    if (duration) descParts.push('Duration: ' + duration);
+    if (crewSize) descParts.push('Crew size: ' + crewSize);
+    if (freeText) descParts.push(freeText);
+
+    var sessionRes = await db.auth.getSession();
+    var session = sessionRes.data.session;
+    if (!session) { alert('Please sign in again to post a job.'); return; }
+
+    var payload = {
+      title: document.getElementById('jobTitle').value || 'Untitled Job',
+      trade_type: selectedTrade || 'General',
+      location: [city, state].filter(Boolean).join(', ') || null,
+      pay: document.getElementById('payRate').value || null,
+      description: descParts.join('\n') || null,
+      status: 'open',
+      source: 'tradedeck',
+      posted_by: session.user.id,
+      posted_by_role: session.user.user_metadata ? session.user.user_metadata.role : null,
+      posted_date: document.getElementById('startDate').value || null
     };
-    fetch(API+'/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
-      .then(function(r){ return r.json(); })
-      .then(function(){
-        document.querySelectorAll('.step-pane').forEach(function(p){ p.classList.remove('active'); });
-        document.querySelector('.progress-wrap').style.display='none';
-        document.querySelector('.flow-body').style.display='none';
-        document.getElementById('successPane').classList.add('active');
-        loadJobs();
-      })
-      .catch(function(){ alert('Failed to post job. Please try again.'); });
+
+    var res = await db.from('jobs').insert(payload);
+    if (res.error) {
+      alert('Failed to post job. ' + res.error.message);
+      return;
+    }
+    document.querySelectorAll('.step-pane').forEach(function(p){ p.classList.remove('active'); });
+    document.querySelector('.progress-wrap').style.display='none';
+    document.querySelector('.flow-body').style.display='none';
+    document.getElementById('successPane').classList.add('active');
+    loadJobs();
   }
 
   ['navPostBtn','heroPostBtn','barPostBtn'].forEach(function(id){ var el=document.getElementById(id); if(el) el.addEventListener('click',openFlow); });
@@ -1090,6 +1315,444 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   ccInit();
+
+  /* --- DRAW MANAGER --- */
+  var dmSetupJob = null;
+
+  async function loadDrawManager() {
+    var body = document.getElementById('dmBody');
+    body.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--steel);">Loading...</div>';
+
+    var sessionRes = await db.auth.getSession();
+    var session = sessionRes.data.session;
+    if (!session) { body.innerHTML = '<div class="dm-empty">Sign in required.</div>'; return; }
+    var uid = session.user.id;
+
+    var jobsRes = await db.from('jobs').select('id,title,posted_by,hired_by').or('posted_by.eq.' + uid + ',hired_by.eq.' + uid);
+    if (jobsRes.error) { body.innerHTML = '<div class="dm-empty">Could not load your jobs.</div>'; return; }
+    var myJobs = jobsRes.data || [];
+    var myJobIds = myJobs.map(function(j){ return j.id; });
+
+    /* Milestones where this user is the assigned inspector, even on a job
+       they didn't post or get hired on -- covers a third-party inspector. */
+    var vmRes = await db.from('milestones').select('*,draw_schedules(id,job_id,contract_value)').eq('verifier_id', uid);
+    var verifierMilestones = (vmRes.data || []);
+    var extraJobIds = [];
+    verifierMilestones.forEach(function(m) {
+      var jid = m.draw_schedules ? m.draw_schedules.job_id : null;
+      if (jid && myJobIds.indexOf(jid) === -1 && extraJobIds.indexOf(jid) === -1) extraJobIds.push(jid);
+    });
+
+    var extraJobs = [];
+    if (extraJobIds.length) {
+      var extraJobsRes = await db.from('jobs').select('id,title,posted_by,hired_by').in('id', extraJobIds);
+      extraJobs = extraJobsRes.data || [];
+    }
+    var allJobs = myJobs.concat(extraJobs);
+
+    if (!allJobs.length) {
+      body.innerHTML = '<div class="dm-empty">No jobs yet. Draw schedules show up here once you\'re the owner, contractor, or assigned inspector on a job.</div>';
+      return;
+    }
+
+    var allJobIds = allJobs.map(function(j){ return j.id; });
+    var dsRes = await db.from('draw_schedules').select('*').in('job_id', allJobIds);
+    var schedules = dsRes.data || [];
+    var scheduleIds = schedules.map(function(s){ return s.id; });
+
+    var milestones = [];
+    if (scheduleIds.length) {
+      var msRes = await db.from('milestones').select('*').in('schedule_id', scheduleIds);
+      milestones = msRes.data || [];
+    }
+    verifierMilestones.forEach(function(vm) {
+      if (!milestones.some(function(m){ return m.id === vm.id; })) milestones.push(vm);
+    });
+
+    var profileIds = [];
+    allJobs.forEach(function(j) {
+      if (j.posted_by && profileIds.indexOf(j.posted_by) === -1) profileIds.push(j.posted_by);
+      if (j.hired_by && profileIds.indexOf(j.hired_by) === -1) profileIds.push(j.hired_by);
+    });
+    milestones.forEach(function(m){ if (m.verifier_id && profileIds.indexOf(m.verifier_id) === -1) profileIds.push(m.verifier_id); });
+
+    var profiles = await dmFetchProfiles(profileIds);
+    renderDrawManager(uid, allJobs, schedules, milestones, profiles);
+  }
+
+  async function dmFetchProfiles(ids) {
+    var map = {};
+    if (!ids.length) return map;
+    var res = await db.from('profiles').select('id,full_name,email').in('id', ids);
+    (res.data || []).forEach(function(p){ map[p.id] = p; });
+    return map;
+  }
+
+  function dmName(profiles, id) {
+    if (!id) return '--';
+    var p = profiles[id];
+    if (!p) return 'Unknown';
+    return p.full_name || p.email || 'Unknown';
+  }
+
+  function dmStatusBadge(status) {
+    var label = status.charAt(0).toUpperCase() + status.slice(1);
+    return '<span class="dm-status dm-status-' + status + '">' + label + '</span>';
+  }
+
+  function renderDrawManager(uid, jobs, schedules, milestones, profiles) {
+    var body = document.getElementById('dmBody');
+    body.innerHTML = '';
+
+    jobs.forEach(function(job) {
+      var schedule = schedules.filter(function(s){ return s.job_id === job.id; })[0];
+      var isOwner = job.posted_by === uid;
+      var isContractor = job.hired_by === uid;
+
+      var card = document.createElement('div');
+      card.className = 'dm-job-card';
+
+      var head = '<div class="dm-job-head"><div><div class="dm-job-title">' + job.title + '</div>' +
+        '<div class="dm-job-meta">' +
+        (isOwner ? 'You posted this job' : (isContractor ? 'You\'re hired on this job' : 'You\'re assigned as inspector')) +
+        '</div></div>' +
+        (schedule ? '<div class="dm-contract-value">$' + Number(schedule.contract_value).toLocaleString() + '</div>' : '') +
+        '</div>';
+
+      if (!schedule) {
+        head += isOwner
+          ? '<div class="dm-setup-banner"><p>No draw schedule set up yet for this job.</p><button class="btn-primary dm-open-setup" style="font-size:0.78rem;padding:9px 16px;" data-job-id="' + job.id + '" data-job-title="' + job.title.replace(/"/g,'&quot;') + '">Set Up Draw Schedule</button></div>'
+          : '<div class="dm-setup-banner"><p>The job owner hasn\'t set up a draw schedule yet.</p></div>';
+        card.innerHTML = head;
+        body.appendChild(card);
+        return;
+      }
+
+      var jobMilestones = milestones.filter(function(m){ return m.schedule_id === schedule.id; })
+        .sort(function(a,b){ return (a.order_num||0) - (b.order_num||0); });
+
+      var msHtml = '<div class="dm-milestones">';
+      if (!jobMilestones.length) {
+        msHtml += '<div class="dm-empty" style="padding:20px;">No milestones on this schedule.</div>';
+      }
+      jobMilestones.forEach(function(m) {
+        var isVerifierOwner = m.verifier_type === 'owner' && isOwner;
+        var isVerifierInspector = m.verifier_type === 'inspector' && m.verifier_id === uid;
+        var canApprove = (isVerifierOwner || isVerifierInspector) && m.status === 'submitted';
+        var canSubmit = isContractor && m.status === 'pending';
+
+        msHtml += '<div class="dm-milestone">' +
+          '<div class="dm-milestone-main">' +
+          '<div class="dm-milestone-name">' + m.name + '</div>' +
+          '<div class="dm-milestone-pct">' + m.pct + '%</div>' +
+          '<div class="dm-milestone-verifier">Verified by ' + (m.verifier_type === 'owner' ? 'Owner' : 'Inspector: ' + dmName(profiles, m.verifier_id)) + '</div>' +
+          '</div>' +
+          '<div class="dm-actions">' +
+          dmStatusBadge(m.status) +
+          (canSubmit ? '<button class="dm-btn dm-btn-submit dm-submit-btn" data-id="' + m.id + '">Submit</button>' : '') +
+          (canApprove ? '<button class="dm-btn dm-btn-approve dm-decide-btn" data-id="' + m.id + '" data-decision="approved">Approve</button><button class="dm-btn dm-btn-dispute dm-decide-btn" data-id="' + m.id + '" data-decision="disputed">Dispute</button>' : '') +
+          '</div></div>';
+      });
+      msHtml += '</div>';
+
+      card.innerHTML = head + msHtml;
+      body.appendChild(card);
+    });
+
+    document.querySelectorAll('.dm-open-setup').forEach(function(btn) {
+      btn.addEventListener('click', function() { dmOpenSetup(this.dataset.jobId, this.dataset.jobTitle); });
+    });
+    document.querySelectorAll('.dm-submit-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() { dmSubmitMilestone(this.dataset.id); });
+    });
+    document.querySelectorAll('.dm-decide-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() { dmDecideMilestone(this.dataset.id, this.dataset.decision); });
+    });
+  }
+
+  async function dmSubmitMilestone(id) {
+    var res = await db.from('milestones').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', id);
+    if (res.error) { alert('Could not submit milestone. ' + res.error.message); return; }
+    loadDrawManager();
+  }
+
+  async function dmDecideMilestone(id, decision) {
+    if (decision === 'disputed' && !confirm('Mark this milestone as disputed?')) return;
+    var patch = { status: decision };
+    if (decision === 'approved') { patch.approved_at = new Date().toISOString(); }
+    var res = await db.from('milestones').update(patch).eq('id', id);
+    if (res.error) { alert('Could not update milestone. ' + res.error.message); return; }
+    loadDrawManager();
+  }
+
+  /* --- DRAW SCHEDULE SETUP --- */
+  function dmOpenSetup(jobId, jobTitle) {
+    dmSetupJob = { id: jobId, title: jobTitle };
+    document.getElementById('dmSetupTitle').textContent = 'Set Up Draw Schedule -- ' + jobTitle;
+    document.getElementById('dmContractValue').value = '';
+    document.getElementById('dmMilestoneRows').innerHTML = '';
+    document.getElementById('dmSetupError').style.display = 'none';
+    dmAddMilestoneRow();
+    document.getElementById('dmSetupOverlay').classList.add('active');
+  }
+
+  function dmCloseSetup() {
+    document.getElementById('dmSetupOverlay').classList.remove('active');
+    dmSetupJob = null;
+  }
+
+  function dmAddMilestoneRow() {
+    var wrap = document.getElementById('dmMilestoneRows');
+    var row = document.createElement('div');
+    row.className = 'dm-milestone-input-row';
+    row.innerHTML =
+      '<input type="text" class="dm-mi-name" placeholder="Milestone name">' +
+      '<input type="number" class="dm-mi-pct" placeholder="%" min="1" max="100">' +
+      '<select class="dm-mi-verifier">' +
+      '<option value="owner">Owner Approves</option>' +
+      '<option value="inspector">Inspector Approves</option>' +
+      '</select>' +
+      '<input type="email" class="dm-mi-inspector-email" placeholder="Inspector email" style="display:none;">' +
+      '<button type="button" class="dm-mi-remove">&#x2715;</button>';
+    wrap.appendChild(row);
+    row.querySelector('.dm-mi-verifier').addEventListener('change', function() {
+      row.querySelector('.dm-mi-inspector-email').style.display = this.value === 'inspector' ? 'block' : 'none';
+    });
+    row.querySelector('.dm-mi-remove').addEventListener('click', function() {
+      if (wrap.children.length > 1) row.remove();
+    });
+  }
+
+  async function dmSubmitSetup() {
+    var errEl = document.getElementById('dmSetupError');
+    errEl.style.display = 'none';
+
+    var contractValue = parseFloat(document.getElementById('dmContractValue').value);
+    if (!contractValue || contractValue <= 0) {
+      errEl.textContent = 'Enter a contract value greater than 0.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    var rows = document.querySelectorAll('#dmMilestoneRows .dm-milestone-input-row');
+    var milestoneInputs = [];
+    var pctTotal = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var name = row.querySelector('.dm-mi-name').value.trim();
+      var pct = parseFloat(row.querySelector('.dm-mi-pct').value);
+      var verifierType = row.querySelector('.dm-mi-verifier').value;
+      var inspectorEmail = row.querySelector('.dm-mi-inspector-email').value.trim();
+      if (!name || !pct) {
+        errEl.textContent = 'Every milestone needs a name and a percentage.';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (verifierType === 'inspector' && !inspectorEmail) {
+        errEl.textContent = 'Enter the inspector\'s email for "' + name + '".';
+        errEl.style.display = 'block';
+        return;
+      }
+      pctTotal += pct;
+      milestoneInputs.push({ name: name, pct: Math.round(pct), verifier_type: verifierType, inspector_email: inspectorEmail, order_num: i });
+    }
+
+    if (Math.round(pctTotal) !== 100) {
+      errEl.textContent = 'Milestone percentages must add up to 100% (currently ' + pctTotal + '%).';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    var submitBtn = document.getElementById('dmSetupSubmitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creating...';
+
+    try {
+      for (var j = 0; j < milestoneInputs.length; j++) {
+        var mi = milestoneInputs[j];
+        if (mi.verifier_type === 'inspector') {
+          var pRes = await db.from('profiles').select('id').eq('email', mi.inspector_email).maybeSingle();
+          if (pRes.error || !pRes.data) {
+            errEl.textContent = 'No visible TradeDeck account found for "' + mi.inspector_email + '".';
+            errEl.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Create Draw Schedule';
+            return;
+          }
+          mi.verifier_id = pRes.data.id;
+        }
+      }
+
+      var dsRes = await db.from('draw_schedules').insert({
+        job_id: dmSetupJob.id,
+        contract_value: Math.round(contractValue)
+      }).select().single();
+
+      if (dsRes.error) {
+        errEl.textContent = 'Could not create draw schedule. ' + dsRes.error.message;
+        errEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Draw Schedule';
+        return;
+      }
+
+      var scheduleId = dsRes.data.id;
+      var milestoneRows = milestoneInputs.map(function(mi) {
+        return {
+          schedule_id: scheduleId,
+          name: mi.name,
+          pct: mi.pct,
+          order_num: mi.order_num,
+          verifier_type: mi.verifier_type,
+          verifier_id: mi.verifier_id || null,
+          status: 'pending'
+        };
+      });
+
+      var msInsertRes = await db.from('milestones').insert(milestoneRows);
+      if (msInsertRes.error) {
+        errEl.textContent = 'Draw schedule created, but milestones failed to save. ' + msInsertRes.error.message;
+        errEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Draw Schedule';
+        return;
+      }
+
+      dmCloseSetup();
+      loadDrawManager();
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create Draw Schedule';
+    }
+  }
+
+  document.getElementById('dmSetupCloseBtn').addEventListener('click', dmCloseSetup);
+  document.getElementById('dmAddMilestoneBtn').addEventListener('click', dmAddMilestoneRow);
+  document.getElementById('dmSetupSubmitBtn').addEventListener('click', dmSubmitSetup);
+  document.getElementById('dmSetupOverlay').addEventListener('click', function(e){ if (e.target === this) dmCloseSetup(); });
+
+  window.loadDrawManager = loadDrawManager;
+
+  /* --- ADMIN --- */
+  var admUsersLoaded = false;
+  var admJobsLoaded = false;
+
+  function loadAdmin() {
+    if (!admUsersLoaded) { admLoadUsers(); admUsersLoaded = true; }
+  }
+
+  document.querySelectorAll('.adm-subtab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      document.querySelectorAll('.adm-subtab').forEach(function(t){ t.classList.remove('active'); });
+      document.querySelectorAll('.adm-subview').forEach(function(v){ v.classList.remove('active'); });
+      this.classList.add('active');
+      document.getElementById('adm-' + this.dataset.adm).classList.add('active');
+      if (this.dataset.adm === 'jobs' && !admJobsLoaded) { admLoadJobs(); admJobsLoaded = true; }
+    });
+  });
+
+  async function admLoadUsers() {
+    var body = document.getElementById('admUsersBody');
+    body.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--steel);">Loading...</div>';
+    var res = await db.from('profiles').select('id,email,full_name,tier,jobs_completed,is_admin').order('created_at', { ascending: false });
+    if (res.error) { body.innerHTML = '<div class="adm-empty">Could not load users. ' + res.error.message + '</div>'; return; }
+    admRenderUsers(res.data || []);
+  }
+
+  function admRenderUsers(users) {
+    var body = document.getElementById('admUsersBody');
+    if (!users.length) { body.innerHTML = '<div class="adm-empty">No users yet.</div>'; return; }
+    var html = '<table class="adm-table"><thead><tr><th>Name</th><th>Email</th><th>Tier</th><th>Jobs Done</th><th>Role</th><th></th></tr></thead><tbody>';
+    users.forEach(function(u) {
+      html += '<tr>' +
+        '<td>' + (u.full_name || '--') + '</td>' +
+        '<td>' + (u.email || '--') + '</td>' +
+        '<td>' + (u.tier != null ? u.tier : '--') + '</td>' +
+        '<td>' + (u.jobs_completed != null ? u.jobs_completed : 0) + '</td>' +
+        '<td>' + (u.is_admin ? '<span class="adm-badge adm-badge-admin">Admin</span>' : '<span class="adm-badge adm-badge-user">User</span>') + '</td>' +
+        '<td>' + (u.is_admin
+          ? '<button class="adm-btn adm-btn-revoke adm-revoke-btn" data-id="' + u.id + '">Revoke Admin</button>'
+          : '<button class="adm-btn adm-btn-grant adm-grant-btn" data-id="' + u.id + '">Make Admin</button>') +
+        '</td></tr>';
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+
+    document.querySelectorAll('.adm-grant-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        if (confirm('Grant full administrator access to this user?')) admSetAdmin(this.dataset.id, true);
+      });
+    });
+    document.querySelectorAll('.adm-revoke-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        if (confirm('Revoke administrator access from this user?')) admSetAdmin(this.dataset.id, false);
+      });
+    });
+  }
+
+  async function admSetAdmin(id, value) {
+    var res = await db.from('profiles').update({ is_admin: value }).eq('id', id);
+    if (res.error) { alert('Could not update admin status. ' + res.error.message); return; }
+    admLoadUsers();
+  }
+
+  async function admLoadJobs() {
+    var body = document.getElementById('admJobsBody');
+    body.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--steel);">Loading...</div>';
+    var jobsRes = await db.from('jobs').select('id,title,trade_type,status,posted_by,hired_by').order('created_at', { ascending: false });
+    if (jobsRes.error) { body.innerHTML = '<div class="adm-empty">Could not load jobs. ' + jobsRes.error.message + '</div>'; return; }
+    var jobs = jobsRes.data || [];
+    var ids = [];
+    jobs.forEach(function(j) {
+      if (j.posted_by && ids.indexOf(j.posted_by) === -1) ids.push(j.posted_by);
+      if (j.hired_by && ids.indexOf(j.hired_by) === -1) ids.push(j.hired_by);
+    });
+    var profiles = await dmFetchProfiles(ids);
+    admRenderJobs(jobs, profiles);
+  }
+
+  function admRenderJobs(jobs, profiles) {
+    var body = document.getElementById('admJobsBody');
+    if (!jobs.length) { body.innerHTML = '<div class="adm-empty">No jobs yet.</div>'; return; }
+    var statuses = ['open', 'filled', 'closed'];
+    var html = '<table class="adm-table"><thead><tr><th>Title</th><th>Trade</th><th>Posted By</th><th>Hired</th><th>Status</th><th></th></tr></thead><tbody>';
+    jobs.forEach(function(j) {
+      html += '<tr>' +
+        '<td>' + (j.title || '--') + '</td>' +
+        '<td>' + (j.trade_type || '--') + '</td>' +
+        '<td>' + dmName(profiles, j.posted_by) + '</td>' +
+        '<td>' + (j.hired_by ? dmName(profiles, j.hired_by) : '--') + '</td>' +
+        '<td><select class="adm-select adm-status-select" data-id="' + j.id + '">' +
+          statuses.map(function(s){ return '<option value="' + s + '"' + (s === j.status ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
+          '</select></td>' +
+        '<td><button class="adm-btn adm-btn-delete adm-delete-job-btn" data-id="' + j.id + '">Delete</button></td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+
+    document.querySelectorAll('.adm-status-select').forEach(function(sel) {
+      sel.addEventListener('change', function() { admUpdateJobStatus(this.dataset.id, this.value); });
+    });
+    document.querySelectorAll('.adm-delete-job-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        if (confirm('Permanently delete this job? This cannot be undone.')) admDeleteJob(this.dataset.id);
+      });
+    });
+  }
+
+  async function admUpdateJobStatus(id, status) {
+    var res = await db.from('jobs').update({ status: status }).eq('id', id);
+    if (res.error) { alert('Could not update job status. ' + res.error.message); admLoadJobs(); }
+  }
+
+  async function admDeleteJob(id) {
+    var res = await db.from('jobs').delete().eq('id', id);
+    if (res.error) { alert('Could not delete job. ' + res.error.message); return; }
+    admLoadJobs();
+  }
+
+  window.loadAdmin = loadAdmin;
 
 });
 </script>
