@@ -155,6 +155,26 @@ textarea{min-height:80px;resize:vertical}
 .stars span{color:var(--border);transition:color .1s}
 .stars span.on{color:var(--amber)}
 
+/* ── WORKER PROFILES ── */
+.worker-filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;-ms-overflow-style:none;scrollbar-width:none}
+.worker-filters::-webkit-scrollbar{display:none}
+.trade-chip{white-space:nowrap;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0;transition:all .15s}
+.trade-chip.active{background:var(--teal);color:#000;border-color:var(--teal)}
+.worker-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px}
+.worker-avatar{width:44px;height:44px;border-radius:50%;background:var(--teal-dim);border:2px solid var(--teal);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:var(--teal);flex-shrink:0;letter-spacing:-.5px}
+.worker-info{flex:1;min-width:0}
+.worker-name{font-size:15px;font-weight:700;line-height:1.2;margin-bottom:2px}
+.worker-trade{font-size:12px;color:var(--muted)}
+.v-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.04em}
+.v-badge.unverified{background:rgba(255,255,255,.05);color:var(--muted);border:1px solid var(--border)}
+.v-badge.pending{background:rgba(245,166,35,.12);color:var(--amber);border:1px solid rgba(245,166,35,.25)}
+.v-badge.verified{background:rgba(74,222,128,.12);color:var(--green);border:1px solid rgba(74,222,128,.25)}
+.tier-pips{display:flex;gap:3px;margin-top:4px}
+.pip{width:10px;height:10px;border-radius:50%;background:var(--border)}
+.pip.on{background:var(--teal)}
+.trade-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:10px;font-size:12px;color:var(--muted);line-height:1.7}
+.trade-card strong{color:var(--text)}
+
 /* ── EMPTY STATES ── */
 .empty{text-align:center;padding:40px 20px;color:var(--muted)}
 .empty svg{width:40px;height:40px;stroke:var(--border);margin-bottom:12px}
@@ -308,6 +328,13 @@ textarea{min-height:80px;resize:vertical}
     <div id="adm-jobs-pane" style="display:none"></div>
   </div>
 
+  <!-- WORKERS -->
+  <div id="screen-workers" class="screen">
+    <div class="screen-header"><h2>Workers</h2><span class="text-muted" style="font-size:11px">Utah Only</span></div>
+    <div class="worker-filters" id="worker-filters"></div>
+    <div id="workers-content"></div>
+  </div>
+
   <!-- PROFILE -->
   <div id="screen-profile" class="screen">
     <div class="screen-header"><h2>Profile</h2></div>
@@ -330,8 +357,11 @@ textarea{min-height:80px;resize:vertical}
   <button onclick="switchTab('draws')" id="nav-draws">
     <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Draws
   </button>
+  <button onclick="switchTab('workers')" id="nav-workers">
+    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Workers
+  </button>
   <button onclick="switchTab('profile')" id="nav-profile">
-    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile
+    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Me
   </button>
 </nav>
 
@@ -351,6 +381,27 @@ textarea{min-height:80px;resize:vertical}
     <textarea id="apply-msg" placeholder="Trade experience, crew size, availability…" style="min-height:70px"></textarea>
     <div id="apply-error" style="color:var(--danger);font-size:12px;margin-bottom:8px;display:none"></div>
     <button class="btn btn-primary btn-block" onclick="submitApply()">Send Application</button>
+  </div>
+</div>
+
+<!-- CONTACT WORKER OVERLAY -->
+<div class="overlay" id="contact-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <h3>Contact Worker</h3>
+      <button class="close-btn" onclick="closeOverlay('contact-overlay')">×</button>
+    </div>
+    <div id="contact-worker-name" style="font-size:14px;color:var(--muted);margin-bottom:14px"></div>
+    <label>Your Name</label>
+    <input id="contact-from-name" placeholder="Full name"/>
+    <label>Phone</label>
+    <input id="contact-from-phone" type="tel" placeholder="435-555-0100"/>
+    <label>Job / Project</label>
+    <input id="contact-job" placeholder="Framing — Park City Lot 14"/>
+    <label>Message</label>
+    <textarea id="contact-msg" placeholder="Trade needed, timeline, crew size, site address…" style="min-height:70px"></textarea>
+    <div id="contact-error" style="color:var(--danger);font-size:12px;margin-bottom:8px;display:none"></div>
+    <button class="btn btn-primary btn-block" onclick="submitContact()">Send Request</button>
   </div>
 </div>
 
@@ -477,13 +528,127 @@ function switchTab(tab) {
   document.getElementById('screen-'+tab).classList.add('active');
   const nb = document.getElementById('nav-'+tab);
   if (nb) nb.classList.add('active');
-  if (tab==='photos') renderPhotos();
-  if (tab==='draws')  renderDraws();
-  if (tab==='admin')  renderAdmin();
+  if (tab==='photos')  renderPhotos();
+  if (tab==='draws')   renderDraws();
+  if (tab==='admin')   renderAdmin();
+  if (tab==='workers') renderWorkers();
 }
 
 // ── RENDER ────────────────────────────────────────────────────────────────
-function render() { renderHome(); renderWork(); renderDraws(); renderPhotos(); renderProfile(); }
+function render() { renderHome(); renderWork(); renderDraws(); renderPhotos(); renderProfile(); renderWorkers(); }
+
+// ── WORKER PROFILES ──────────────────────────────────────────────────────
+const WORKER_TRADES = ['All','Framing','Concrete','Roofing','Electrical','Plumbing','HVAC',
+  'Drywall','Flooring','Excavation','Siding','Finish Carpentry','Painting','Landscaping','General Labor'];
+
+const S_WK = { trade:'All', workers:[], loaded:false, contactId:null, contactName:'' };
+
+async function loadWorkers() {
+  let q = sb.from('worker_profiles').select('*').eq('state','UT').order('tier',{ascending:false}).limit(100);
+  const { data } = await q;
+  S_WK.workers = data || [];
+  S_WK.loaded  = true;
+}
+
+async function renderWorkers() {
+  const el = document.getElementById('workers-content');
+  if (!S_WK.loaded) {
+    el.innerHTML = '<div class="text-muted" style="padding:16px;text-align:center">Loading workers…</div>';
+    await loadWorkers();
+  }
+
+  // Trade filter chips
+  document.getElementById('worker-filters').innerHTML = WORKER_TRADES.map(t =>
+    `<button class="trade-chip${S_WK.trade===t?' active':''}" onclick="filterWorkerTrade('${t}')">${t}</button>`
+  ).join('');
+
+  const list = S_WK.trade==='All' ? S_WK.workers
+    : S_WK.workers.filter(w => (w.trade||'').toLowerCase().includes(S_WK.trade.toLowerCase()));
+
+  if (!list.length) {
+    el.innerHTML = `<div class="empty"><p>No ${S_WK.trade==='All'?'':S_WK.trade+' '}workers yet in Utah.<br>Be the first to register.</p></div>`;
+    return;
+  }
+
+  el.innerHTML = list.map(w => workerCard(w)).join('');
+}
+
+function workerCard(w) {
+  const initials = (w.full_name||'?').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+  const vStatus  = w.verification_status || 'unverified';
+  const vLabel   = { unverified:'Unverified', pending:'Pending Review', verified:'Verified' }[vStatus] || vStatus;
+  const tier     = Math.min(5, Math.max(1, w.tier||1));
+  const pips     = Array.from({length:5},(_,i) => `<div class="pip${i<tier?' on':''}"></div>`).join('');
+  const trades   = [w.trade, w.secondary_trade].filter(Boolean).join(' · ');
+  const yrs      = w.years_experience ? `${w.years_experience} yrs exp` : '';
+  const loc      = [w.city, w.county ? w.county+' Co.' : ''].filter(Boolean).join(', ');
+
+  return `
+    <div class="worker-card">
+      <div class="flex gap8" style="align-items:flex-start;margin-bottom:10px">
+        <div class="worker-avatar">${initials}</div>
+        <div class="worker-info">
+          <div class="worker-name">${w.full_name||'—'}</div>
+          <div class="worker-trade">${trades||'—'}${loc?' · '+loc:''}</div>
+          <div class="tier-pips">${pips}</div>
+        </div>
+        <span class="v-badge ${vStatus}">
+          ${vStatus==='verified'?'✓ ':vStatus==='pending'?'⏳ ':''}${vLabel}
+        </span>
+      </div>
+      <div class="trade-card">
+        ${yrs?`<strong>Experience:</strong> ${yrs}<br>`:''}
+        ${w.company?`<strong>Company:</strong> ${w.company}<br>`:''}
+        ${w.license_number?`<strong>License:</strong> ${w.license_number}<br>`:''}
+        ${w.bio?`<strong>About:</strong> ${w.bio.slice(0,120)}${w.bio.length>120?'…':''}`:'No bio added yet.'}
+      </div>
+      <div class="flex between mt8" style="align-items:center">
+        <span class="text-muted" style="font-size:11px">Tier ${tier} · ${vLabel}</span>
+        ${vStatus==='verified'
+          ? `<button class="btn btn-primary btn-sm" onclick="openContact('${w.id}','${(w.full_name||'').replace(/'/g,"\\'")}')">Contact</button>`
+          : `<span class="text-muted" style="font-size:11px">Verification pending</span>`}
+      </div>
+    </div>`;
+}
+
+function filterWorkerTrade(trade) {
+  S_WK.trade = trade;
+  renderWorkers();
+}
+
+function openContact(workerId, workerName) {
+  S_WK.contactId   = workerId;
+  S_WK.contactName = workerName;
+  document.getElementById('contact-worker-name').textContent = 'To: ' + workerName;
+  document.getElementById('contact-from-name').value  = S.profile?.full_name || '';
+  document.getElementById('contact-from-phone').value = S.profile?.phone || '';
+  document.getElementById('contact-job').value  = '';
+  document.getElementById('contact-msg').value  = '';
+  document.getElementById('contact-error').style.display = 'none';
+  document.getElementById('contact-overlay').classList.add('open');
+}
+
+async function submitContact() {
+  const fromName  = document.getElementById('contact-from-name').value.trim();
+  const fromPhone = document.getElementById('contact-from-phone').value.trim();
+  const job       = document.getElementById('contact-job').value.trim();
+  const msg       = document.getElementById('contact-msg').value.trim();
+  const err       = document.getElementById('contact-error');
+  err.style.display = 'none';
+  if (!fromName) { showErr(err, 'Your name is required'); return; }
+  if (!msg)      { showErr(err, 'Add a message so the worker knows what you need'); return; }
+  const { error } = await sb.from('contact_requests').insert({
+    worker_id:    S_WK.contactId,
+    requester_id: S.user.id,
+    from_name:    fromName,
+    from_phone:   fromPhone,
+    project:      job,
+    message:      msg,
+    status:       'pending'
+  });
+  if (error) { showErr(err, error.message); return; }
+  closeOverlay('contact-overlay');
+}
 
 // HOME
 const TIERS = ['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
