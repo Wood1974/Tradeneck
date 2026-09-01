@@ -299,14 +299,24 @@ async function signOut(){await sb.auth.signOut();location.reload();}
 
 // ─── LOAD DATA ────────────────────────────────────────────────────────────────
 async function loadData() {
-  const [jobsRes, drawRes, kslRes] = await Promise.all([
+  const [jobsRes, kslRes] = await Promise.all([
     sb.from('jobs').select('*').eq('status','open').eq('source','tradedeck').order('created_at',{ascending:false}).limit(50),
-    sb.from('draw_schedules').select('*, draws(*)').order('created_at',{ascending:false}).limit(30),
     sb.from('jobs').select('*').eq('source','ksl').order('created_at',{ascending:false}).limit(200),
   ]);
   STATE.jobs    = jobsRes.data  || [];
-  STATE.draws   = drawRes.data  || [];
   STATE.kslJobs = kslRes.data   || [];
+
+  /* Only load draw schedules for jobs this user posted -- not every
+     schedule on the platform. */
+  STATE.draws = [];
+  if (STATE.user) {
+    const myJobsRes = await sb.from('jobs').select('id').eq('owner_id', STATE.user.id);
+    const myJobIds = (myJobsRes.data || []).map(j => j.id);
+    if (myJobIds.length) {
+      const drawRes = await sb.from('draw_schedules').select('*, draws(*)').in('job_id', myJobIds).order('created_at', { ascending: false });
+      STATE.draws = drawRes.data || [];
+    }
+  }
 
   /* Applied state (mine only -- RLS on applications only lets a user
      see their own rows or rows on a job they posted, so this can't leak
@@ -592,15 +602,15 @@ function renderDraws(){
     return;
   }
   el.innerHTML = STATE.draws.map(s=>{
-    const draws = (s.draws||[]).sort((a,b)=>a.position-b.position);
-    const releasedPct = draws.filter(d=>d.status==='approved'||d.status==='released').reduce((sum,d)=>sum+d.pct,0);
+    const draws = (s.draws||[]).sort((a,b)=>(a.milestone_order||0)-(b.milestone_order||0));
+    const releasedPct = draws.filter(d=>d.status==='approved'||d.status==='released').reduce((sum,d)=>sum+(d.percentage||0),0);
     return `<div class="card">
       <div class="flex between"><h3>Draw Schedule</h3><span class="text-muted">$${(s.contract_value||0).toLocaleString()}</span></div>
       <div class="escrow-bar"><div class="escrow-fill" style="width:${releasedPct}%"></div></div>
       <p class="text-muted" style="font-size:12px;margin-bottom:12px">${releasedPct}% released</p>
       ${draws.map(d=>`
         <div class="flex between mt8" style="align-items:center">
-          <span style="font-size:14px">${d.position}. ${d.name} <span class="text-muted">(${d.pct}%)</span></span>
+          <span style="font-size:14px">${d.milestone_order}. ${d.milestone_name} <span class="text-muted">(${d.percentage}%)</span></span>
           <div class="flex gap8" style="align-items:center">
             <span class="draw-status ${d.status}">${d.status}</span>
             ${d.status==='pending'?`<button class="btn btn-outline btn-sm" onclick="drawAction('${d.id}','submitted')">Submit</button>`:''}

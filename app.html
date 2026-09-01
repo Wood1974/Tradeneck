@@ -1093,15 +1093,15 @@ document.addEventListener('DOMContentLoaded', function() {
           '<span class="badge badge-open">Open</span>' +
         '</div>' +
         '<div class="bc-fields">' +
-          '<div class="bc-field"><label>Trade</label><div class="val">' + (job.trade_type || '--') + '</div></div>' +
-          '<div class="bc-field"><label>Pay</label><div class="val">' + (job.pay || '--') + '</div></div>' +
-          '<div class="bc-field"><label>Job Type</label><div class="val">' + (job.job_type || '--') + '</div></div>' +
-          '<div class="bc-field"><label>Start</label><div class="val">' + (job.posted_date || '--') + '</div></div>' +
+          '<div class="bc-field"><label>Trade</label><div class="val">' + (job.trade || '--') + '</div></div>' +
+          '<div class="bc-field"><label>Pay</label><div class="val">' + (job.rate || '--') + '</div></div>' +
+          '<div class="bc-field"><label>County</label><div class="val">' + (job.county || '--') + '</div></div>' +
+          '<div class="bc-field"><label>Start</label><div class="val">' + (job.start_date || '--') + '</div></div>' +
         '</div>' +
         '<hr class="bc-divider">' +
         '<div class="bc-footer">' +
           '<span class="bc-apply-count">' + job.applicants + ' applicant' + (job.applicants!==1?'s':'') + '</span>' +
-          (job.posted_by === uid
+          (job.owner_id === uid
             ? '<span style="color:var(--steel);font-size:0.8rem;">Your job post</span>'
             : '<button class="btn-primary" style="font-size:0.8rem;padding:8px 16px;' + (job.alreadyApplied ? 'background:#4ADE80;' : '') + '" id="heroApplyBtn"' + (job.alreadyApplied ? ' disabled' : '') + '>' + (job.alreadyApplied ? 'Applied' : 'Apply') + '</button>') +
         '</div>';
@@ -1150,18 +1150,18 @@ document.addEventListener('DOMContentLoaded', function() {
       jobs.forEach(function(job) {
         var card = document.createElement('div');
         card.className = 'job-card';
-        card.dataset.trade = job.trade_type || '';
+        card.dataset.trade = job.trade || '';
         card.dataset.location = job.location || '';
-        var isOwnJob = job.posted_by === uid;
+        var isOwnJob = job.owner_id === uid;
         card.innerHTML =
           '<div class="jc-head"><div><div class="jc-title">' + job.title + '</div>' +
           '<div class="jc-meta">' + (job.location || '--') + ' &middot; ' + job.age + '</div></div>' +
           '<span class="badge badge-open">Open</span></div>' +
           '<div class="jc-fields">' +
-          '<div class="jc-field"><label>Trade</label><div class="jval">' + (job.trade_type || '--') + '</div></div>' +
-          '<div class="jc-field"><label>Job Type</label><div class="jval">' + (job.job_type || '--') + '</div></div>' +
-          '<div class="jc-field"><label>Pay</label><div class="jval">' + (job.pay || '--') + '</div></div>' +
-          '<div class="jc-field"><label>Start</label><div class="jval">' + (job.posted_date || '--') + '</div></div>' +
+          '<div class="jc-field"><label>Trade</label><div class="jval">' + (job.trade || '--') + '</div></div>' +
+          '<div class="jc-field"><label>County</label><div class="jval">' + (job.county || '--') + '</div></div>' +
+          '<div class="jc-field"><label>Pay</label><div class="jval">' + (job.rate || '--') + '</div></div>' +
+          '<div class="jc-field"><label>Start</label><div class="jval">' + (job.start_date || '--') + '</div></div>' +
           '</div>' +
           '<div class="jc-footer">' +
           '<span class="bc-apply-count">' + job.applicants + ' applicant' + (job.applicants!==1?'s':'') + '</span>' +
@@ -1307,15 +1307,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     var payload = {
       title: document.getElementById('jobTitle').value || 'Untitled Job',
-      trade_type: selectedTrade || 'General',
+      trade: selectedTrade || 'General',
       location: [city, state].filter(Boolean).join(', ') || null,
-      pay: document.getElementById('payRate').value || null,
+      state: state || null,
+      rate: document.getElementById('payRate').value || null,
       description: descParts.join('\n') || null,
       status: 'open',
       source: 'tradedeck',
-      posted_by: session.user.id,
-      posted_by_role: session.user.user_metadata ? session.user.user_metadata.role : null,
-      posted_date: document.getElementById('startDate').value || null
+      owner_id: session.user.id,
+      start_date: document.getElementById('startDate').value || null
     };
 
     var res = await db.from('jobs').insert(payload);
@@ -1448,71 +1448,28 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!session) { body.innerHTML = '<div class="dm-empty">Sign in required.</div>'; return; }
     var uid = session.user.id;
 
-    var jobsRes = await db.from('jobs').select('id,title,posted_by,hired_by').or('posted_by.eq.' + uid + ',hired_by.eq.' + uid);
+    var jobsRes = await db.from('jobs').select('id,title,owner_id').eq('owner_id', uid);
     if (jobsRes.error) { body.innerHTML = '<div class="dm-empty">Could not load your jobs.</div>'; return; }
     var myJobs = jobsRes.data || [];
-    var myJobIds = myJobs.map(function(j){ return j.id; });
 
-    /* Milestones where this user is the assigned inspector, even on a job
-       they didn't post or get hired on -- covers a third-party inspector. */
-    var vmRes = await db.from('milestones').select('*,draw_schedules(id,job_id,contract_value)').eq('verifier_id', uid);
-    var verifierMilestones = (vmRes.data || []);
-    var extraJobIds = [];
-    verifierMilestones.forEach(function(m) {
-      var jid = m.draw_schedules ? m.draw_schedules.job_id : null;
-      if (jid && myJobIds.indexOf(jid) === -1 && extraJobIds.indexOf(jid) === -1) extraJobIds.push(jid);
-    });
-
-    var extraJobs = [];
-    if (extraJobIds.length) {
-      var extraJobsRes = await db.from('jobs').select('id,title,posted_by,hired_by').in('id', extraJobIds);
-      extraJobs = extraJobsRes.data || [];
-    }
-    var allJobs = myJobs.concat(extraJobs);
-
-    if (!allJobs.length) {
-      body.innerHTML = '<div class="dm-empty">No jobs yet. Draw schedules show up here once you\'re the owner, contractor, or assigned inspector on a job.</div>';
+    if (!myJobs.length) {
+      body.innerHTML = '<div class="dm-empty">No jobs yet. Draw schedules show up here once you post a job and set up milestones.</div>';
       return;
     }
 
-    var allJobIds = allJobs.map(function(j){ return j.id; });
-    var dsRes = await db.from('draw_schedules').select('*').in('job_id', allJobIds);
+    var myJobIds = myJobs.map(function(j){ return j.id; });
+    var dsRes = await db.from('draw_schedules').select('*').in('job_id', myJobIds);
     var schedules = dsRes.data || [];
     var scheduleIds = schedules.map(function(s){ return s.id; });
 
-    var milestones = [];
+    var drawRows = [];
     if (scheduleIds.length) {
-      var msRes = await db.from('milestones').select('*').in('schedule_id', scheduleIds);
-      milestones = msRes.data || [];
+      /* draws.job_id is the draw_schedules.id FK, not jobs.id */
+      var drRes = await db.from('draws').select('*').in('job_id', scheduleIds);
+      drawRows = drRes.data || [];
     }
-    verifierMilestones.forEach(function(vm) {
-      if (!milestones.some(function(m){ return m.id === vm.id; })) milestones.push(vm);
-    });
 
-    var profileIds = [];
-    allJobs.forEach(function(j) {
-      if (j.posted_by && profileIds.indexOf(j.posted_by) === -1) profileIds.push(j.posted_by);
-      if (j.hired_by && profileIds.indexOf(j.hired_by) === -1) profileIds.push(j.hired_by);
-    });
-    milestones.forEach(function(m){ if (m.verifier_id && profileIds.indexOf(m.verifier_id) === -1) profileIds.push(m.verifier_id); });
-
-    var profiles = await dmFetchProfiles(profileIds);
-    renderDrawManager(uid, allJobs, schedules, milestones, profiles);
-  }
-
-  async function dmFetchProfiles(ids) {
-    var map = {};
-    if (!ids.length) return map;
-    var res = await db.from('profiles').select('id,full_name,email').in('id', ids);
-    (res.data || []).forEach(function(p){ map[p.id] = p; });
-    return map;
-  }
-
-  function dmName(profiles, id) {
-    if (!id) return '--';
-    var p = profiles[id];
-    if (!p) return 'Unknown';
-    return p.full_name || p.email || 'Unknown';
+    renderDrawManager(uid, myJobs, schedules, drawRows);
   }
 
   function dmStatusBadge(status) {
@@ -1520,57 +1477,50 @@ document.addEventListener('DOMContentLoaded', function() {
     return '<span class="dm-status dm-status-' + status + '">' + label + '</span>';
   }
 
-  function renderDrawManager(uid, jobs, schedules, milestones, profiles) {
+  function renderDrawManager(uid, jobs, schedules, drawRows) {
     var body = document.getElementById('dmBody');
     body.innerHTML = '';
 
     jobs.forEach(function(job) {
       var schedule = schedules.filter(function(s){ return s.job_id === job.id; })[0];
-      var isOwner = job.posted_by === uid;
-      var isContractor = job.hired_by === uid;
+      var isOwner = job.owner_id === uid;
 
       var card = document.createElement('div');
       card.className = 'dm-job-card';
 
       var head = '<div class="dm-job-head"><div><div class="dm-job-title">' + job.title + '</div>' +
-        '<div class="dm-job-meta">' +
-        (isOwner ? 'You posted this job' : (isContractor ? 'You\'re hired on this job' : 'You\'re assigned as inspector')) +
-        '</div></div>' +
+        '<div class="dm-job-meta">' + (isOwner ? 'You posted this job' : '') + '</div></div>' +
         (schedule ? '<div class="dm-contract-value">$' + Number(schedule.contract_value).toLocaleString() + '</div>' : '') +
         '</div>';
 
       if (!schedule) {
-        head += isOwner
-          ? '<div class="dm-setup-banner"><p>No draw schedule set up yet for this job.</p><button class="btn-primary dm-open-setup" style="font-size:0.78rem;padding:9px 16px;" data-job-id="' + job.id + '" data-job-title="' + job.title.replace(/"/g,'&quot;') + '">Set Up Draw Schedule</button></div>'
-          : '<div class="dm-setup-banner"><p>The job owner hasn\'t set up a draw schedule yet.</p></div>';
+        head += '<div class="dm-setup-banner"><p>No draw schedule set up yet for this job.</p><button class="btn-primary dm-open-setup" style="font-size:0.78rem;padding:9px 16px;" data-job-id="' + job.id + '" data-job-title="' + job.title.replace(/"/g,'&quot;') + '">Set Up Draw Schedule</button></div>';
         card.innerHTML = head;
         body.appendChild(card);
         return;
       }
 
-      var jobMilestones = milestones.filter(function(m){ return m.schedule_id === schedule.id; })
-        .sort(function(a,b){ return (a.order_num||0) - (b.order_num||0); });
+      var jobDraws = drawRows.filter(function(d){ return d.job_id === schedule.id; })
+        .sort(function(a,b){ return (a.milestone_order||0) - (b.milestone_order||0); });
 
       var msHtml = '<div class="dm-milestones">';
-      if (!jobMilestones.length) {
+      if (!jobDraws.length) {
         msHtml += '<div class="dm-empty" style="padding:20px;">No milestones on this schedule.</div>';
       }
-      jobMilestones.forEach(function(m) {
-        var isVerifierOwner = m.verifier_type === 'owner' && isOwner;
-        var isVerifierInspector = m.verifier_type === 'inspector' && m.verifier_id === uid;
-        var canApprove = (isVerifierOwner || isVerifierInspector) && m.status === 'submitted';
-        var canSubmit = isContractor && m.status === 'pending';
+      jobDraws.forEach(function(d) {
+        var canApprove = isOwner && d.status === 'submitted';
+        var canSubmit = isOwner && d.status === 'pending';
 
         msHtml += '<div class="dm-milestone">' +
           '<div class="dm-milestone-main">' +
-          '<div class="dm-milestone-name">' + m.name + '</div>' +
-          '<div class="dm-milestone-pct">' + m.pct + '%</div>' +
-          '<div class="dm-milestone-verifier">Verified by ' + (m.verifier_type === 'owner' ? 'Owner' : 'Inspector: ' + dmName(profiles, m.verifier_id)) + '</div>' +
+          '<div class="dm-milestone-name">' + d.milestone_name + '</div>' +
+          '<div class="dm-milestone-pct">' + d.percentage + '%</div>' +
+          '<div class="dm-milestone-verifier">Verified by ' + (d.verifier_type === 'owner' ? 'Owner' : 'Inspector') + '</div>' +
           '</div>' +
           '<div class="dm-actions">' +
-          dmStatusBadge(m.status) +
-          (canSubmit ? '<button class="dm-btn dm-btn-submit dm-submit-btn" data-id="' + m.id + '">Submit</button>' : '') +
-          (canApprove ? '<button class="dm-btn dm-btn-approve dm-decide-btn" data-id="' + m.id + '" data-decision="approved">Approve</button><button class="dm-btn dm-btn-dispute dm-decide-btn" data-id="' + m.id + '" data-decision="disputed">Dispute</button>' : '') +
+          dmStatusBadge(d.status) +
+          (canSubmit ? '<button class="dm-btn dm-btn-submit dm-submit-btn" data-id="' + d.id + '">Submit</button>' : '') +
+          (canApprove ? '<button class="dm-btn dm-btn-approve dm-decide-btn" data-id="' + d.id + '" data-decision="approved">Approve</button><button class="dm-btn dm-btn-dispute dm-decide-btn" data-id="' + d.id + '" data-decision="disputed">Dispute</button>' : '') +
           '</div></div>';
       });
       msHtml += '</div>';
@@ -1591,7 +1541,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   async function dmSubmitMilestone(id) {
-    var res = await db.from('milestones').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', id);
+    var res = await db.from('draws').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', id);
     if (res.error) { alert('Could not submit milestone. ' + res.error.message); return; }
     loadDrawManager();
   }
@@ -1600,7 +1550,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (decision === 'disputed' && !confirm('Mark this milestone as disputed?')) return;
     var patch = { status: decision };
     if (decision === 'approved') { patch.approved_at = new Date().toISOString(); }
-    var res = await db.from('milestones').update(patch).eq('id', id);
+    if (decision === 'disputed') { patch.resolved_at = new Date().toISOString(); }
+    var res = await db.from('draws').update(patch).eq('id', id);
     if (res.error) { alert('Could not update milestone. ' + res.error.message); return; }
     loadDrawManager();
   }
@@ -1632,12 +1583,8 @@ document.addEventListener('DOMContentLoaded', function() {
       '<option value="owner">Owner Approves</option>' +
       '<option value="inspector">Inspector Approves</option>' +
       '</select>' +
-      '<input type="email" class="dm-mi-inspector-email" placeholder="Inspector email" style="display:none;">' +
       '<button type="button" class="dm-mi-remove">&#x2715;</button>';
     wrap.appendChild(row);
-    row.querySelector('.dm-mi-verifier').addEventListener('change', function() {
-      row.querySelector('.dm-mi-inspector-email').style.display = this.value === 'inspector' ? 'block' : 'none';
-    });
     row.querySelector('.dm-mi-remove').addEventListener('click', function() {
       if (wrap.children.length > 1) row.remove();
     });
@@ -1646,6 +1593,14 @@ document.addEventListener('DOMContentLoaded', function() {
   async function dmSubmitSetup() {
     var errEl = document.getElementById('dmSetupError');
     errEl.style.display = 'none';
+
+    var sessionRes = await db.auth.getSession();
+    var session = sessionRes.data.session;
+    if (!session) {
+      errEl.textContent = 'Please sign in again to set up a draw schedule.';
+      errEl.style.display = 'block';
+      return;
+    }
 
     var contractValue = parseFloat(document.getElementById('dmContractValue').value);
     if (!contractValue || contractValue <= 0) {
@@ -1662,19 +1617,13 @@ document.addEventListener('DOMContentLoaded', function() {
       var name = row.querySelector('.dm-mi-name').value.trim();
       var pct = parseFloat(row.querySelector('.dm-mi-pct').value);
       var verifierType = row.querySelector('.dm-mi-verifier').value;
-      var inspectorEmail = row.querySelector('.dm-mi-inspector-email').value.trim();
       if (!name || !pct) {
         errEl.textContent = 'Every milestone needs a name and a percentage.';
         errEl.style.display = 'block';
         return;
       }
-      if (verifierType === 'inspector' && !inspectorEmail) {
-        errEl.textContent = 'Enter the inspector\'s email for "' + name + '".';
-        errEl.style.display = 'block';
-        return;
-      }
       pctTotal += pct;
-      milestoneInputs.push({ name: name, pct: Math.round(pct), verifier_type: verifierType, inspector_email: inspectorEmail, order_num: i });
+      milestoneInputs.push({ name: name, pct: Math.round(pct), verifier_type: verifierType });
     }
 
     if (Math.round(pctTotal) !== 100) {
@@ -1688,53 +1637,35 @@ document.addEventListener('DOMContentLoaded', function() {
     submitBtn.textContent = 'Creating...';
 
     try {
-      for (var j = 0; j < milestoneInputs.length; j++) {
-        var mi = milestoneInputs[j];
-        if (mi.verifier_type === 'inspector') {
-          var pRes = await db.from('profiles').select('id').eq('email', mi.inspector_email).maybeSingle();
-          if (pRes.error || !pRes.data) {
-            errEl.textContent = 'No visible TradeDeck account found for "' + mi.inspector_email + '".';
-            errEl.style.display = 'block';
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Create Draw Schedule';
-            return;
-          }
-          mi.verifier_id = pRes.data.id;
-        }
-      }
-
       var dsRes = await db.from('draw_schedules').insert({
         job_id: dmSetupJob.id,
+        owner_id: session.user.id,
         contract_value: Math.round(contractValue)
       }).select().single();
 
       if (dsRes.error) {
         errEl.textContent = 'Could not create draw schedule. ' + dsRes.error.message;
         errEl.style.display = 'block';
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Create Draw Schedule';
         return;
       }
 
       var scheduleId = dsRes.data.id;
-      var milestoneRows = milestoneInputs.map(function(mi) {
+      var drawRows = milestoneInputs.map(function(mi, idx) {
         return {
-          schedule_id: scheduleId,
-          name: mi.name,
-          pct: mi.pct,
-          order_num: mi.order_num,
+          job_id: scheduleId,
+          milestone_order: idx + 1,
+          milestone_name: mi.name,
+          percentage: mi.pct,
+          amount_cents: Math.round(contractValue * 100 * (mi.pct / 100)),
           verifier_type: mi.verifier_type,
-          verifier_id: mi.verifier_id || null,
           status: 'pending'
         };
       });
 
-      var msInsertRes = await db.from('milestones').insert(milestoneRows);
-      if (msInsertRes.error) {
-        errEl.textContent = 'Draw schedule created, but milestones failed to save. ' + msInsertRes.error.message;
+      var drInsertRes = await db.from('draws').insert(drawRows);
+      if (drInsertRes.error) {
+        errEl.textContent = 'Draw schedule created, but milestones failed to save. ' + drInsertRes.error.message;
         errEl.style.display = 'block';
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Create Draw Schedule';
         return;
       }
 
@@ -1754,6 +1685,21 @@ document.addEventListener('DOMContentLoaded', function() {
   window.loadDrawManager = loadDrawManager;
 
   /* --- ADMIN --- */
+  async function dmFetchProfiles(ids) {
+    var map = {};
+    if (!ids.length) return map;
+    var res = await db.from('profiles').select('id,full_name,email').in('id', ids);
+    (res.data || []).forEach(function(p){ map[p.id] = p; });
+    return map;
+  }
+
+  function dmName(profiles, id) {
+    if (!id) return '--';
+    var p = profiles[id];
+    if (!p) return 'Unknown';
+    return p.full_name || p.email || 'Unknown';
+  }
+
   var admUsersLoaded = false;
   var admJobsLoaded = false;
 
@@ -1819,13 +1765,12 @@ document.addEventListener('DOMContentLoaded', function() {
   async function admLoadJobs() {
     var body = document.getElementById('admJobsBody');
     body.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--steel);">Loading...</div>';
-    var jobsRes = await db.from('jobs').select('id,title,trade_type,status,posted_by,hired_by').order('created_at', { ascending: false });
+    var jobsRes = await db.from('jobs').select('id,title,trade,status,owner_id,location').order('created_at', { ascending: false });
     if (jobsRes.error) { body.innerHTML = '<div class="adm-empty">Could not load jobs. ' + jobsRes.error.message + '</div>'; return; }
     var jobs = jobsRes.data || [];
     var ids = [];
     jobs.forEach(function(j) {
-      if (j.posted_by && ids.indexOf(j.posted_by) === -1) ids.push(j.posted_by);
-      if (j.hired_by && ids.indexOf(j.hired_by) === -1) ids.push(j.hired_by);
+      if (j.owner_id && ids.indexOf(j.owner_id) === -1) ids.push(j.owner_id);
     });
     var profiles = await dmFetchProfiles(ids);
     admRenderJobs(jobs, profiles);
@@ -1835,13 +1780,13 @@ document.addEventListener('DOMContentLoaded', function() {
     var body = document.getElementById('admJobsBody');
     if (!jobs.length) { body.innerHTML = '<div class="adm-empty">No jobs yet.</div>'; return; }
     var statuses = ['open', 'filled', 'closed'];
-    var html = '<table class="adm-table"><thead><tr><th>Title</th><th>Trade</th><th>Posted By</th><th>Hired</th><th>Status</th><th></th></tr></thead><tbody>';
+    var html = '<table class="adm-table"><thead><tr><th>Title</th><th>Trade</th><th>Location</th><th>Posted By</th><th>Status</th><th></th></tr></thead><tbody>';
     jobs.forEach(function(j) {
       html += '<tr>' +
         '<td>' + (j.title || '--') + '</td>' +
-        '<td>' + (j.trade_type || '--') + '</td>' +
-        '<td>' + dmName(profiles, j.posted_by) + '</td>' +
-        '<td>' + (j.hired_by ? dmName(profiles, j.hired_by) : '--') + '</td>' +
+        '<td>' + (j.trade || '--') + '</td>' +
+        '<td>' + (j.location || '--') + '</td>' +
+        '<td>' + dmName(profiles, j.owner_id) + '</td>' +
         '<td><select class="adm-select adm-status-select" data-id="' + j.id + '">' +
           statuses.map(function(s){ return '<option value="' + s + '"' + (s === j.status ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
           '</select></td>' +
