@@ -29,39 +29,37 @@ principles baked into every feature decision:
 
 ## What's actually in this repo (verified)
 
-- `index.html` — sign-in / sign-up page only. Uses Supabase Auth directly
+- `index.html` — **mobile-first SPA** (primary app). Uses Supabase Auth directly
   (`@supabase/supabase-js@2` from jsDelivr), project `jlaajejpqjldpbinktln`.
-  Handles email+password sign-in, magic link, and sign-up with a role
-  picker (contractor / worker / property owner). On success it redirects
-  to `app.html`.
+  Handles email+password sign-in and sign-up. On success it shows the in-page
+  app shell (Home, Find Work, Post Job, Draws, Profile, Admin). **Does not
+  redirect to `app.html`.**
 - `_headers` — Netlify response headers, sets a Content-Security-Policy for
   the whole site.
-- `app.html` — **added in this session.** Previously this file didn't
-  exist anywhere in git, so every successful sign-in 404'd. It was built
-  by porting `tradedeck-newest.html` (which was sitting, unused, in the
-  `tradedeck-api` repo — see that repo's notes) into this repo, adding a
-  Supabase session guard (redirects back to `index.html` if not signed in,
-  or on sign-out) and a sign-out control in the nav. **The rest of that
-  page's functionality (Find Work, Post a Job, Site Photos/CompanyCam) is
-  UI-only** — it renders mock/static content and is not yet wired to
-  Supabase or to the `tradedeck-api` backend for real data. Treat it as a
-  working shell, not a finished app.
-- CSP note: `_headers` and `app.html`'s own CSP meta tag were both updated
-  to allow `fonts.googleapis.com`/`fonts.gstatic.com` (Google Fonts, used
-  by `app.html`) and `tradedeck-api.onrender.com` (the backend's `/api/jobs`
-  call in the hero section) in addition to the existing Supabase allowance.
-  If you add a new external call from either file, you must add its host
-  to **both** `_headers` and the CSP meta tag, or Netlify's CSP header will
-  silently block it in production (a local `file://` test won't catch
-  this — CSP host-matching behaves differently there; test over http(s)).
+- `app.html` — **desktop marketing shell** with embedded sign-in, Find Work,
+  Post Job wizard, CompanyCam (mock), Draw Manager, and Admin. Also uses
+  Supabase directly. Both frontends must use the same live schema (see below).
+- `app.py` — Flask API (Stripe Connect, escrow, AI photo review). Belongs in
+  the `tradedeck-api` repo for deployment; included here for reference. All
+  routes except `/` and `/stripe/webhook` require a Supabase JWT.
+- CompanyCam tab calls the live `api.companycam.com` API when a user pastes their access token (still stored in localStorage — move to a backend proxy when ready for production).
+- Draw approve actions in both frontends call `POST /draws/:id/approve` on tradedeck-api (releases Stripe escrow when a record exists).
+- Shared helpers live in `js/tradedeck-shared.js` (`escapeHtml`, `apiPost`).
+
+## Live Supabase schema (verified against production, Sep 2026)
+
+The live `jobs` table uses **`owner_id`**, **`trade`**, **`rate`** (not
+`posted_by`, `trade_type`, or `pay`). Draw milestones live in the **`draws`**
+table with columns `milestone_order`, `milestone_name`, `percentage`,
+`amount_cents`, `verifier_type`, `status`. Note: `draws.job_id` is a FK to
+`draw_schedules.id`, not `jobs.id`. A legacy `milestones` table also exists
+but the frontends should use `draws`.
 
 ## What's described elsewhere but NOT in this repo (verified absent)
 
 - No `tradedeck-app.html` mobile rebuild, no `draw_manager_frontend.html`,
-  no `tradedeck-pitch.html` marketing page, no Draw Manager UI, no Profile
-  tab. If earlier notes mention these as "built," they either never got
-  committed, exist uncommitted on a local machine, or were lost — confirm
-  with the project owner before assuming any of it exists.
+  no `tradedeck-pitch.html` marketing page. Draw Manager and Profile **are**
+  built into `index.html` and `app.html`.
 - No Stripe Connect / escrow / draw code anywhere in the frontend.
 
 ## Backend & data
