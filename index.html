@@ -84,7 +84,11 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 .adm-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;text-transform:uppercase;flex-shrink:0}
 .adm-badge-admin{background:rgba(11,188,212,.15);color:var(--teal)}
 .adm-badge-user{background:var(--border);color:var(--muted)}
+.role-pills{display:flex;gap:8px;margin-bottom:10px}
+.role-pill{flex:1;padding:9px 6px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;text-align:center}
+.role-pill.active{color:var(--teal);border-color:var(--teal);background:rgba(11,188,212,.1)}
 </style>
+<script src="js/tradedeck-shared.js"></script>
 </head>
 <body>
 
@@ -96,6 +100,14 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   <input id="auth-email" type="email" placeholder="you@example.com"/>
   <label>Password</label>
   <input id="auth-password" type="password" placeholder="••••••••"/>
+  <div id="auth-role-wrap" style="display:none">
+    <label>I am a...</label>
+    <div class="role-pills">
+      <button type="button" class="role-pill active" data-role="contractor">Contractor</button>
+      <button type="button" class="role-pill" data-role="worker">Worker</button>
+      <button type="button" class="role-pill" data-role="owner">Owner</button>
+    </div>
+  </div>
   <button class="btn btn-primary btn-block" onclick="authSubmit()">Sign In</button>
   <p id="auth-error" style="color:var(--danger);font-size:13px;margin-top:8px"></p>
   <p class="auth-toggle">No account? <span onclick="toggleAuth()">Sign up</span></p>
@@ -242,6 +254,12 @@ const SUPABASE_URL     = 'https://jlaajejpqjldpbinktln.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW5rdGxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMDg3MTksImV4cCI6MjEwMTc4NDcxOX0.tP-seLGoJnivrYmNhhTDmDJw4Uk92D95-zrwWB1G_S4';
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const eh = TradeDeck.escapeHtml;
+
+async function getAccessToken() {
+  const { data: { session } } = await sb.auth.getSession();
+  return session?.access_token || null;
+}
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let STATE = {
@@ -255,19 +273,32 @@ let STATE = {
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 let authMode = 'signin';
+document.querySelectorAll('.role-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.role-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+  });
+});
 function toggleAuth() {
   authMode = authMode==='signin'?'signup':'signin';
-  document.querySelector('#auth-wrap button').textContent = authMode==='signin'?'Sign In':'Create Account';
+  document.querySelector('#auth-wrap .btn-primary').textContent = authMode==='signin'?'Sign In':'Create Account';
   document.querySelector('.auth-toggle span').textContent = authMode==='signin'?'Sign up':'Sign in';
+  document.getElementById('auth-role-wrap').style.display = authMode==='signup'?'block':'none';
+  const errEl = document.getElementById('auth-error');
+  errEl.textContent = '';
+  errEl.style.color = 'var(--danger)';
 }
 async function authSubmit() {
   const email    = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
   const errEl    = document.getElementById('auth-error');
   errEl.textContent = '';
+  errEl.style.color = 'var(--danger)';
   if (!email||!password){errEl.textContent='Email and password required';return;}
+  if (authMode==='signup' && password.length < 8) { errEl.textContent='Password must be at least 8 characters'; return; }
+  const role = document.querySelector('.role-pill.active')?.dataset.role || 'contractor';
   const res = authMode==='signup'
-    ? await sb.auth.signUp({email,password})
+    ? await sb.auth.signUp({email,password, options:{ data:{ role } }})
     : await sb.auth.signInWithPassword({email,password});
   if (res.error){errEl.textContent=res.error.message;return;}
   if (authMode==='signup'&&!res.error){errEl.style.color='var(--green)';errEl.textContent='Check your email to confirm.';return;}
@@ -459,10 +490,10 @@ function renderWork() {
     const jobs = STATE.activeCounty==='all'?STATE.kslJobs:STATE.kslJobs.filter(j=>j.county===STATE.activeCounty);
     el.innerHTML = jobs.length ? jobs.map(j=>`
       <div class="card">
-        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">KSL</span></div>
-        <p>${j.company||''} · ${j.location||''}, ${j.county||''}</p>
-        <p style="margin-top:6px">${(j.description||'').slice(0,120)}…</p>
-        <p class="text-muted" style="margin-top:4px;font-size:12px">${j.rate||''}</p>
+        <div class="flex between"><h3>${eh(j.title)}</h3><span class="badge badge-ksl">KSL</span></div>
+        <p>${eh(j.company||'')} · ${eh(j.location||'')}, ${eh(j.county||'')}</p>
+        <p style="margin-top:6px">${eh((j.description||'').slice(0,120))}…</p>
+        <p class="text-muted" style="margin-top:4px;font-size:12px">${eh(j.rate||'')}</p>
       </div>`).join('') : '<p class="text-muted" style="padding:20px 0">No KSL jobs in this area yet.</p>';
   } else if (STATE.activeWorkTab==='leads') {
     countyEl.style.display = 'none';
@@ -483,17 +514,17 @@ function renderWork() {
       const count = STATE.applicantCounts[j.id]||0;
       return `
       <div class="card">
-        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-teal">${j.trade||'Trade'}</span></div>
-        <p>${j.location||''}, ${j.county||''}</p>
-        <p style="margin-top:4px">${j.rate||j.budget||''}</p>
-        <p class="text-muted" style="margin-top:6px;font-size:12px">${(j.description||'').slice(0,100)}</p>
+        <div class="flex between"><h3>${eh(j.title)}</h3><span class="badge badge-teal">${eh(j.trade||'Trade')}</span></div>
+        <p>${eh(j.location||'')}, ${eh(j.county||'')}</p>
+        <p style="margin-top:4px">${eh(j.rate||j.budget||'')}</p>
+        <p class="text-muted" style="margin-top:6px;font-size:12px">${eh((j.description||'').slice(0,100))}</p>
         <div class="flex between mt8" style="align-items:center">
           <span class="applicant-count">${count} applicant${count!==1?'s':''}</span>
           ${isOwn
             ? '<span class="text-muted" style="font-size:12px">Your job post</span>'
-            : `<button class="btn ${applied?'btn-outline':'btn-primary'} btn-sm" ${applied?'disabled':''} onclick="applyToJob('${j.id}',this)">${applied?'Applied':'Apply'}</button>`}
+            : `<button class="btn ${applied?'btn-outline':'btn-primary'} btn-sm apply-job-btn" data-job-id="${eh(j.id)}" ${applied?'disabled':''}>${applied?'Applied':'Apply'}</button>`}
         </div>
-        ${canRate ? `<button class="btn btn-outline btn-sm mt8" onclick="openRating('${j.id}','${j.owner_id}')">Rate Job</button>` : ''}
+        ${canRate ? `<button class="btn btn-outline btn-sm mt8 rate-job-btn" data-job-id="${eh(j.id)}" data-owner-id="${eh(j.owner_id)}">Rate Job</button>` : ''}
       </div>`;
     }).join('') : '<p class="text-muted" style="padding:20px 0">No open jobs yet. Be the first to post.</p>';
   }
@@ -531,7 +562,7 @@ function renderMilestones(){
   const el = document.getElementById('milestone-rows');
   el.innerHTML = milestones.map((m,i)=>`
     <div class="milestone-row">
-      <input placeholder="Name" value="${m.name}" oninput="milestones[${i}].name=this.value"/>
+      <input placeholder="Name" value="${eh(m.name)}" oninput="milestones[${i}].name=this.value"/>
       <input class="pct-input" type="number" placeholder="%" value="${m.pct||''}" min="1" max="100"
         oninput="milestones[${i}].pct=+this.value;updatePct()"/>
       <select style="width:100px;margin-bottom:0" onchange="milestones[${i}].verifier=this.value">
@@ -610,21 +641,34 @@ function renderDraws(){
       <p class="text-muted" style="font-size:12px;margin-bottom:12px">${releasedPct}% released</p>
       ${draws.map(d=>`
         <div class="flex between mt8" style="align-items:center">
-          <span style="font-size:14px">${d.milestone_order}. ${d.milestone_name} <span class="text-muted">(${d.percentage}%)</span></span>
+          <span style="font-size:14px">${d.milestone_order}. ${eh(d.milestone_name)} <span class="text-muted">(${d.percentage}%)</span></span>
           <div class="flex gap8" style="align-items:center">
-            <span class="draw-status ${d.status}">${d.status}</span>
-            ${d.status==='pending'?`<button class="btn btn-outline btn-sm" onclick="drawAction('${d.id}','submitted')">Submit</button>`:''}
+            <span class="draw-status ${eh(d.status)}">${eh(d.status)}</span>
+            ${d.status==='pending'?`<button class="btn btn-outline btn-sm draw-action-btn" data-draw-id="${eh(d.id)}" data-action="submitted">Submit</button>`:''}
             ${d.status==='submitted'?`
-              <button class="btn btn-primary btn-sm" onclick="drawAction('${d.id}','approved')">Approve</button>
-              <button class="btn btn-danger btn-sm" onclick="drawAction('${d.id}','disputed')">Dispute</button>`:''}
+              <button class="btn btn-primary btn-sm draw-action-btn" data-draw-id="${eh(d.id)}" data-action="approved">Approve</button>
+              <button class="btn btn-danger btn-sm draw-action-btn" data-draw-id="${eh(d.id)}" data-action="disputed">Dispute</button>`:''}
           </div>
         </div>`).join('')}
     </div>`;
   }).join('');
 }
 async function drawAction(id,status){
-  await sb.from('draws').update({status,resolved_at:['approved','disputed'].includes(status)?new Date().toISOString():null}).eq('id',id);
-  await loadData();renderDraws();
+  if (status === 'approved') {
+    try {
+      await TradeDeck.apiPost('/draws/' + encodeURIComponent(id) + '/approve', getAccessToken);
+    } catch (e) {
+      alert('Could not approve draw. ' + e.message);
+      return;
+    }
+    await loadData(); renderDraws();
+    return;
+  }
+  const patch = { status };
+  if (status === 'submitted') patch.submitted_at = new Date().toISOString();
+  if (status === 'disputed') patch.resolved_at = new Date().toISOString();
+  await sb.from('draws').update(patch).eq('id', id);
+  await loadData(); renderDraws();
 }
 
 // ─── PROFILE ──────────────────────────────────────────────────────────────────
@@ -635,23 +679,23 @@ function renderProfile(){
   const tiers=['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
   el.innerHTML=`
     <div class="card">
-      <h3>${p.full_name||p.email}</h3>
-      <p class="text-muted">${p.trade||'No trade set'} · Tier: ${tiers[p.tier||1]||'Verified'}</p>
-      ${p.rating>0?`<p class="text-muted" style="margin-top:4px">★ ${p.rating} · ${p.repeat_hire_rate}% repeat hire</p>`:''}
+      <h3>${eh(p.full_name||p.email)}</h3>
+      <p class="text-muted">${eh(p.trade||'No trade set')} · Tier: ${eh(tiers[p.tier||1]||'Verified')}</p>
+      ${p.rating>0?`<p class="text-muted" style="margin-top:4px">★ ${eh(p.rating)} · ${eh(p.repeat_hire_rate)}% repeat hire</p>`:''}
     </div>
     <div class="card">
       <h3>Edit Profile</h3>
       <label>Full Name</label>
-      <input id="edit-name" value="${p.full_name||''}"/>
+      <input id="edit-name" value="${eh(p.full_name||'')}"/>
       <label>Company</label>
-      <input id="edit-company" value="${p.company||''}"/>
+      <input id="edit-company" value="${eh(p.company||'')}"/>
       <label>Trade</label>
       <select id="edit-trade">
         ${['Framing','Concrete','Roofing','Electrical','Plumbing','HVAC','Drywall','Flooring','Excavation','Landscaping','General Contractor','Other']
           .map(t=>`<option ${p.trade===t?'selected':''}>${t}</option>`).join('')}
       </select>
       <label>Phone</label>
-      <input id="edit-phone" value="${p.phone||''}" placeholder="435-555-0100"/>
+      <input id="edit-phone" value="${eh(p.phone||'')}" placeholder="435-555-0100"/>
       <button class="btn btn-primary btn-block" onclick="saveProfile()">Save</button>
     </div>
     <button class="btn btn-outline btn-block mt8" onclick="signOut()">Sign Out</button>
@@ -693,7 +737,7 @@ async function admLoadUsers(){
   const el = document.getElementById('adm-users');
   el.innerHTML = '<p class="text-muted" style="padding:20px 0">Loading…</p>';
   const {data,error} = await sb.from('profiles').select('id,email,full_name,tier,jobs_completed,is_admin').order('created_at',{ascending:false});
-  if (error){el.innerHTML = `<p class="text-muted" style="padding:20px 0">Could not load users. ${error.message}</p>`;return;}
+  if (error){el.innerHTML = `<p class="text-muted" style="padding:20px 0">Could not load users. ${eh(error.message)}</p>`;return;}
   admRenderUsers(data||[]);
 }
 function admRenderUsers(users){
@@ -703,13 +747,16 @@ function admRenderUsers(users){
     <div class="card">
       <div class="adm-row">
         <div>
-          <h3>${u.full_name||u.email}</h3>
-          <p class="text-muted">Tier ${u.tier!=null?u.tier:'--'} · ${u.jobs_completed||0} jobs done</p>
+          <h3>${eh(u.full_name||u.email)}</h3>
+          <p class="text-muted">Tier ${u.tier!=null?eh(u.tier):'--'} · ${u.jobs_completed||0} jobs done</p>
         </div>
         <span class="adm-badge ${u.is_admin?'adm-badge-admin':'adm-badge-user'}">${u.is_admin?'Admin':'User'}</span>
       </div>
-      <button class="btn btn-sm mt8 ${u.is_admin?'btn-outline':'btn-primary'}" onclick="admSetAdmin('${u.id}',${!u.is_admin})">${u.is_admin?'Revoke Admin':'Make Admin'}</button>
+      <button class="btn btn-sm mt8 ${u.is_admin?'btn-outline':'btn-primary'} adm-set-admin-btn" data-user-id="${eh(u.id)}" data-make-admin="${!u.is_admin}">${u.is_admin?'Revoke Admin':'Make Admin'}</button>
     </div>`).join('');
+  el.querySelectorAll('.adm-set-admin-btn').forEach(btn => {
+    btn.addEventListener('click', () => admSetAdmin(btn.dataset.userId, btn.dataset.makeAdmin === 'true'));
+  });
 }
 async function admSetAdmin(id,value){
   if (!confirm(value?'Grant full administrator access to this user?':'Revoke administrator access from this user?')) return;
@@ -721,7 +768,7 @@ async function admLoadJobs(){
   const el = document.getElementById('adm-jobs');
   el.innerHTML = '<p class="text-muted" style="padding:20px 0">Loading…</p>';
   const {data,error} = await sb.from('jobs').select('id,title,trade,owner_id,status').order('created_at',{ascending:false});
-  if (error){el.innerHTML = `<p class="text-muted" style="padding:20px 0">Could not load jobs. ${error.message}</p>`;return;}
+  if (error){el.innerHTML = `<p class="text-muted" style="padding:20px 0">Could not load jobs. ${eh(error.message)}</p>`;return;}
   const jobs = data||[];
   const ids = [...new Set(jobs.map(j=>j.owner_id).filter(Boolean))];
   const profiles = await admFetchProfiles(ids);
@@ -743,16 +790,22 @@ function admRenderJobs(jobs,profiles){
     const posterName = poster ? (poster.full_name||poster.email) : '--';
     return `
     <div class="card">
-      <h3>${j.title}</h3>
-      <p class="text-muted">${j.trade||'--'} · Posted by ${posterName}</p>
+      <h3>${eh(j.title)}</h3>
+      <p class="text-muted">${eh(j.trade||'--')} · Posted by ${eh(posterName)}</p>
       <div class="flex gap8 mt8" style="align-items:center;flex-wrap:wrap">
-        <select style="width:auto;margin-bottom:0" onchange="admUpdateJobStatus('${j.id}',this.value)">
+        <select class="adm-job-status" data-job-id="${eh(j.id)}" style="width:auto;margin-bottom:0">
           ${statuses.map(s=>`<option value="${s}" ${s===j.status?'selected':''}>${s}</option>`).join('')}
         </select>
-        <button class="btn btn-danger btn-sm" onclick="admDeleteJob('${j.id}')">Delete</button>
+        <button class="btn btn-danger btn-sm adm-delete-job-btn" data-job-id="${eh(j.id)}">Delete</button>
       </div>
     </div>`;
   }).join('');
+  el.querySelectorAll('.adm-job-status').forEach(sel => {
+    sel.addEventListener('change', () => admUpdateJobStatus(sel.dataset.jobId, sel.value));
+  });
+  el.querySelectorAll('.adm-delete-job-btn').forEach(btn => {
+    btn.addEventListener('click', () => admDeleteJob(btn.dataset.jobId));
+  });
 }
 async function admUpdateJobStatus(id,status){
   const {error} = await sb.from('jobs').update({status}).eq('id',id);
@@ -792,6 +845,17 @@ async function submitRating(){
 function closeOverlay(id){document.getElementById(id).classList.remove('open');}
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
+document.getElementById('work-content').addEventListener('click', (e) => {
+  const applyBtn = e.target.closest('.apply-job-btn');
+  if (applyBtn) applyToJob(applyBtn.dataset.jobId, applyBtn);
+  const rateBtn = e.target.closest('.rate-job-btn');
+  if (rateBtn) openRating(rateBtn.dataset.jobId, rateBtn.dataset.ownerId);
+});
+document.getElementById('draws-content').addEventListener('click', (e) => {
+  const btn = e.target.closest('.draw-action-btn');
+  if (btn) drawAction(btn.dataset.drawId, btn.dataset.action);
+});
+
 (async()=>{
   const {data:{session}} = await sb.auth.getSession();
   if (session?.user) await onLogin(session.user);

@@ -42,14 +42,9 @@ principles baked into every feature decision:
 - `app.py` — Flask API (Stripe Connect, escrow, AI photo review). Belongs in
   the `tradedeck-api` repo for deployment; included here for reference. All
   routes except `/` and `/stripe/webhook` require a Supabase JWT.
-- CSP note: `_headers` and `app.html`'s own CSP meta tag were both updated
-  to allow `fonts.googleapis.com`/`fonts.gstatic.com` (Google Fonts, used
-  by `app.html`) and `tradedeck-api.onrender.com` (the backend's `/api/jobs`
-  call in the hero section) in addition to the existing Supabase allowance.
-  If you add a new external call from either file, you must add its host
-  to **both** `_headers` and the CSP meta tag, or Netlify's CSP header will
-  silently block it in production (a local `file://` test won't catch
-  this — CSP host-matching behaves differently there; test over http(s)).
+- CompanyCam tab calls the live `api.companycam.com` API when a user pastes their access token (still stored in localStorage — move to a backend proxy when ready for production).
+- Draw approve actions in both frontends call `POST /draws/:id/approve` on tradedeck-api (releases Stripe escrow when a record exists).
+- Shared helpers live in `js/tradedeck-shared.js` (`escapeHtml`, `apiPost`).
 
 ## Live Supabase schema (verified against production, Sep 2026)
 

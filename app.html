@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TradeDeck -- Hire the Trade. Find the Work.</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; connect-src 'self' https://*.supabase.co https://*.supabase.io wss://*.supabase.co https://tradedeck-api.onrender.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src fonts.gstatic.com; img-src 'self' data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; connect-src 'self' https://*.supabase.co https://*.supabase.io wss://*.supabase.co https://tradedeck-api.onrender.com https://api.companycam.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src fonts.gstatic.com; img-src 'self' data: https:;">
+<script src="js/tradedeck-shared.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -894,6 +895,12 @@ const { createClient } = supabase;
 const SUPABASE_URL = 'https://jlaajejpqjldpbinktln.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW5rdGxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMDg3MTksImV4cCI6MjEwMTc4NDcxOX0.tP-seLGoJnivrYmNhhTDmDJw4Uk92D95-zrwWB1G_S4';
 const db = createClient(SUPABASE_URL, SUPABASE_ANON);
+const eh = TradeDeck.escapeHtml;
+
+async function getAccessToken() {
+  var sessionRes = await db.auth.getSession();
+  return sessionRes.data.session ? sessionRes.data.session.access_token : null;
+}
 
 function showApp(session) {
   document.getElementById('auth-loading-overlay').style.display = 'none';
@@ -1088,15 +1095,15 @@ document.addEventListener('DOMContentLoaded', function() {
       var job = jobs[0];
       document.getElementById('heroCard').innerHTML =
         '<div class="bc-header">' +
-          '<div><div class="bc-title">' + job.title + '</div>' +
-          '<div class="bc-subtitle">' + (job.location || '--') + ' &middot; ' + job.age + '</div></div>' +
+          '<div><div class="bc-title">' + eh(job.title) + '</div>' +
+          '<div class="bc-subtitle">' + eh(job.location || '--') + ' &middot; ' + eh(job.age) + '</div></div>' +
           '<span class="badge badge-open">Open</span>' +
         '</div>' +
         '<div class="bc-fields">' +
-          '<div class="bc-field"><label>Trade</label><div class="val">' + (job.trade || '--') + '</div></div>' +
-          '<div class="bc-field"><label>Pay</label><div class="val">' + (job.rate || '--') + '</div></div>' +
-          '<div class="bc-field"><label>County</label><div class="val">' + (job.county || '--') + '</div></div>' +
-          '<div class="bc-field"><label>Start</label><div class="val">' + (job.start_date || '--') + '</div></div>' +
+          '<div class="bc-field"><label>Trade</label><div class="val">' + eh(job.trade || '--') + '</div></div>' +
+          '<div class="bc-field"><label>Pay</label><div class="val">' + eh(job.rate || '--') + '</div></div>' +
+          '<div class="bc-field"><label>County</label><div class="val">' + eh(job.county || '--') + '</div></div>' +
+          '<div class="bc-field"><label>Start</label><div class="val">' + eh(job.start_date || '--') + '</div></div>' +
         '</div>' +
         '<hr class="bc-divider">' +
         '<div class="bc-footer">' +
@@ -1154,14 +1161,14 @@ document.addEventListener('DOMContentLoaded', function() {
         card.dataset.location = job.location || '';
         var isOwnJob = job.owner_id === uid;
         card.innerHTML =
-          '<div class="jc-head"><div><div class="jc-title">' + job.title + '</div>' +
-          '<div class="jc-meta">' + (job.location || '--') + ' &middot; ' + job.age + '</div></div>' +
+          '<div class="jc-head"><div><div class="jc-title">' + eh(job.title) + '</div>' +
+          '<div class="jc-meta">' + eh(job.location || '--') + ' &middot; ' + eh(job.age) + '</div></div>' +
           '<span class="badge badge-open">Open</span></div>' +
           '<div class="jc-fields">' +
-          '<div class="jc-field"><label>Trade</label><div class="jval">' + (job.trade || '--') + '</div></div>' +
-          '<div class="jc-field"><label>County</label><div class="jval">' + (job.county || '--') + '</div></div>' +
-          '<div class="jc-field"><label>Pay</label><div class="jval">' + (job.rate || '--') + '</div></div>' +
-          '<div class="jc-field"><label>Start</label><div class="jval">' + (job.start_date || '--') + '</div></div>' +
+          '<div class="jc-field"><label>Trade</label><div class="jval">' + eh(job.trade || '--') + '</div></div>' +
+          '<div class="jc-field"><label>County</label><div class="jval">' + eh(job.county || '--') + '</div></div>' +
+          '<div class="jc-field"><label>Pay</label><div class="jval">' + eh(job.rate || '--') + '</div></div>' +
+          '<div class="jc-field"><label>Start</label><div class="jval">' + eh(job.start_date || '--') + '</div></div>' +
           '</div>' +
           '<div class="jc-footer">' +
           '<span class="bc-apply-count">' + job.applicants + ' applicant' + (job.applicants!==1?'s':'') + '</span>' +
@@ -1347,71 +1354,105 @@ document.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeFlow(); });
 
   /* --- COMPANYCAM --- */
-  var CC_KEY='td_cc_api_key';
-  var ccApiKey='';
-  try { ccApiKey=localStorage.getItem(CC_KEY)||''; } catch(e){}
+  var CC_KEY = 'td_cc_api_key';
+  var CC_API = 'https://api.companycam.com/v2';
+  var ccApiKey = '';
+  var ccProjectsCache = [];
+  try { ccApiKey = localStorage.getItem(CC_KEY) || ''; } catch (e) {}
 
-  var mockProjects=[
-    {id:'proj_001',name:'Park City Framing -- Lot 14'},
-    {id:'proj_002',name:'Heber Concrete Flatwork'},
-    {id:'proj_003',name:'Kamas Metal Roof'}
-  ];
+  function ccFormatDate(value) {
+    if (!value) return '--';
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return '--';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
 
-  var mockPhotos=[
-    {id:1,caption:'Foundation forms set',date:'Jul 22',tag:'Before',project:'proj_001'},
-    {id:2,caption:'First floor framing complete',date:'Jul 23',tag:'Progress',project:'proj_001'},
-    {id:3,caption:'Roof trusses delivered',date:'Jul 24',tag:'Progress',project:'proj_001'},
-    {id:4,caption:'Concrete pour -- driveway',date:'Jul 21',tag:'During',project:'proj_002'},
-    {id:5,caption:'Flatwork finished -- Day 1',date:'Jul 22',tag:'Progress',project:'proj_002'},
-    {id:6,caption:'Metal panels -- north face',date:'Jul 20',tag:'Progress',project:'proj_003'}
-  ];
+  function ccPhotoUrl(photo) {
+    if (!photo || !photo.uris) return '';
+    return photo.uris.thumbnail || photo.uris.small || photo.uris.original || photo.uris.web || '';
+  }
+
+  async function ccApi(path) {
+    var res = await fetch(CC_API + path, {
+      headers: { Authorization: 'Bearer ' + ccApiKey, Accept: 'application/json' }
+    });
+    if (!res.ok) throw new Error('CompanyCam API error ' + res.status);
+    return res.json();
+  }
 
   function ccInit() {
     if (ccApiKey) {
-      document.getElementById('ccConnectBanner').style.display='none';
-      document.getElementById('ccConnected').style.display='block';
+      document.getElementById('ccConnectBanner').style.display = 'none';
+      document.getElementById('ccConnected').style.display = 'block';
       ccLoadProjects();
     }
   }
 
-  function ccLoadProjects() {
-    /* LIVE API: GET https://api.companycam.com/v2/projects
-       Headers: { Authorization: 'Bearer ' + ccApiKey }
-       Replace mockProjects array above with live response data */
-    var select=document.getElementById('ccJobSelect');
-    select.innerHTML='<option value="">All Projects</option>';
-    mockProjects.forEach(function(p){
-      var opt=document.createElement('option');
-      opt.value=p.id; opt.textContent=p.name; select.appendChild(opt);
-    });
-    document.getElementById('ccTotalProjects').textContent=mockProjects.length;
-    ccLoadPhotos('');
+  async function ccLoadProjects() {
+    var select = document.getElementById('ccJobSelect');
+    select.innerHTML = '<option value="">All Projects</option>';
+    try {
+      var data = await ccApi('/projects?per_page=50');
+      ccProjectsCache = Array.isArray(data) ? data : [];
+      ccProjectsCache.forEach(function(p) {
+        var opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name || p.project_name || ('Project ' + p.id);
+        select.appendChild(opt);
+      });
+      document.getElementById('ccTotalProjects').textContent = ccProjectsCache.length;
+      ccLoadPhotos('');
+    } catch (e) {
+      alert('Could not load CompanyCam projects. ' + e.message);
+    }
   }
 
-  function ccLoadPhotos(projectId) {
-    /* LIVE API: GET https://api.companycam.com/v2/photos?project_id=projectId
-       Headers: { Authorization: 'Bearer ' + ccApiKey }
-       Replace mockPhotos array above with live response data */
-    var grid=document.getElementById('ccPhotosGrid');
-    var empty=document.getElementById('ccEmpty');
-    grid.innerHTML='';
-    var filtered=projectId ? mockPhotos.filter(function(p){ return p.project===projectId; }) : mockPhotos;
-    if (!filtered.length) { empty.style.display='block'; return; }
-    empty.style.display='none';
-    document.getElementById('ccTotalPhotos').textContent=filtered.length;
-    document.getElementById('ccThisWeek').textContent=filtered.filter(function(p){ return ['Jul 22','Jul 23','Jul 24'].indexOf(p.date)>-1; }).length;
-    filtered.forEach(function(photo) {
-      var card=document.createElement('div');
-      card.className='cc-photo-card';
-      card.innerHTML=
-        '<div class="cc-photo-img-placeholder">Photo ' + photo.id + '</div>' +
-        '<div class="cc-photo-meta">' +
-        '<div class="cc-photo-caption">'+photo.caption+'</div>' +
-        '<div class="cc-photo-date">'+photo.date+'</div>' +
-        '<span class="cc-photo-tag">'+photo.tag+'</span>' +
-        '</div>';
-      grid.appendChild(card);
-    });
+  async function ccLoadPhotos(projectId) {
+    var grid = document.getElementById('ccPhotosGrid');
+    var empty = document.getElementById('ccEmpty');
+    grid.innerHTML = '';
+    try {
+      var photos = [];
+      if (projectId) {
+        var data = await ccApi('/projects/' + encodeURIComponent(projectId) + '/photos?per_page=50');
+        photos = Array.isArray(data) ? data : [];
+      } else {
+        var projects = ccProjectsCache.slice(0, 5);
+        for (var i = 0; i < projects.length; i++) {
+          var batch = await ccApi('/projects/' + encodeURIComponent(projects[i].id) + '/photos?per_page=20');
+          photos = photos.concat(Array.isArray(batch) ? batch : []);
+        }
+      }
+      if (!photos.length) { empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+      document.getElementById('ccTotalPhotos').textContent = photos.length;
+      var weekAgo = Date.now() - (7 * 86400000);
+      document.getElementById('ccThisWeek').textContent = photos.filter(function(p) {
+        var t = new Date(p.captured_at || p.created_at || 0).getTime();
+        return !isNaN(t) && t >= weekAgo;
+      }).length;
+      photos.forEach(function(photo) {
+        var card = document.createElement('div');
+        card.className = 'cc-photo-card';
+        var url = ccPhotoUrl(photo);
+        var caption = photo.description || photo.caption || 'Site photo';
+        var date = ccFormatDate(photo.captured_at || photo.created_at);
+        var tag = (photo.tags && photo.tags[0] && (photo.tags[0].name || photo.tags[0])) || 'Photo';
+        card.innerHTML =
+          (url
+            ? '<img src="' + eh(url) + '" alt="" style="width:100%;aspect-ratio:4/3;object-fit:cover">'
+            : '<div class="cc-photo-img-placeholder">No preview</div>') +
+          '<div class="cc-photo-meta">' +
+          '<div class="cc-photo-caption">' + eh(caption) + '</div>' +
+          '<div class="cc-photo-date">' + eh(date) + '</div>' +
+          '<span class="cc-photo-tag">' + eh(tag) + '</span>' +
+          '</div>';
+        grid.appendChild(card);
+      });
+    } catch (e) {
+      empty.style.display = 'block';
+      empty.textContent = 'Could not load photos. ' + e.message;
+    }
   }
 
   document.getElementById('ccConnectBtn').addEventListener('click',function(){
@@ -1488,13 +1529,13 @@ document.addEventListener('DOMContentLoaded', function() {
       var card = document.createElement('div');
       card.className = 'dm-job-card';
 
-      var head = '<div class="dm-job-head"><div><div class="dm-job-title">' + job.title + '</div>' +
+      var head = '<div class="dm-job-head"><div><div class="dm-job-title">' + eh(job.title) + '</div>' +
         '<div class="dm-job-meta">' + (isOwner ? 'You posted this job' : '') + '</div></div>' +
         (schedule ? '<div class="dm-contract-value">$' + Number(schedule.contract_value).toLocaleString() + '</div>' : '') +
         '</div>';
 
       if (!schedule) {
-        head += '<div class="dm-setup-banner"><p>No draw schedule set up yet for this job.</p><button class="btn-primary dm-open-setup" style="font-size:0.78rem;padding:9px 16px;" data-job-id="' + job.id + '" data-job-title="' + job.title.replace(/"/g,'&quot;') + '">Set Up Draw Schedule</button></div>';
+        head += '<div class="dm-setup-banner"><p>No draw schedule set up yet for this job.</p><button class="btn-primary dm-open-setup" style="font-size:0.78rem;padding:9px 16px;" data-job-id="' + eh(job.id) + '" data-job-title="' + eh(job.title) + '">Set Up Draw Schedule</button></div>';
         card.innerHTML = head;
         body.appendChild(card);
         return;
@@ -1513,14 +1554,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         msHtml += '<div class="dm-milestone">' +
           '<div class="dm-milestone-main">' +
-          '<div class="dm-milestone-name">' + d.milestone_name + '</div>' +
-          '<div class="dm-milestone-pct">' + d.percentage + '%</div>' +
+          '<div class="dm-milestone-name">' + eh(d.milestone_name) + '</div>' +
+          '<div class="dm-milestone-pct">' + eh(d.percentage) + '%</div>' +
           '<div class="dm-milestone-verifier">Verified by ' + (d.verifier_type === 'owner' ? 'Owner' : 'Inspector') + '</div>' +
           '</div>' +
           '<div class="dm-actions">' +
           dmStatusBadge(d.status) +
-          (canSubmit ? '<button class="dm-btn dm-btn-submit dm-submit-btn" data-id="' + d.id + '">Submit</button>' : '') +
-          (canApprove ? '<button class="dm-btn dm-btn-approve dm-decide-btn" data-id="' + d.id + '" data-decision="approved">Approve</button><button class="dm-btn dm-btn-dispute dm-decide-btn" data-id="' + d.id + '" data-decision="disputed">Dispute</button>' : '') +
+          (canSubmit ? '<button class="dm-btn dm-btn-submit dm-submit-btn" data-id="' + eh(d.id) + '">Submit</button>' : '') +
+          (canApprove ? '<button class="dm-btn dm-btn-approve dm-decide-btn" data-id="' + eh(d.id) + '" data-decision="approved">Approve</button><button class="dm-btn dm-btn-dispute dm-decide-btn" data-id="' + eh(d.id) + '" data-decision="disputed">Dispute</button>' : '') +
           '</div></div>';
       });
       msHtml += '</div>';
@@ -1548,9 +1589,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
   async function dmDecideMilestone(id, decision) {
     if (decision === 'disputed' && !confirm('Mark this milestone as disputed?')) return;
-    var patch = { status: decision };
-    if (decision === 'approved') { patch.approved_at = new Date().toISOString(); }
-    if (decision === 'disputed') { patch.resolved_at = new Date().toISOString(); }
+    if (decision === 'approved') {
+      try {
+        await TradeDeck.apiPost('/draws/' + encodeURIComponent(id) + '/approve', getAccessToken);
+        loadDrawManager();
+        return;
+      } catch (e) {
+        alert('Could not approve draw. ' + e.message);
+        return;
+      }
+    }
+    var patch = { status: decision, resolved_at: new Date().toISOString() };
     var res = await db.from('draws').update(patch).eq('id', id);
     if (res.error) { alert('Could not update milestone. ' + res.error.message); return; }
     loadDrawManager();
@@ -1721,7 +1770,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var body = document.getElementById('admUsersBody');
     body.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--steel);">Loading...</div>';
     var res = await db.from('profiles').select('id,email,full_name,tier,jobs_completed,is_admin').order('created_at', { ascending: false });
-    if (res.error) { body.innerHTML = '<div class="adm-empty">Could not load users. ' + res.error.message + '</div>'; return; }
+    if (res.error) { body.innerHTML = '<div class="adm-empty">Could not load users. ' + eh(res.error.message) + '</div>'; return; }
     admRenderUsers(res.data || []);
   }
 
@@ -1731,14 +1780,14 @@ document.addEventListener('DOMContentLoaded', function() {
     var html = '<table class="adm-table"><thead><tr><th>Name</th><th>Email</th><th>Tier</th><th>Jobs Done</th><th>Role</th><th></th></tr></thead><tbody>';
     users.forEach(function(u) {
       html += '<tr>' +
-        '<td>' + (u.full_name || '--') + '</td>' +
-        '<td>' + (u.email || '--') + '</td>' +
-        '<td>' + (u.tier != null ? u.tier : '--') + '</td>' +
-        '<td>' + (u.jobs_completed != null ? u.jobs_completed : 0) + '</td>' +
+        '<td>' + eh(u.full_name || '--') + '</td>' +
+        '<td>' + eh(u.email || '--') + '</td>' +
+        '<td>' + (u.tier != null ? eh(u.tier) : '--') + '</td>' +
+        '<td>' + (u.jobs_completed != null ? eh(u.jobs_completed) : 0) + '</td>' +
         '<td>' + (u.is_admin ? '<span class="adm-badge adm-badge-admin">Admin</span>' : '<span class="adm-badge adm-badge-user">User</span>') + '</td>' +
         '<td>' + (u.is_admin
-          ? '<button class="adm-btn adm-btn-revoke adm-revoke-btn" data-id="' + u.id + '">Revoke Admin</button>'
-          : '<button class="adm-btn adm-btn-grant adm-grant-btn" data-id="' + u.id + '">Make Admin</button>') +
+          ? '<button class="adm-btn adm-btn-revoke adm-revoke-btn" data-id="' + eh(u.id) + '">Revoke Admin</button>'
+          : '<button class="adm-btn adm-btn-grant adm-grant-btn" data-id="' + eh(u.id) + '">Make Admin</button>') +
         '</td></tr>';
     });
     html += '</tbody></table>';
@@ -1766,7 +1815,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var body = document.getElementById('admJobsBody');
     body.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--steel);">Loading...</div>';
     var jobsRes = await db.from('jobs').select('id,title,trade,status,owner_id,location').order('created_at', { ascending: false });
-    if (jobsRes.error) { body.innerHTML = '<div class="adm-empty">Could not load jobs. ' + jobsRes.error.message + '</div>'; return; }
+    if (jobsRes.error) { body.innerHTML = '<div class="adm-empty">Could not load jobs. ' + eh(jobsRes.error.message) + '</div>'; return; }
     var jobs = jobsRes.data || [];
     var ids = [];
     jobs.forEach(function(j) {
@@ -1783,14 +1832,14 @@ document.addEventListener('DOMContentLoaded', function() {
     var html = '<table class="adm-table"><thead><tr><th>Title</th><th>Trade</th><th>Location</th><th>Posted By</th><th>Status</th><th></th></tr></thead><tbody>';
     jobs.forEach(function(j) {
       html += '<tr>' +
-        '<td>' + (j.title || '--') + '</td>' +
-        '<td>' + (j.trade || '--') + '</td>' +
-        '<td>' + (j.location || '--') + '</td>' +
-        '<td>' + dmName(profiles, j.owner_id) + '</td>' +
-        '<td><select class="adm-select adm-status-select" data-id="' + j.id + '">' +
+        '<td>' + eh(j.title || '--') + '</td>' +
+        '<td>' + eh(j.trade || '--') + '</td>' +
+        '<td>' + eh(j.location || '--') + '</td>' +
+        '<td>' + eh(dmName(profiles, j.owner_id)) + '</td>' +
+        '<td><select class="adm-select adm-status-select" data-id="' + eh(j.id) + '">' +
           statuses.map(function(s){ return '<option value="' + s + '"' + (s === j.status ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
           '</select></td>' +
-        '<td><button class="adm-btn adm-btn-delete adm-delete-job-btn" data-id="' + j.id + '">Delete</button></td>' +
+        '<td><button class="adm-btn adm-btn-delete adm-delete-job-btn" data-id="' + eh(j.id) + '">Delete</button></td>' +
         '</tr>';
     });
     html += '</tbody></table>';

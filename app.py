@@ -236,13 +236,13 @@ def get_draw(draw_id):
 def approve_draw(draw_id):
     try:
         supabase.table("draws").update({
-            "status": "owner_approved",
+            "status": "approved",
             "approved_at": _utcnow(),
         }).eq("id", draw_id).execute()
         tid, err = _release(draw_id)
         if err:
-            return jsonify({"error": err}), 404
-        return jsonify({"success": True, "transfer_id": tid})
+            return jsonify({"success": True, "escrow_released": False, "warning": err})
+        return jsonify({"success": True, "escrow_released": True, "transfer_id": tid})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
