@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TradeDeck -- Hire the Trade. Find the Work.</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; connect-src 'self' https://*.supabase.co https://*.supabase.io wss://*.supabase.co https://tradedeck-api.onrender.com https://api.companycam.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src fonts.gstatic.com; img-src 'self' data: https:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; connect-src 'self' https://*.supabase.co https://*.supabase.io wss://*.supabase.co https://tradedeck-api.onrender.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src fonts.gstatic.com; img-src 'self' data:;">
 <script src="js/tradedeck-shared.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -120,34 +120,13 @@ nav a:hover{color:var(--white)}
 .ls-link{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.78rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--amber);text-decoration:none;white-space:nowrap;padding:6px 12px;border:1px solid rgba(245,166,35,0.3);border-radius:var(--radius);transition:all 0.15s}
 .ls-link:hover{background:var(--amber);color:var(--navy)}
 .fw-empty{text-align:center;padding:60px 20px;color:var(--steel)}
-/* COMPANYCAM */
+/* PAGE SECTION HEADER (Draw Manager, Admin) */
 .cc-header{background:linear-gradient(135deg,var(--slate) 0%,#232840 100%);border-bottom:1px solid var(--line);padding:48px 40px 40px}
 .cc-header-inner{max-width:1100px;margin:0 auto}
 .cc-eyebrow{font-family:'Barlow Condensed',sans-serif;font-size:0.75rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--amber);margin-bottom:10px}
 .cc-header h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(2rem,4vw,3rem);text-transform:uppercase;color:var(--white);line-height:1;margin-bottom:10px}
 .cc-header p{color:var(--steel);font-size:0.9rem;max-width:520px}
 .cc-body{max-width:1100px;margin:0 auto;padding:32px 40px 60px}
-.cc-connect-banner{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:32px;text-align:center;margin-bottom:28px}
-.cc-connect-banner h3{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.2rem;text-transform:uppercase;color:var(--white);margin-bottom:8px}
-.cc-connect-banner p{color:var(--steel);font-size:0.875rem;margin-bottom:18px}
-.cc-api-input{background:var(--navy);border:1px solid rgba(139,155,180,0.3);border-radius:var(--radius);color:var(--concrete);font-family:'Inter',sans-serif;font-size:0.875rem;padding:10px 14px;outline:none;width:100%;max-width:400px;margin:0 auto 12px;display:block}
-.cc-api-input:focus{border-color:var(--amber)}
-.cc-stats{display:flex;gap:24px;margin-bottom:28px;flex-wrap:wrap}
-.cc-stat{background:var(--slate);border:1px solid var(--line);border-radius:6px;padding:16px 20px;flex:1;min-width:120px}
-.cc-stat .num{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.8rem;color:var(--amber);line-height:1}
-.cc-stat .lbl{font-size:0.72rem;color:var(--steel);text-transform:uppercase;letter-spacing:0.08em;margin-top:4px}
-.cc-toolbar{display:flex;gap:12px;align-items:center;margin-bottom:24px;flex-wrap:wrap}
-.cc-job-select{background:var(--slate);border:1px solid rgba(139,155,180,0.3);border-radius:var(--radius);color:var(--concrete);font-family:'Inter',sans-serif;font-size:0.875rem;padding:9px 14px;outline:none;appearance:none;min-width:200px;cursor:pointer}
-.cc-job-select:focus{border-color:var(--amber)}
-.cc-photos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
-.cc-photo-card{background:var(--slate);border:1px solid var(--line);border-radius:6px;overflow:hidden;transition:border-color 0.15s,transform 0.15s}
-.cc-photo-card:hover{border-color:rgba(139,155,180,0.5);transform:translateY(-2px)}
-.cc-photo-img-placeholder{width:100%;aspect-ratio:4/3;background:var(--navy);display:flex;align-items:center;justify-content:center;color:var(--steel);font-size:0.8rem;letter-spacing:0.1em;text-transform:uppercase;font-family:'Barlow Condensed',sans-serif;font-weight:700}
-.cc-photo-meta{padding:10px 12px}
-.cc-photo-caption{font-size:0.82rem;color:var(--concrete);font-weight:500;margin-bottom:4px}
-.cc-photo-date{font-size:0.72rem;color:var(--steel)}
-.cc-photo-tag{display:inline-block;font-family:'Barlow Condensed',sans-serif;font-size:0.65rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:2px 7px;border-radius:2px;border:1px solid rgba(245,166,35,0.4);color:var(--amber);background:rgba(245,166,35,0.06);margin-top:4px}
-.cc-empty{text-align:center;padding:60px 20px;color:var(--steel)}
 /* FLOW */
 .flow-overlay{display:none;position:fixed;inset:0;background:rgba(10,12,20,0.88);z-index:200;align-items:center;justify-content:center;padding:20px}
 .flow-overlay.active{display:flex}
@@ -356,7 +335,6 @@ footer p{font-size:0.8rem;color:var(--steel)}
 <div class="page-tab-bar">
   <button class="page-tab active" data-page="home">Home</button>
   <button class="page-tab" data-page="findwork">Find Work</button>
-  <button class="page-tab" data-page="sitephotos">Site Photos</button>
   <button class="page-tab" data-page="drawmanager">Draw Manager</button>
   <button class="page-tab" data-page="postjob">Post a Job</button>
   <button class="page-tab" data-page="admin" id="adminTabBtn" style="display:none;">Admin</button>
@@ -663,43 +641,6 @@ footer p{font-size:0.8rem;color:var(--steel)}
 
       </div>
       <div class="fw-empty" id="sourcesEmpty" style="display:none;"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.4rem;text-transform:uppercase;color:var(--steel);">No Sources Match</div><p style="font-size:0.875rem;margin-top:8px;">Try clearing your filters.</p></div>
-    </div>
-  </div>
-</div>
-
-<!-- SITE PHOTOS (CompanyCam) -->
-<div class="page-view" id="page-sitephotos">
-  <div class="cc-header">
-    <div class="cc-header-inner">
-      <div class="cc-eyebrow">Powered by CompanyCam</div>
-      <h2>Job Site Photos</h2>
-      <p>Every job documented. Before, during, and after -- tied to the project, visible to the crew.</p>
-    </div>
-  </div>
-  <div class="cc-body">
-    <div class="cc-connect-banner" id="ccConnectBanner">
-      <h3>Connect CompanyCam</h3>
-      <p>Paste your CompanyCam API key to pull job site photos directly into TradeDeck.</p>
-      <input type="text" class="cc-api-input" id="ccApiKeyInput" placeholder="Paste CompanyCam API key here...">
-      <button class="btn-primary" id="ccConnectBtn">Connect</button>
-      <p style="margin-top:14px;font-size:0.78rem;color:var(--steel);">Find your key: app.companycam.com &rarr; Account &rarr; API</p>
-    </div>
-    <div id="ccConnected" style="display:none;">
-      <div class="cc-stats">
-        <div class="cc-stat"><div class="num" id="ccTotalPhotos">--</div><div class="lbl">Total Photos</div></div>
-        <div class="cc-stat"><div class="num" id="ccTotalProjects">--</div><div class="lbl">Projects</div></div>
-        <div class="cc-stat"><div class="num" id="ccThisWeek">--</div><div class="lbl">This Week</div></div>
-      </div>
-      <div class="cc-toolbar">
-        <select class="cc-job-select" id="ccJobSelect"><option value="">All Projects</option></select>
-        <button class="btn-ghost" id="ccRefreshBtn" style="font-size:0.8rem;padding:9px 16px;">Refresh</button>
-        <button class="btn-ghost" id="ccDisconnectBtn" style="font-size:0.8rem;padding:9px 16px;border-color:rgba(255,100,100,0.4);color:rgba(255,100,100,0.8);">Disconnect</button>
-      </div>
-      <div class="cc-photos-grid" id="ccPhotosGrid"></div>
-      <div class="cc-empty" id="ccEmpty" style="display:none;">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:1.4rem;text-transform:uppercase;color:var(--steel);">No Photos Yet</div>
-        <p style="font-size:0.875rem;margin-top:8px;">Photos added in CompanyCam appear here automatically.</p>
-      </div>
     </div>
   </div>
 </div>
@@ -1352,130 +1293,6 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('step3Submit').addEventListener('click',submitPost);
   document.getElementById('flowOverlay').addEventListener('click',function(e){ if(e.target===this) closeFlow(); });
   document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeFlow(); });
-
-  /* --- COMPANYCAM --- */
-  var CC_KEY = 'td_cc_api_key';
-  var CC_API = 'https://api.companycam.com/v2';
-  var ccApiKey = '';
-  var ccProjectsCache = [];
-  try { ccApiKey = localStorage.getItem(CC_KEY) || ''; } catch (e) {}
-
-  function ccFormatDate(value) {
-    if (!value) return '--';
-    var d = new Date(value);
-    if (isNaN(d.getTime())) return '--';
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  }
-
-  function ccPhotoUrl(photo) {
-    if (!photo || !photo.uris) return '';
-    return photo.uris.thumbnail || photo.uris.small || photo.uris.original || photo.uris.web || '';
-  }
-
-  async function ccApi(path) {
-    var res = await fetch(CC_API + path, {
-      headers: { Authorization: 'Bearer ' + ccApiKey, Accept: 'application/json' }
-    });
-    if (!res.ok) throw new Error('CompanyCam API error ' + res.status);
-    return res.json();
-  }
-
-  function ccInit() {
-    if (ccApiKey) {
-      document.getElementById('ccConnectBanner').style.display = 'none';
-      document.getElementById('ccConnected').style.display = 'block';
-      ccLoadProjects();
-    }
-  }
-
-  async function ccLoadProjects() {
-    var select = document.getElementById('ccJobSelect');
-    select.innerHTML = '<option value="">All Projects</option>';
-    try {
-      var data = await ccApi('/projects?per_page=50');
-      ccProjectsCache = Array.isArray(data) ? data : [];
-      ccProjectsCache.forEach(function(p) {
-        var opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = p.name || p.project_name || ('Project ' + p.id);
-        select.appendChild(opt);
-      });
-      document.getElementById('ccTotalProjects').textContent = ccProjectsCache.length;
-      ccLoadPhotos('');
-    } catch (e) {
-      alert('Could not load CompanyCam projects. ' + e.message);
-    }
-  }
-
-  async function ccLoadPhotos(projectId) {
-    var grid = document.getElementById('ccPhotosGrid');
-    var empty = document.getElementById('ccEmpty');
-    grid.innerHTML = '';
-    try {
-      var photos = [];
-      if (projectId) {
-        var data = await ccApi('/projects/' + encodeURIComponent(projectId) + '/photos?per_page=50');
-        photos = Array.isArray(data) ? data : [];
-      } else {
-        var projects = ccProjectsCache.slice(0, 5);
-        for (var i = 0; i < projects.length; i++) {
-          var batch = await ccApi('/projects/' + encodeURIComponent(projects[i].id) + '/photos?per_page=20');
-          photos = photos.concat(Array.isArray(batch) ? batch : []);
-        }
-      }
-      if (!photos.length) { empty.style.display = 'block'; return; }
-      empty.style.display = 'none';
-      document.getElementById('ccTotalPhotos').textContent = photos.length;
-      var weekAgo = Date.now() - (7 * 86400000);
-      document.getElementById('ccThisWeek').textContent = photos.filter(function(p) {
-        var t = new Date(p.captured_at || p.created_at || 0).getTime();
-        return !isNaN(t) && t >= weekAgo;
-      }).length;
-      photos.forEach(function(photo) {
-        var card = document.createElement('div');
-        card.className = 'cc-photo-card';
-        var url = ccPhotoUrl(photo);
-        var caption = photo.description || photo.caption || 'Site photo';
-        var date = ccFormatDate(photo.captured_at || photo.created_at);
-        var tag = (photo.tags && photo.tags[0] && (photo.tags[0].name || photo.tags[0])) || 'Photo';
-        card.innerHTML =
-          (url
-            ? '<img src="' + eh(url) + '" alt="" style="width:100%;aspect-ratio:4/3;object-fit:cover">'
-            : '<div class="cc-photo-img-placeholder">No preview</div>') +
-          '<div class="cc-photo-meta">' +
-          '<div class="cc-photo-caption">' + eh(caption) + '</div>' +
-          '<div class="cc-photo-date">' + eh(date) + '</div>' +
-          '<span class="cc-photo-tag">' + eh(tag) + '</span>' +
-          '</div>';
-        grid.appendChild(card);
-      });
-    } catch (e) {
-      empty.style.display = 'block';
-      empty.textContent = 'Could not load photos. ' + e.message;
-    }
-  }
-
-  document.getElementById('ccConnectBtn').addEventListener('click',function(){
-    var key=document.getElementById('ccApiKeyInput').value.trim();
-    if (!key) { alert('Paste your CompanyCam API key first.'); return; }
-    ccApiKey=key;
-    try { localStorage.setItem(CC_KEY,key); } catch(e){}
-    document.getElementById('ccConnectBanner').style.display='none';
-    document.getElementById('ccConnected').style.display='block';
-    ccLoadProjects();
-  });
-
-  document.getElementById('ccJobSelect').addEventListener('change',function(){ ccLoadPhotos(this.value); });
-  document.getElementById('ccRefreshBtn').addEventListener('click',ccLoadProjects);
-  document.getElementById('ccDisconnectBtn').addEventListener('click',function(){
-    ccApiKey='';
-    try { localStorage.removeItem(CC_KEY); } catch(e){}
-    document.getElementById('ccConnectBanner').style.display='block';
-    document.getElementById('ccConnected').style.display='none';
-    document.getElementById('ccApiKeyInput').value='';
-  });
-
-  ccInit();
 
   /* --- DRAW MANAGER --- */
   var dmSetupJob = null;

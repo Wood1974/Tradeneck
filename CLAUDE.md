@@ -37,12 +37,11 @@ principles baked into every feature decision:
 - `_headers` — Netlify response headers, sets a Content-Security-Policy for
   the whole site.
 - `app.html` — **desktop marketing shell** with embedded sign-in, Find Work,
-  Post Job wizard, CompanyCam (mock), Draw Manager, and Admin. Also uses
-  Supabase directly. Both frontends must use the same live schema (see below).
+  Post Job wizard, Draw Manager, and Admin. Also uses Supabase directly.
+  Both frontends must use the same live schema (see below).
 - `app.py` — Flask API (Stripe Connect, escrow, AI photo review). Belongs in
   the `tradedeck-api` repo for deployment; included here for reference. All
   routes except `/` and `/stripe/webhook` require a Supabase JWT.
-- CompanyCam tab calls the live `api.companycam.com` API when a user pastes their access token (still stored in localStorage — move to a backend proxy when ready for production).
 - Draw approve actions in both frontends call `POST /draws/:id/approve` on tradedeck-api (releases Stripe escrow when a record exists).
 - Shared helpers live in `js/tradedeck-shared.js` (`escapeHtml`, `apiPost`).
 
