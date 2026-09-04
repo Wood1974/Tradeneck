@@ -54,12 +54,23 @@ table with columns `milestone_order`, `milestone_name`, `percentage`,
 `draw_schedules.id`, not `jobs.id`. A legacy `milestones` table also exists
 but the frontends should use `draws`.
 
+## Product gaps migration (Sep 2026)
+
+Run `supabase_product_gaps.sql` in the Supabase SQL Editor before using:
+- Hire / assign (`jobs.assigned_contractor_id`)
+- Binary close-out columns on `reviews` (`on_time`, `clean`, `would_hire_again`)
+- Tier recompute RPC `recompute_profile_tier(uuid)`
+
+Frontend (`index.html`) wires: Hire on applicant rows, Fund escrow → Submit → Approve & release / Dispute refund, and binary close-out (written review optional).
+
 ## What's described elsewhere but NOT in this repo (verified absent)
 
 - No `tradedeck-app.html` mobile rebuild, no `draw_manager_frontend.html`,
   no `tradedeck-pitch.html` marketing page. Draw Manager and Profile **are**
   built into `index.html` and `app.html`.
-- No Stripe Connect / escrow / draw code anywhere in the frontend.
+- No Stripe Connect / escrow UI was present historically; `index.html` Draw
+  Manager now calls create / approve / refund on tradedeck-api. Full payment
+  capture still requires Stripe keys on the API and a hired contractor.
 
 ## Backend & data
 
@@ -80,24 +91,18 @@ but the frontends should use `draws`.
   repo's CLAUDE.md — this dual-auth situation is a real architectural
   problem to resolve before going further, not a documentation gap.
 
-## Key features described in the product plan (not yet implemented in code)
-
-These are real, well-specified plans — worth preserving — but confirmed
-**not yet built** in either repo as of this writing:
+## Key features described in the product plan (partially implemented)
 
 - Verification stack (identity → background check → license cross-check →
-  COI upload/parse → quarterly monitoring).
-- Five-tier ranking (Verified → Active → Proven → Trusted → TradeDeck Pro)
-  computed from jobs completed, timeline adherence, cost variance, and
-  cleanliness sign-offs. The `tradedeck_schema.sql` `profiles` table has
-  columns for this, but nothing writes to them yet.
-- Draw/escrow system with milestone schedule, dual verification
-  (owner/inspector), and Stripe Connect payouts. Schema exists (`draws`
-  table); no application code exists yet in either repo.
-- KSL Jobs scraper writing external listings into the `jobs` table
-  (`source='ksl'`) — built as a separate standalone project (not part of
-  either repo), delivered this session, not yet calibrated against live
-  KSL markup or run.
+  COI upload/parse → quarterly monitoring) — **not built**.
+- Five-tier ranking — schema + `recompute_profile_tier` RPC ship in
+  `supabase_product_gaps.sql`; frontend calls it after close-out. Still no
+  automated job-completion / cost-variance pipeline.
+- Draw/escrow — UI wired to create / approve / refund API routes; requires
+  Stripe env on tradedeck-api and a hired contractor (`assigned_contractor_id`).
+- Binary close-out — UI in `index.html`; needs SQL migration for boolean columns.
+- Hire / assign — UI in `index.html`; needs `assigned_contractor_id` column.
+- KSL Jobs scraper — separate project, not part of this repo.
 
 ## Deployment
 

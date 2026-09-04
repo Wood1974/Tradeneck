@@ -63,6 +63,14 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 .stars{display:flex;gap:6px;font-size:28px;cursor:pointer;margin:10px 0}
 .stars span{color:var(--border);transition:color .1s}
 .stars span.on{color:#ffb400}
+.closeout-q{margin-bottom:14px}
+.closeout-q .q-label{font-size:14px;color:var(--text);margin-bottom:8px;font-weight:600}
+.closeout-toggle{display:flex;gap:8px}
+.closeout-toggle button{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--muted);font-size:14px;font-weight:600;cursor:pointer}
+.closeout-toggle button.yes.on{background:rgba(74,222,128,.15);color:var(--green);border-color:var(--green)}
+.closeout-toggle button.no.on{background:rgba(224,85,85,.15);color:var(--danger);border-color:var(--danger)}
+.applicant-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border)}
+.applicant-row:first-child{border-top:none}
 .milestone-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .milestone-row input{margin-bottom:0}
 .milestone-row .pct-input{width:65px;flex-shrink:0;text-align:center}
@@ -231,20 +239,38 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   </button>
 </nav>
 
-<!-- RATING OVERLAY -->
+<!-- CLOSE-OUT OVERLAY (binary — never a prompted star review) -->
 <div class="overlay" id="rating-overlay">
   <div class="overlay-inner">
     <div class="overlay-header">
-      <h3>Rate this Job</h3>
+      <h3>Job close-out</h3>
       <button class="close-btn" onclick="closeOverlay('rating-overlay')">×</button>
     </div>
-    <div class="stars" id="star-picker">
-      <span onclick="setRating(1)">★</span><span onclick="setRating(2)">★</span>
-      <span onclick="setRating(3)">★</span><span onclick="setRating(4)">★</span>
-      <span onclick="setRating(5)">★</span>
+    <p class="text-muted" style="margin-bottom:16px">Three quick checks. A written note is optional and never required.</p>
+    <div class="closeout-q" data-field="on_time">
+      <div class="q-label">On time?</div>
+      <div class="closeout-toggle">
+        <button type="button" class="yes" data-val="true">Yes</button>
+        <button type="button" class="no" data-val="false">No</button>
+      </div>
     </div>
-    <textarea id="review-text" placeholder="Share your experience (optional)…"></textarea>
-    <button class="btn btn-primary btn-block" onclick="submitRating()">Submit Rating</button>
+    <div class="closeout-q" data-field="clean">
+      <div class="q-label">Site left clean?</div>
+      <div class="closeout-toggle">
+        <button type="button" class="yes" data-val="true">Yes</button>
+        <button type="button" class="no" data-val="false">No</button>
+      </div>
+    </div>
+    <div class="closeout-q" data-field="would_hire_again">
+      <div class="q-label">Would hire again?</div>
+      <div class="closeout-toggle">
+        <button type="button" class="yes" data-val="true">Yes</button>
+        <button type="button" class="no" data-val="false">No</button>
+      </div>
+    </div>
+    <label style="margin-top:8px">Written review <span class="text-muted">(optional)</span></label>
+    <textarea id="review-text" placeholder="Only if you want to — never prompted again."></textarea>
+    <button class="btn btn-primary btn-block" onclick="submitRating()">Submit close-out</button>
   </div>
 </div>
 
@@ -264,10 +290,11 @@ async function getAccessToken() {
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let STATE = {
   user:null, profile:null, isAdmin:false,
-  jobs:[], kslJobs:[], draws:[],
-  appliedJobIds:{}, applicantCounts:{},
+  jobs:[], kslJobs:[], draws:[], myPostedJobs:[],
+  appliedJobIds:{}, applicantCounts:{}, applicantsByJob:{},
   activeWorkTab:'open', activeCounty:'all', activeAdmTab:'users', admLoaded:false,
-  currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0,
+  currentRatingJobId:null, currentRatingRevieweeId:null,
+  closeOut:{ on_time:null, clean:null, would_hire_again:null },
   milestones:[]
 };
 
@@ -337,15 +364,37 @@ async function loadData() {
   STATE.jobs    = jobsRes.data  || [];
   STATE.kslJobs = kslRes.data   || [];
 
+  /* Jobs this user was hired onto (for close-out on Home). */
+  if (STATE.user) {
+    const hiredRes = await sb.from('jobs').select('*').eq('assigned_contractor_id', STATE.user.id).order('created_at', { ascending: false }).limit(30);
+    const hired = hiredRes.data || [];
+    const seen = new Set(STATE.jobs.map(j => j.id));
+    hired.forEach(j => { if (!seen.has(j.id)) STATE.jobs.push(j); });
+  }
+
   /* Only load draw schedules for jobs this user posted -- not every
      schedule on the platform. */
   STATE.draws = [];
+  STATE.myPostedJobs = [];
+  STATE.applicantsByJob = {};
   if (STATE.user) {
-    const myJobsRes = await sb.from('jobs').select('id').eq('owner_id', STATE.user.id);
-    const myJobIds = (myJobsRes.data || []).map(j => j.id);
+    const myJobsRes = await sb.from('jobs').select('*').eq('owner_id', STATE.user.id).order('created_at', { ascending: false });
+    STATE.myPostedJobs = myJobsRes.data || [];
+    const myJobIds = STATE.myPostedJobs.map(j => j.id);
     if (myJobIds.length) {
       const drawRes = await sb.from('draw_schedules').select('*, draws(*)').in('job_id', myJobIds).order('created_at', { ascending: false });
       STATE.draws = drawRes.data || [];
+      const appsRes = await sb.from('applications').select('id,job_id,applicant_id,status').in('job_id', myJobIds);
+      const applicantIds = [...new Set((appsRes.data || []).map(a => a.applicant_id).filter(Boolean))];
+      const profileMap = {};
+      if (applicantIds.length) {
+        const { data: profiles } = await sb.from('profiles').select('id,full_name,email,trade,tier').in('id', applicantIds);
+        (profiles || []).forEach(p => { profileMap[p.id] = p; });
+      }
+      (appsRes.data || []).forEach(a => {
+        if (!STATE.applicantsByJob[a.job_id]) STATE.applicantsByJob[a.job_id] = [];
+        STATE.applicantsByJob[a.job_id].push({ ...a, profile: profileMap[a.applicant_id] || null });
+      });
     }
   }
 
@@ -390,9 +439,35 @@ function renderHome() {
   if (!STATE.profile) return;
   const tiers = ['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
   document.getElementById('home-tier').textContent = tiers[STATE.profile.tier||1]||'Verified';
+  const myJobs = STATE.myPostedJobs || [];
+  const hiredOn = (STATE.jobs || []).filter(j => j.assigned_contractor_id === STATE.user?.id);
+  let myJobsHtml = '';
+  if (myJobs.length || hiredOn.length) {
+    myJobsHtml = `<div class="card mt8"><h3>Your jobs</h3>${
+      myJobs.map(j => {
+        const applicants = STATE.applicantsByJob[j.id] || [];
+        const assigned = j.assigned_contractor_id;
+        return `<div class="mt8" style="padding-top:8px;border-top:1px solid var(--border)">
+          <div class="flex between"><strong style="font-size:14px">${eh(j.title)}</strong><span class="badge badge-teal">${eh(j.status||'open')}</span></div>
+          ${assigned
+            ? `<button class="btn btn-outline btn-sm mt8 rate-job-btn" data-job-id="${eh(j.id)}" data-owner-id="${eh(assigned)}">Close out</button>`
+            : (applicants.length
+              ? applicants.map(a => `<div class="applicant-row"><span style="font-size:13px">${eh((a.profile&&(a.profile.full_name||a.profile.email))||'Applicant')}</span><button class="btn btn-primary btn-sm hire-applicant-btn" data-job-id="${eh(j.id)}" data-applicant-id="${eh(a.applicant_id)}">Hire</button></div>`).join('')
+              : '<p class="text-muted mt8" style="font-size:12px">No applicants yet</p>')}
+        </div>`;
+      }).join('')
+    }${
+      hiredOn.map(j => `<div class="mt8" style="padding-top:8px;border-top:1px solid var(--border)">
+        <div class="flex between"><strong style="font-size:14px">${eh(j.title)}</strong><span class="text-muted" style="font-size:12px">You're hired</span></div>
+        <button class="btn btn-outline btn-sm mt8 rate-job-btn" data-job-id="${eh(j.id)}" data-owner-id="${eh(j.owner_id)}">Close out</button>
+      </div>`).join('')
+    }</div>`;
+  }
   document.getElementById('home-stats').innerHTML = `
     <div class="flex between"><span class="text-muted">Jobs available</span><strong>${STATE.jobs.length}</strong></div>
     <div class="flex between mt8"><span class="text-muted">Active draws</span><strong>${STATE.draws.length}</strong></div>
+    <div class="flex between mt8"><span class="text-muted">Tier</span><strong>${tiers[STATE.profile.tier||1]||'Verified'}</strong></div>
+    ${myJobsHtml}
   `;
 }
 
@@ -509,9 +584,28 @@ function renderWork() {
     countyEl.style.display = 'none';
     el.innerHTML = STATE.jobs.length ? STATE.jobs.map(j=>{
       const isOwn = !!(j.owner_id && STATE.user && j.owner_id === STATE.user.id);
-      const canRate = !!(j.owner_id && STATE.user && j.owner_id !== STATE.user.id);
+      const assignedId = j.assigned_contractor_id || null;
+      const canRate = !!(assignedId && STATE.user && (STATE.user.id === j.owner_id || STATE.user.id === assignedId));
+      const revieweeId = STATE.user && STATE.user.id === j.owner_id ? assignedId : j.owner_id;
       const applied = !!STATE.appliedJobIds[j.id];
       const count = STATE.applicantCounts[j.id]||0;
+      const applicants = STATE.applicantsByJob[j.id] || [];
+      let hireBlock = '';
+      if (isOwn) {
+        if (assignedId) {
+          hireBlock = `<p class="text-muted mt8" style="font-size:12px">Hired · status ${eh(j.status||'open')}</p>`;
+        } else if (applicants.length) {
+          hireBlock = `<div class="mt8">${applicants.map(a => {
+            const name = a.profile ? (a.profile.full_name || a.profile.email) : a.applicant_id;
+            return `<div class="applicant-row">
+              <span style="font-size:13px">${eh(name)}</span>
+              <button class="btn btn-primary btn-sm hire-applicant-btn" data-job-id="${eh(j.id)}" data-applicant-id="${eh(a.applicant_id)}">Hire</button>
+            </div>`;
+          }).join('')}</div>`;
+        } else {
+          hireBlock = '<span class="text-muted" style="font-size:12px">Your job post · no applicants yet</span>';
+        }
+      }
       return `
       <div class="card">
         <div class="flex between"><h3>${eh(j.title)}</h3><span class="badge badge-teal">${eh(j.trade||'Trade')}</span></div>
@@ -521,10 +615,10 @@ function renderWork() {
         <div class="flex between mt8" style="align-items:center">
           <span class="applicant-count">${count} applicant${count!==1?'s':''}</span>
           ${isOwn
-            ? '<span class="text-muted" style="font-size:12px">Your job post</span>'
+            ? hireBlock
             : `<button class="btn ${applied?'btn-outline':'btn-primary'} btn-sm apply-job-btn" data-job-id="${eh(j.id)}" ${applied?'disabled':''}>${applied?'Applied':'Apply'}</button>`}
         </div>
-        ${canRate ? `<button class="btn btn-outline btn-sm mt8 rate-job-btn" data-job-id="${eh(j.id)}" data-owner-id="${eh(j.owner_id)}">Rate Job</button>` : ''}
+        ${canRate && revieweeId ? `<button class="btn btn-outline btn-sm mt8 rate-job-btn" data-job-id="${eh(j.id)}" data-owner-id="${eh(revieweeId)}">Close out job</button>` : ''}
       </div>`;
     }).join('') : '<p class="text-muted" style="padding:20px 0">No open jobs yet. Be the first to post.</p>';
   }
@@ -534,6 +628,21 @@ function filterCounty(county,btn){
   document.querySelectorAll('.county-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   renderWork();
+}
+
+async function hireApplicant(jobId, applicantId) {
+  if (!confirm('Hire this applicant for the job?')) return;
+  const { error } = await sb.from('jobs').update({
+    assigned_contractor_id: applicantId,
+    status: 'filled',
+  }).eq('id', jobId).eq('owner_id', STATE.user.id);
+  if (error) {
+    alert('Could not hire applicant. Run supabase_product_gaps.sql if assigned_contractor_id is missing. ' + error.message);
+    return;
+  }
+  await sb.from('applications').update({ status: 'hired' }).eq('job_id', jobId).eq('applicant_id', applicantId);
+  await loadData();
+  render();
 }
 
 // ─── APPLY ────────────────────────────────────────────────────────────────────
@@ -633,27 +742,56 @@ function renderDraws(){
     return;
   }
   el.innerHTML = STATE.draws.map(s=>{
+    const job = (STATE.myPostedJobs || []).find(j => j.id === s.job_id);
     const draws = (s.draws||[]).sort((a,b)=>(a.milestone_order||0)-(b.milestone_order||0));
     const releasedPct = draws.filter(d=>d.status==='approved'||d.status==='released').reduce((sum,d)=>sum+(d.percentage||0),0);
     return `<div class="card">
-      <div class="flex between"><h3>Draw Schedule</h3><span class="text-muted">$${(s.contract_value||0).toLocaleString()}</span></div>
+      <div class="flex between"><h3>${eh(job?.title || 'Draw Schedule')}</h3><span class="text-muted">$${(s.contract_value||0).toLocaleString()}</span></div>
       <div class="escrow-bar"><div class="escrow-fill" style="width:${releasedPct}%"></div></div>
       <p class="text-muted" style="font-size:12px;margin-bottom:12px">${releasedPct}% released</p>
       ${draws.map(d=>`
         <div class="flex between mt8" style="align-items:center">
           <span style="font-size:14px">${d.milestone_order}. ${eh(d.milestone_name)} <span class="text-muted">(${d.percentage}%)</span></span>
-          <div class="flex gap8" style="align-items:center">
+          <div class="flex gap8" style="align-items:center;flex-wrap:wrap">
             <span class="draw-status ${eh(d.status)}">${eh(d.status)}</span>
-            ${d.status==='pending'?`<button class="btn btn-outline btn-sm draw-action-btn" data-draw-id="${eh(d.id)}" data-action="submitted">Submit</button>`:''}
+            ${d.status==='pending'?`
+              <button class="btn btn-outline btn-sm draw-action-btn" data-draw-id="${eh(d.id)}" data-action="fund" data-job-id="${eh(s.job_id)}" data-amount="${eh(d.amount_cents||0)}" data-payee="${eh(job?.assigned_contractor_id||'')}">Fund escrow</button>
+              <button class="btn btn-outline btn-sm draw-action-btn" data-draw-id="${eh(d.id)}" data-action="submitted">Submit</button>`:''}
+            ${d.status==='held'||d.status==='funded'?`
+              <button class="btn btn-outline btn-sm draw-action-btn" data-draw-id="${eh(d.id)}" data-action="submitted">Submit work</button>`:''}
             ${d.status==='submitted'?`
-              <button class="btn btn-primary btn-sm draw-action-btn" data-draw-id="${eh(d.id)}" data-action="approved">Approve</button>
-              <button class="btn btn-danger btn-sm draw-action-btn" data-draw-id="${eh(d.id)}" data-action="disputed">Dispute</button>`:''}
+              <button class="btn btn-primary btn-sm draw-action-btn" data-draw-id="${eh(d.id)}" data-action="approved">Approve & release</button>
+              <button class="btn btn-danger btn-sm draw-action-btn" data-draw-id="${eh(d.id)}" data-action="disputed">Dispute / refund</button>`:''}
           </div>
         </div>`).join('')}
     </div>`;
   }).join('');
 }
-async function drawAction(id,status){
+async function drawAction(id,status,meta={}){
+  if (status === 'fund') {
+    if (!meta.payee) {
+      alert('Hire a contractor on this job before funding escrow.');
+      return;
+    }
+    if (!meta.amount || Number(meta.amount) <= 0) {
+      alert('This milestone has no amount. Set a contract value when creating the draw schedule.');
+      return;
+    }
+    try {
+      await TradeDeck.apiPost('/stripe/escrow/create', getAccessToken, {
+        job_id: meta.jobId,
+        draw_id: id,
+        amount_cents: Number(meta.amount),
+        payee_id: meta.payee,
+      });
+      await sb.from('draws').update({ status: 'held' }).eq('id', id);
+    } catch (e) {
+      alert('Could not create escrow. ' + e.message);
+      return;
+    }
+    await loadData(); renderDraws();
+    return;
+  }
   if (status === 'approved') {
     try {
       await TradeDeck.apiPost('/draws/' + encodeURIComponent(id) + '/approve', getAccessToken);
@@ -664,9 +802,21 @@ async function drawAction(id,status){
     await loadData(); renderDraws();
     return;
   }
+  if (status === 'disputed') {
+    try {
+      await TradeDeck.apiPost('/stripe/escrow/refund', getAccessToken, { draw_id: id });
+    } catch (e) {
+      // Escrow may not exist yet — still mark disputed locally
+      await sb.from('draws').update({ status: 'disputed', resolved_at: new Date().toISOString() }).eq('id', id);
+      alert('Marked disputed. Escrow refund: ' + e.message);
+      await loadData(); renderDraws();
+      return;
+    }
+    await loadData(); renderDraws();
+    return;
+  }
   const patch = { status };
   if (status === 'submitted') patch.submitted_at = new Date().toISOString();
-  if (status === 'disputed') patch.resolved_at = new Date().toISOString();
   await sb.from('draws').update(patch).eq('id', id);
   await loadData(); renderDraws();
 }
@@ -681,7 +831,8 @@ function renderProfile(){
     <div class="card">
       <h3>${eh(p.full_name||p.email)}</h3>
       <p class="text-muted">${eh(p.trade||'No trade set')} · Tier: ${eh(tiers[p.tier||1]||'Verified')}</p>
-      ${p.rating>0?`<p class="text-muted" style="margin-top:4px">★ ${eh(p.rating)} · ${eh(p.repeat_hire_rate)}% repeat hire</p>`:''}
+      ${p.rating>0?`<p class="text-muted" style="margin-top:4px">Close-out score ${eh(p.rating)}/3 · ${eh(p.repeat_hire_rate||0)}% would hire again</p>`:''}
+      ${p.timeline_score!=null || p.cleanliness_score!=null ? `<p class="text-muted" style="margin-top:4px">On-time ${eh(p.timeline_score||0)}% · Clean ${eh(p.cleanliness_score||0)}%</p>`:''}
     </div>
     <div class="card">
       <h3>Edit Profile</h3>
@@ -818,28 +969,55 @@ async function admDeleteJob(id){
   admLoadJobs();
 }
 
-// ─── RATINGS ──────────────────────────────────────────────────────────────────
+// ─── CLOSE-OUT (binary) ───────────────────────────────────────────────────────
 function openRating(jobId,revieweeId){
-  STATE.currentRatingJobId=jobId;STATE.currentRatingRevieweeId=revieweeId;STATE.currentRating=0;
-  document.querySelectorAll('#star-picker span').forEach(s=>s.classList.remove('on'));
+  STATE.currentRatingJobId=jobId;
+  STATE.currentRatingRevieweeId=revieweeId;
+  STATE.closeOut = { on_time:null, clean:null, would_hire_again:null };
+  document.querySelectorAll('.closeout-toggle button').forEach(b => b.classList.remove('on'));
   document.getElementById('review-text').value='';
   document.getElementById('rating-overlay').classList.add('open');
 }
-function setRating(n){
-  STATE.currentRating=n;
-  document.querySelectorAll('#star-picker span').forEach((s,i)=>s.classList.toggle('on',i<n));
-}
+document.getElementById('rating-overlay').addEventListener('click', (e) => {
+  const btn = e.target.closest('.closeout-toggle button');
+  if (!btn) return;
+  const wrap = btn.closest('.closeout-q');
+  const field = wrap.dataset.field;
+  wrap.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  STATE.closeOut[field] = btn.dataset.val === 'true';
+});
 async function submitRating(){
-  if (!STATE.currentRating){alert('Select a rating');return;}
-  if (!STATE.currentRatingRevieweeId){alert('Could not determine who this review is for.');return;}
-  const {error} = await sb.from('reviews').insert({
+  const { on_time, clean, would_hire_again } = STATE.closeOut;
+  if (on_time === null || clean === null || would_hire_again === null) {
+    alert('Answer all three close-out questions.');
+    return;
+  }
+  if (!STATE.currentRatingRevieweeId){alert('Could not determine who this close-out is for.');return;}
+  const yesCount = [on_time, clean, would_hire_again].filter(Boolean).length;
+  const payload = {
     job_id:      STATE.currentRatingJobId,
     reviewer_id: STATE.user.id,
-    reviewee_id: STATE.currentRatingRevieweeId, // the job's poster — set by openRating(), not the reviewer
-    rating:      STATE.currentRating,
-    body:        document.getElementById('review-text').value
-  });
-  if (error){alert(error.message);return;}
+    reviewee_id: STATE.currentRatingRevieweeId,
+    rating:      yesCount, // 0–3 yeses until star ratings are fully retired
+    body:        document.getElementById('review-text').value.trim() || null,
+    on_time,
+    clean,
+    would_hire_again,
+  };
+  const {error} = await sb.from('reviews').insert(payload);
+  if (error){
+    alert('Could not save close-out. Run supabase_product_gaps.sql if binary columns are missing. ' + error.message);
+    return;
+  }
+  // Bump jobs_completed for reviewee and recompute tier when RPC exists
+  const { data: prof } = await sb.from('profiles').select('jobs_completed').eq('id', STATE.currentRatingRevieweeId).maybeSingle();
+  if (prof) {
+    await sb.from('profiles').update({ jobs_completed: (prof.jobs_completed || 0) + 1 }).eq('id', STATE.currentRatingRevieweeId);
+  }
+  try {
+    await sb.rpc('recompute_profile_tier', { p_profile_id: STATE.currentRatingRevieweeId });
+  } catch (_) { /* RPC available after migration */ }
   closeOverlay('rating-overlay');
 }
 function closeOverlay(id){document.getElementById(id).classList.remove('open');}
@@ -850,10 +1028,22 @@ document.getElementById('work-content').addEventListener('click', (e) => {
   if (applyBtn) applyToJob(applyBtn.dataset.jobId, applyBtn);
   const rateBtn = e.target.closest('.rate-job-btn');
   if (rateBtn) openRating(rateBtn.dataset.jobId, rateBtn.dataset.ownerId);
+  const hireBtn = e.target.closest('.hire-applicant-btn');
+  if (hireBtn) hireApplicant(hireBtn.dataset.jobId, hireBtn.dataset.applicantId);
+});
+document.getElementById('home-stats').addEventListener('click', (e) => {
+  const rateBtn = e.target.closest('.rate-job-btn');
+  if (rateBtn) openRating(rateBtn.dataset.jobId, rateBtn.dataset.ownerId);
+  const hireBtn = e.target.closest('.hire-applicant-btn');
+  if (hireBtn) hireApplicant(hireBtn.dataset.jobId, hireBtn.dataset.applicantId);
 });
 document.getElementById('draws-content').addEventListener('click', (e) => {
   const btn = e.target.closest('.draw-action-btn');
-  if (btn) drawAction(btn.dataset.drawId, btn.dataset.action);
+  if (btn) drawAction(btn.dataset.drawId, btn.dataset.action, {
+    jobId: btn.dataset.jobId,
+    amount: btn.dataset.amount,
+    payee: btn.dataset.payee,
+  });
 });
 
 (async()=>{
