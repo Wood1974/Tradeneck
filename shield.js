@@ -16,14 +16,17 @@
 // Requires: Supabase client (sb) available globally
 // Stripe.js is lazy-loaded only when payment is about to happen
 
+// ═════════════════════════════════════════════════════════════════════════
+// SHIELD CONFIG — edit prices/keys here (single source for the frontend).
+// NOTE: STRIPE_PK is a TEST publishable key -> Shield payments run in Stripe
+// TEST mode. Swap it for the live pk_live_... key to take real payments.
+// These prices are DISPLAY values; the actual charge is the Stripe Price
+// referenced by STRIPE_SHIELD_PRICE_ID on the backend — keep the two in sync.
+// ═════════════════════════════════════════════════════════════════════════
 const STRIPE_PK        = 'pk_test_51TLWkTDNZcAJj6Kyd84RVIQ0qPO1iHP109ccBL4P9OQvShE21T291c4BhhtC8Z6CEYQKqmtjj2b6UZQe1n1CusGC00KNY7CwAl'
 const API_BASE         = 'https://tradedeck-api.onrender.com'
-const CONTRACTOR_SUB_PRICE = 49
-
-// ─────────────────────────────────────────────────
-// SHIELD PRICING
-// ─────────────────────────────────────────────────
-const SHIELD_TIERS = [
+const CONTRACTOR_SUB_PRICE = 49  // $/mo contractor subscription (display)
+const SHIELD_TIERS = [           // per-job Shield price by job budget (display)
   { label: 'Under $15,000',     max: 15000,    price: 79  },
   { label: '$15,000–$50,000',   max: 50000,    price: 129 },
   { label: 'Over $50,000',      max: Infinity, price: 199 },
