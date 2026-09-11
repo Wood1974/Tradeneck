@@ -37,8 +37,20 @@ every feature decision:
   Find Work, Post Job (with an optional draw-schedule builder), Draw
   Manager, Profile, Admin**. The old `app.html` desktop shell has been
   **deleted** — there is one frontend now, not two.
+- `shield.js` — the **TradeDeck Shield UI** (mountable module, ~95KB),
+  moved here Sep 2026 from the `tradedeck-api` repo. Loaded as a classic
+  script after the inline app script (so it can read the shared global `sb`
+  Supabase client); its functions attach to `window`
+  (`renderShieldDashboard`, `renderShieldBrief`, `purchaseShieldPerJob`,
+  `renderContractorUploadFlow`, `subscribeContractorToShield`,
+  `renderShieldBadge`, `renderShieldCloseOutModal`). It calls the `/shield`
+  backend endpoints and lazy-loads Stripe.js for payment. Wired into
+  `index.html` as a **Shield nav tab** → `renderShieldDashboard` on first
+  open (`loadShield`). The deeper hooks (per-job brief in Post Job,
+  contractor upload flow) are available but not yet wired into those flows.
 - `_headers` — Netlify response headers; sets the site-wide
-  Content-Security-Policy.
+  Content-Security-Policy. Now allows Stripe (`js.stripe.com`,
+  `api.stripe.com`, `frame-src` for Elements iframes) for Shield.
 - `wrangler.jsonc` — Cloudflare (Wrangler) static-assets config
   (`directory: "."`). The site is wired for **both** Netlify and Cloudflare
   static hosting; confirm with the owner which is actually serving
@@ -47,19 +59,18 @@ every feature decision:
   sit in this repo "for reference" has been removed — the real, current
   backend is the `tradedeck-api` repo. Don't re-add a backend file here.
 
-### The frontend does NOT call the backend API yet
+### Backend wiring status
 
-`index.html` contains **zero** references to `tradedeck-api.onrender.com`.
-It talks only to Supabase directly. That means everything the Flask API
-does — Stripe Connect onboarding, escrow create/release/refund, AI photo
-review, and the entire TradeDeck Shield product — has **no UI wired to it**
-here. Wiring the Draw Manager to the escrow endpoints (fund / approve /
-release) and adding photo upload is the biggest single piece of remaining
-frontend work. When you add any call to the API or to Stripe.js, you must
-add the new host (e.g. `js.stripe.com`, `api.stripe.com`) to the CSP in
-**both** `_headers` and any CSP `<meta>` tag, or Netlify's CSP header will
-silently block it in production (a local `file://` test won't catch this —
-test over http(s)).
+`shield.js` **does** call the backend (`tradedeck-api.onrender.com/shield/*`)
+and Stripe. The rest of `index.html` still talks only to Supabase directly —
+so the **escrow flow (Stripe Connect onboarding, escrow create/release/refund,
+draw photo review) is not yet wired** to the Draw Manager. That's now the
+biggest remaining frontend piece. When you add an escrow call, add its host to
+the CSP in **both** `_headers` and any CSP `<meta>` tag (`index.html` currently
+has no meta CSP), or Netlify's CSP header will silently block it in production
+(a local `file://` test won't catch this — test over http(s)). Stripe hosts
+(`js.stripe.com`, `api.stripe.com`, Elements `frame-src`) are already allowed
+in `_headers` from the Shield work.
 
 ### Admin tab is cosmetic only
 
@@ -120,9 +131,16 @@ end-to-end yet.
 ## Trust / tier / verification (partially built)
 
 - Five-tier ranking (Verified → Active → Proven → Trusted → TradeDeck Pro):
-  `profiles` has the tier + rating columns and the DB has
-  rating-recalculation functions, but the inputs (completed jobs, timeline
-  adherence, cost variance, cleanliness) are not being written yet.
+  now **derived automatically** (Sep 2026). `rating`/`repeat_hire_rate`
+  recompute from `reviews` (existing trigger); `jobs_completed` increments
+  for the payee when a job's draws are all `released`
+  (`bump_jobs_completed_on_release` trigger — active once escrow release is
+  wired); and `tier` is derived from `jobs_completed` + `rating` on every
+  profile write (`compute_profile_tier` + `set_profile_tier` BEFORE trigger).
+  Thresholds are a documented **starter** formula (migration
+  `20260911150000_tier_inputs.sql` in the API repo) — timeline adherence,
+  cost variance, and cleanliness sign-offs aren't captured yet and should
+  refine the formula when they are.
 - Verification stack (identity → background → license → COI → quarterly
   monitoring): a `verifications` storage bucket exists; the flow is not
   built in the frontend.
@@ -165,12 +183,15 @@ and granted to `authenticated` only. It was verified end-to-end (happy path
 ## Known-good next steps (Sep 2026)
 
 1. Wire the Draw Manager to the escrow endpoints (fund via Stripe.js →
-   approve → release) and add draw photo upload. Add Stripe hosts to the
-   CSP when you do. **This is now the biggest remaining piece** — the payee
-   is set, so escrow create/release has everything it needs server-side.
-2. Move the Shield UI into this repo (it currently sits stranded in the API
-   repo as `tradedeck-newest.html` / `shield_merged.js`).
-3. Start writing the tier inputs so `profiles` ratings mean something.
+   approve → release) and add draw photo upload. **This is now the biggest
+   remaining piece** — the payee is set and Stripe CSP hosts are already
+   allowed, so escrow create/release has everything it needs server-side.
+2. Wire Shield's deeper hooks: the per-job brief (`renderShieldBrief` /
+   `renderShieldToggle`) into the Post Job flow, and the contractor upload
+   flow (`renderContractorUploadFlow`) into the draw view. The Shield tab +
+   dashboard are already live; these hooks exist in `shield.js` but aren't
+   mounted into those screens yet.
+3. Run a full escrow cycle in Stripe test mode end-to-end.
 4. Consider transitioning `jobs.status` to `filled` on hire (deliberately
    left `open` for now so the owner's Manage-applicants card stays visible;
    `loadData` only loads `status='open'` jobs, so changing it interacts with

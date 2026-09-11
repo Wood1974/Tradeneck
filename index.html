@@ -178,6 +178,12 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     <div id="draws-content"></div>
   </div>
 
+  <!-- SHIELD -->
+  <div id="screen-shield" class="screen">
+    <div class="screen-header"><h2>TradeDeck Shield</h2></div>
+    <div id="shield-dashboard-mount"></div>
+  </div>
+
   <!-- PROFILE -->
   <div id="screen-profile" class="screen">
     <div class="screen-header"><h2>Profile</h2></div>
@@ -210,6 +216,9 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   </button>
   <button onclick="switchTab('draws')" id="nav-draws">
     <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Draws
+  </button>
+  <button onclick="switchTab('shield')" id="nav-shield">
+    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>Shield
   </button>
   <button onclick="switchTab('profile')" id="nav-profile">
     <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile
@@ -252,12 +261,13 @@ const SUPABASE_URL     = 'https://jlaajejpqjldpbinktln.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW5rdGxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMDg3MTksImV4cCI6MjEwMTc4NDcxOX0.tP-seLGoJnivrYmNhhTDmDJw4Uk92D95-zrwWB1G_S4';
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+window.sb = sb; // shield.js (external script) reads the shared Supabase client
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let STATE = {
   user:null, profile:null, isAdmin:false,
   jobs:[], kslJobs:[], draws:[],
-  appliedJobIds:{}, applicantCounts:{}, payeeProfiles:{},
+  appliedJobIds:{}, applicantCounts:{}, payeeProfiles:{}, shieldLoaded:false,
   activeWorkTab:'open', activeCounty:'all', activeAdmTab:'users', admLoaded:false,
   currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0,
   milestones:[]
@@ -353,6 +363,19 @@ function switchTab(tab) {
   document.getElementById('screen-'+tab).classList.add('active');
   document.getElementById('nav-'+tab).classList.add('active');
   if (tab==='admin') loadAdmin();
+  if (tab==='shield') loadShield();
+}
+// Shield UI lives in shield.js (loaded after this script). Mount the homeowner
+// dashboard once on first open; the module reads the global `sb` client.
+function loadShield(){
+  const mount = document.getElementById('shield-dashboard-mount');
+  if (!mount || STATE.shieldLoaded) return;
+  if (typeof window.renderShieldDashboard !== 'function'){
+    mount.innerHTML = '<p class="text-muted" style="padding:20px 0">Shield module failed to load.</p>';
+    return;
+  }
+  STATE.shieldLoaded = true;
+  window.renderShieldDashboard(mount);
 }
 function workTab(tab,btn) {
   STATE.activeWorkTab = tab;
@@ -883,5 +906,8 @@ function closeOverlay(id){document.getElementById(id).classList.remove('open');}
   if (session?.user) await onLogin(session.user);
 })();
 </script>
+<!-- TradeDeck Shield UI (mountable module). Loaded after the main script so it
+     can read the shared `sb` client; functions attach to window. -->
+<script src="shield.js"></script>
 </body>
 </html>
