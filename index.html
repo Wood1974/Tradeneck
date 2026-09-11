@@ -76,6 +76,8 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 .county-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px}
 .county-tab{white-space:nowrap;padding:4px 10px;border-radius:14px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0}
 .county-tab.active{background:var(--teal);color:#000;border-color:var(--teal)}
+.trade-tab{white-space:nowrap;padding:4px 10px;border-radius:14px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0}
+.trade-tab.active{background:var(--teal);color:#000;border-color:var(--teal)}
 .applicant-count{font-size:12px;color:var(--muted)}
 .lead-category{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--teal);font-weight:700;margin:20px 0 8px;padding-top:4px}
 .lead-category:first-child{margin-top:0}
@@ -138,6 +140,7 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
       <button class="tab-btn" onclick="workTab('leads',this)">Lead Sources</button>
     </div>
     <div class="county-tabs" id="county-tabs" style="display:none"></div>
+    <div class="county-tabs" id="trade-tabs" style="display:none"></div>
     <div id="work-content"></div>
   </div>
 
@@ -284,7 +287,7 @@ let STATE = {
   user:null, profile:null, isAdmin:false,
   jobs:[], kslJobs:[], draws:[],
   appliedJobIds:{}, applicantCounts:{}, payeeProfiles:{}, shieldLoaded:false,
-  activeWorkTab:'open', activeCounty:'all', activeAdmTab:'users', admLoaded:false,
+  activeWorkTab:'open', activeCounty:'all', activeTrade:'all', activeAdmTab:'users', admLoaded:false,
   currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0,
   milestones:[]
 };
@@ -400,6 +403,7 @@ function workTab(tab,btn) {
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('county-tabs').style.display = tab==='ksl'?'flex':'none';
+  document.getElementById('trade-tabs').style.display  = tab==='ksl'?'flex':'none';
   renderWork();
 }
 
@@ -419,6 +423,18 @@ function renderHome() {
 const COUNTIES = ['All','Box Elder','Cache','Carbon','Daggett','Davis','Duchesne','Emery',
   'Garfield','Grand','Iron','Juab','Kane','Millard','Morgan','Piute','Rich','Salt Lake',
   'San Juan','Sanpete','Sevier','Summit','Tooele','Uintah','Utah','Wasatch','Washington','Wayne','Weber'];
+
+// Construction trade categories present on scraped KSL listings (jobs.trade).
+// Most KSL rows are NOT trade-tagged (KSL is a general job board, not a
+// construction-only feed) -- 'Other' surfaces everything else rather than
+// silently hiding it, in keeping with full transparency.
+const TRADE_CATEGORIES = ['All','General Labor','Electrical','Excavation','Concrete','HVAC',
+  'Framing','Plumbing','Flooring','Landscaping','Roofing','Drywall','Other'];
+function jobMatchesTrade(job, trade){
+  if (trade==='all') return true;
+  if (trade==='Other') return !job.trade || !TRADE_CATEGORIES.includes(job.trade);
+  return job.trade===trade;
+}
 
 const LEAD_CATEGORIES = [
   {cat:'Boots on the Ground — Free', items:[
@@ -502,21 +518,31 @@ const LEAD_CATEGORIES = [
 function renderWork() {
   const el = document.getElementById('work-content');
   const countyEl = document.getElementById('county-tabs');
+  const tradeEl = document.getElementById('trade-tabs');
   if (STATE.activeWorkTab==='ksl') {
     countyEl.style.display = 'flex';
     countyEl.innerHTML = COUNTIES.map(c=>`
       <button class="county-tab${(c==='All'&&STATE.activeCounty==='all')||(c===STATE.activeCounty)?' active':''}"
         onclick="filterCounty('${c==='All'?'all':c}',this)">${c}</button>`).join('');
-    const jobs = STATE.activeCounty==='all'?STATE.kslJobs:STATE.kslJobs.filter(j=>j.county===STATE.activeCounty);
+    const byCounty = STATE.activeCounty==='all'?STATE.kslJobs:STATE.kslJobs.filter(j=>j.county===STATE.activeCounty);
+    tradeEl.style.display = 'flex';
+    tradeEl.innerHTML = TRADE_CATEGORIES.map(t=>{
+      const val = t==='All'?'all':t;
+      const count = byCounty.filter(j=>jobMatchesTrade(j,val)).length;
+      return `<button class="trade-tab${val===STATE.activeTrade?' active':''}"
+        onclick="filterTrade('${val}',this)">${t} (${count})</button>`;
+    }).join('');
+    const jobs = byCounty.filter(j=>jobMatchesTrade(j,STATE.activeTrade));
     el.innerHTML = jobs.length ? jobs.map(j=>`
       <div class="card">
-        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">KSL</span></div>
+        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">${j.trade||'KSL'}</span></div>
         <p>${j.company||''} · ${j.location||''}, ${j.county||''}</p>
         <p style="margin-top:6px">${(j.description||'').slice(0,120)}…</p>
         <p class="text-muted" style="margin-top:4px;font-size:12px">${j.rate||''}</p>
-      </div>`).join('') : '<p class="text-muted" style="padding:20px 0">No KSL jobs in this area yet.</p>';
+      </div>`).join('') : '<p class="text-muted" style="padding:20px 0">No KSL jobs in this category yet.</p>';
   } else if (STATE.activeWorkTab==='leads') {
     countyEl.style.display = 'none';
+    tradeEl.style.display = 'none';
     el.innerHTML = LEAD_CATEGORIES.map(group=>`
       <div class="lead-category">${group.cat}</div>
       ${group.items.map(l=>`
@@ -527,6 +553,7 @@ function renderWork() {
         </div>`).join('')}`).join('');
   } else {
     countyEl.style.display = 'none';
+    tradeEl.style.display = 'none';
     el.innerHTML = STATE.jobs.length ? STATE.jobs.map(j=>{
       const isOwn = !!(j.owner_id && STATE.user && j.owner_id === STATE.user.id);
       const canRate = !!(j.owner_id && STATE.user && j.owner_id !== STATE.user.id);
@@ -551,8 +578,10 @@ function renderWork() {
 }
 function filterCounty(county,btn){
   STATE.activeCounty=county;
-  document.querySelectorAll('.county-tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
+  renderWork(); // rebuilds both tab rows (trade counts depend on county)
+}
+function filterTrade(trade,btn){
+  STATE.activeTrade=trade;
   renderWork();
 }
 
