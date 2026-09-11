@@ -425,14 +425,18 @@ const COUNTIES = ['All','Box Elder','Cache','Carbon','Daggett','Davis','Duchesne
   'San Juan','Sanpete','Sevier','Summit','Tooele','Uintah','Utah','Wasatch','Washington','Wayne','Weber'];
 
 // Construction trade categories present on scraped KSL listings (jobs.trade).
-// Most KSL rows are NOT trade-tagged (KSL is a general job board, not a
-// construction-only feed) -- 'Other' surfaces everything else rather than
-// silently hiding it, in keeping with full transparency.
-const TRADE_CATEGORIES = ['All','General Labor','Electrical','Excavation','Concrete','HVAC',
+// Most KSL rows are NOT trade-tagged -- the KSL scraper pulls the general job
+// board, not a construction-only feed, so untagged rows are mostly unrelated
+// listings (retail, medical, sales, etc.), not miscategorized trade jobs.
+// Default view ('All Trades') therefore excludes 'Other' so a county isn't a
+// long scroll of non-construction jobs; 'Other' stays one tap away rather
+// than being hidden outright, in keeping with full transparency.
+const TRADE_CATEGORIES = ['All Trades','General Labor','Electrical','Excavation','Concrete','HVAC',
   'Framing','Plumbing','Flooring','Landscaping','Roofing','Drywall','Other'];
+const KNOWN_TRADES = new Set(TRADE_CATEGORIES.filter(t=>t!=='All Trades'&&t!=='Other'));
 function jobMatchesTrade(job, trade){
-  if (trade==='all') return true;
-  if (trade==='Other') return !job.trade || !TRADE_CATEGORIES.includes(job.trade);
+  if (trade==='all') return KNOWN_TRADES.has(job.trade); // "All Trades" = every known category, NOT Other
+  if (trade==='Other') return !job.trade || !KNOWN_TRADES.has(job.trade);
   return job.trade===trade;
 }
 
@@ -527,7 +531,7 @@ function renderWork() {
     const byCounty = STATE.activeCounty==='all'?STATE.kslJobs:STATE.kslJobs.filter(j=>j.county===STATE.activeCounty);
     tradeEl.style.display = 'flex';
     tradeEl.innerHTML = TRADE_CATEGORIES.map(t=>{
-      const val = t==='All'?'all':t;
+      const val = t==='All Trades'?'all':t;
       const count = byCounty.filter(j=>jobMatchesTrade(j,val)).length;
       return `<button class="trade-tab${val===STATE.activeTrade?' active':''}"
         onclick="filterTrade('${val}',this)">${t} (${count})</button>`;
