@@ -236,6 +236,16 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   </div>
 </div>
 
+<div class="overlay" id="applicants-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <h3 id="applicants-title">Applicants</h3>
+      <button class="close-btn" onclick="closeOverlay('applicants-overlay')">×</button>
+    </div>
+    <div id="applicants-content"></div>
+  </div>
+</div>
+
 <script>
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const SUPABASE_URL     = 'https://jlaajejpqjldpbinktln.supabase.co';
@@ -247,7 +257,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let STATE = {
   user:null, profile:null, isAdmin:false,
   jobs:[], kslJobs:[], draws:[],
-  appliedJobIds:{}, applicantCounts:{},
+  appliedJobIds:{}, applicantCounts:{}, payeeProfiles:{},
   activeWorkTab:'open', activeCounty:'all', activeAdmTab:'users', admLoaded:false,
   currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0,
   milestones:[]
@@ -307,6 +317,16 @@ async function loadData() {
   STATE.jobs    = jobsRes.data  || [];
   STATE.draws   = drawRes.data  || [];
   STATE.kslJobs = kslRes.data   || [];
+
+  /* Resolve the hired contractor (payee) for any draw schedule that has one,
+     so the Draw Manager can name who each schedule pays. profiles are
+     world-readable (profiles_select policy). */
+  STATE.payeeProfiles = {};
+  const payeeIds = [...new Set(STATE.draws.map(s=>s.payee_id).filter(Boolean))];
+  if (payeeIds.length){
+    const {data:payees} = await sb.from('profiles').select('id,full_name,email').in('id',payeeIds);
+    (payees||[]).forEach(p=>{STATE.payeeProfiles[p.id]=p;});
+  }
 
   /* Applied state (mine only -- RLS on applications only lets a user
      see their own rows or rows on a job they posted, so this can't leak
@@ -480,7 +500,7 @@ function renderWork() {
         <div class="flex between mt8" style="align-items:center">
           <span class="applicant-count">${count} applicant${count!==1?'s':''}</span>
           ${isOwn
-            ? '<span class="text-muted" style="font-size:12px">Your job post</span>'
+            ? `<button class="btn btn-primary btn-sm" onclick="openApplicants('${j.id}',this)">Manage applicant${count!==1?'s':''}</button>`
             : `<button class="btn ${applied?'btn-outline':'btn-primary'} btn-sm" ${applied?'disabled':''} onclick="applyToJob('${j.id}',this)">${applied?'Applied':'Apply'}</button>`}
         </div>
         ${canRate ? `<button class="btn btn-outline btn-sm mt8" onclick="openRating('${j.id}','${j.owner_id}')">Rate Job</button>` : ''}
@@ -511,6 +531,79 @@ async function applyToJob(jobId,btn){
   STATE.appliedJobIds[jobId] = true;
   STATE.applicantCounts[jobId] = (STATE.applicantCounts[jobId]||0)+1;
   btn.textContent = 'Applied'; btn.classList.remove('btn-primary'); btn.classList.add('btn-outline');
+}
+
+// ─── MANAGE APPLICANTS (job owner) ──────────────────────────────────────────────
+// RLS lets a job poster SELECT applications on their own jobs; profiles are
+// world-readable. Accepting one calls the accept_application() RPC, which
+// atomically marks it accepted, rejects the rest, and sets the contractor as
+// payee on the job's draw schedule(s) and every draw under them.
+let currentApplicantsJobId = null;
+async function openApplicants(jobId){
+  currentApplicantsJobId = jobId;
+  document.getElementById('applicants-content').innerHTML =
+    '<p class="text-muted" style="padding:20px 0">Loading…</p>';
+  document.getElementById('applicants-overlay').classList.add('open');
+  const {data:apps,error} = await sb.from('applications')
+    .select('id,applicant_id,status,bid_amount,message,created_at')
+    .eq('job_id',jobId)
+    .order('created_at',{ascending:true});
+  if (error){
+    document.getElementById('applicants-content').innerHTML =
+      `<p class="text-muted" style="padding:20px 0">Could not load applicants. ${error.message}</p>`;
+    return;
+  }
+  const ids = [...new Set((apps||[]).map(a=>a.applicant_id).filter(Boolean))];
+  const profiles = {};
+  if (ids.length){
+    const {data:profs} = await sb.from('profiles')
+      .select('id,full_name,email,trade,tier,jobs_completed,rating').in('id',ids);
+    (profs||[]).forEach(p=>{profiles[p.id]=p;});
+  }
+  renderApplicants(apps||[],profiles);
+}
+function renderApplicants(apps,profiles){
+  const el = document.getElementById('applicants-content');
+  document.getElementById('applicants-title').textContent =
+    `Applicants (${apps.length})`;
+  if (!apps.length){
+    el.innerHTML='<p class="text-muted" style="padding:20px 0">No applicants yet.</p>';
+    return;
+  }
+  const tiers=['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
+  const someoneHired = apps.some(a=>a.status==='accepted');
+  el.innerHTML = apps.map(a=>{
+    const p = profiles[a.applicant_id]||{};
+    const name = p.full_name||p.email||'Applicant';
+    const accepted = a.status==='accepted';
+    const rejected = a.status==='rejected';
+    return `
+    <div class="card" style="${rejected?'opacity:.55':''}">
+      <div class="flex between"><h3>${name}</h3>
+        ${accepted?'<span class="badge badge-teal">Hired</span>'
+          :rejected?'<span class="text-muted" style="font-size:12px">Not selected</span>':''}
+      </div>
+      <p class="text-muted" style="font-size:12px;margin-top:2px">${p.trade||'No trade set'} · Tier: ${tiers[p.tier||1]||'Verified'} · ${p.jobs_completed||0} jobs done</p>
+      ${a.bid_amount!=null?`<p style="margin-top:6px">Bid: $${Number(a.bid_amount).toLocaleString()}</p>`:''}
+      ${a.message?`<p style="margin-top:6px;font-size:13px">${a.message}</p>`:''}
+      ${accepted
+        ? '<p class="text-muted" style="font-size:12px;margin-top:8px">Attached as payee on this job’s draws.</p>'
+        : rejected ? ''
+        : `<button class="btn btn-primary btn-sm mt8" onclick="acceptApplicant('${a.id}',this)">${someoneHired?'Hire instead':'Hire'}</button>`}
+    </div>`;
+  }).join('');
+}
+async function acceptApplicant(applicationId,btn){
+  if (!confirm('Hire this applicant? They will be set as the payee on this job’s draw schedule, and any other applicants will be declined.')) return;
+  btn.disabled = true; btn.textContent = 'Hiring…';
+  const {error} = await sb.rpc('accept_application',{p_application_id:applicationId});
+  if (error){
+    alert('Could not hire this applicant. '+error.message);
+    btn.disabled = false; btn.textContent = 'Hire';
+    return;
+  }
+  if (currentApplicantsJobId) await openApplicants(currentApplicantsJobId);
+  await loadData(); renderDraws();
 }
 
 // ─── POST JOB ─────────────────────────────────────────────────────────────────
@@ -592,15 +685,18 @@ function renderDraws(){
     return;
   }
   el.innerHTML = STATE.draws.map(s=>{
-    const draws = (s.draws||[]).sort((a,b)=>a.position-b.position);
-    const releasedPct = draws.filter(d=>d.status==='approved'||d.status==='released').reduce((sum,d)=>sum+d.pct,0);
+    const draws = (s.draws||[]).slice().sort((a,b)=>a.milestone_order-b.milestone_order);
+    const releasedPct = draws.filter(d=>d.status==='approved'||d.status==='released').reduce((sum,d)=>sum+(d.percentage||0),0);
+    const payee = s.payee_id ? STATE.payeeProfiles[s.payee_id] : null;
+    const payeeLabel = payee ? (payee.full_name||payee.email) : null;
     return `<div class="card">
       <div class="flex between"><h3>Draw Schedule</h3><span class="text-muted">$${(s.contract_value||0).toLocaleString()}</span></div>
+      <p class="text-muted" style="font-size:12px;margin-top:2px">${payeeLabel?`Contractor: ${payeeLabel}`:'No contractor hired yet'}</p>
       <div class="escrow-bar"><div class="escrow-fill" style="width:${releasedPct}%"></div></div>
       <p class="text-muted" style="font-size:12px;margin-bottom:12px">${releasedPct}% released</p>
       ${draws.map(d=>`
         <div class="flex between mt8" style="align-items:center">
-          <span style="font-size:14px">${d.position}. ${d.name} <span class="text-muted">(${d.pct}%)</span></span>
+          <span style="font-size:14px">${d.milestone_order}. ${d.milestone_name} <span class="text-muted">(${d.percentage}%)</span></span>
           <div class="flex gap8" style="align-items:center">
             <span class="draw-status ${d.status}">${d.status}</span>
             ${d.status==='pending'?`<button class="btn btn-outline btn-sm" onclick="drawAction('${d.id}','submitted')">Submit</button>`:''}

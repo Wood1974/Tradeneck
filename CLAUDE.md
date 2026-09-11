@@ -146,14 +146,32 @@ end-to-end yet.
 - Keep secrets (Supabase service role key, Stripe secret key, Anthropic API
   key) out of this repo — those belong in the backend's environment config.
 
+## Accept-application → payee flow (built Sep 2026)
+
+The homeowner hires a contractor from the Find Work tab: their own job cards
+show a **Manage applicants** button (`openApplicants`) that opens an overlay
+listing everyone who applied (name, trade, tier, bid, message), each with a
+**Hire** button. Hiring calls the `accept_application(p_application_id)`
+Supabase RPC (`acceptApplicant`), which atomically marks that application
+accepted, rejects the others on the job (single-hire model), and sets
+`payee_id` on the job's `draw_schedules` **and** every `draw` under them —
+the value the API's `require_draw_payee` reads. The Draw Manager then shows
+the hired contractor on each schedule. The RPC is `SECURITY DEFINER`,
+authorization-checked against `auth.uid()` (only the job owner can accept),
+and granted to `authenticated` only. It was verified end-to-end (happy path
++ non-owner denial) against the live DB. Its migration lives in the
+`tradedeck-api` repo (`supabase/migrations/`).
+
 ## Known-good next steps (Sep 2026)
 
 1. Wire the Draw Manager to the escrow endpoints (fund via Stripe.js →
    approve → release) and add draw photo upload. Add Stripe hosts to the
-   CSP when you do.
-2. Decide + build the accept-application flow that sets `draws.payee_id`
-   (the design: contractor is attached to the draw when the homeowner
-   accepts their application). The column now exists.
-3. Move the Shield UI into this repo (it currently sits stranded in the API
+   CSP when you do. **This is now the biggest remaining piece** — the payee
+   is set, so escrow create/release has everything it needs server-side.
+2. Move the Shield UI into this repo (it currently sits stranded in the API
    repo as `tradedeck-newest.html` / `shield_merged.js`).
-4. Start writing the tier inputs so `profiles` ratings mean something.
+3. Start writing the tier inputs so `profiles` ratings mean something.
+4. Consider transitioning `jobs.status` to `filled` on hire (deliberately
+   left `open` for now so the owner's Manage-applicants card stays visible;
+   `loadData` only loads `status='open'` jobs, so changing it interacts with
+   job visibility — decide that together).
