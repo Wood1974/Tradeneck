@@ -106,7 +106,12 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 
   <!-- HOME -->
   <div id="screen-home" class="screen active">
-    <div class="screen-header"><h2>Home</h2><span id="home-tier" class="badge badge-teal"></span></div>
+    <div class="screen-header"><h2>Home</h2>
+      <div class="flex gap8" style="align-items:center">
+        <span id="home-tier" class="badge badge-teal"></span>
+        <button class="btn btn-outline btn-sm" onclick="signOut()">Sign out</button>
+      </div>
+    </div>
     <div id="home-stats" class="card"></div>
     <div class="card">
       <h3>Quick Actions</h3>
@@ -259,9 +264,13 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const SUPABASE_URL     = 'https://jlaajejpqjldpbinktln.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW5rdGxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMDg3MTksImV4cCI6MjEwMTc4NDcxOX0.tP-seLGoJnivrYmNhhTDmDJw4Uk92D95-zrwWB1G_S4';
-const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Guard the single CDN dependency: if @supabase/supabase-js failed to load
+// (ad blocker, CSP, CDN outage), sb is null and the auth page shows a clear
+// message instead of dead buttons or a blank screen.
+const { createClient } = (typeof supabase !== 'undefined' && supabase) ? supabase : {};
+const sb = createClient ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 window.sb = sb; // shield.js (external script) reads the shared Supabase client
+const SB_LOAD_ERROR = 'Could not load the sign-in service. Check your connection or any ad blocker, then reload.';
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let STATE = {
@@ -284,7 +293,9 @@ async function authSubmit() {
   const email    = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
   const errEl    = document.getElementById('auth-error');
+  errEl.style.color = 'var(--danger)';
   errEl.textContent = '';
+  if (!sb){errEl.textContent=SB_LOAD_ERROR;return;}
   if (!email||!password){errEl.textContent='Email and password required';return;}
   const res = authMode==='signup'
     ? await sb.auth.signUp({email,password})
@@ -312,10 +323,10 @@ async function onLogin(user) {
   document.getElementById('auth-wrap').style.display = 'none';
   document.getElementById('app').style.display       = 'block';
   document.getElementById('main-nav').style.display  = 'flex';
-  await loadData();
+  try { await loadData(); } catch (e) { /* render with whatever loaded */ }
   render();
 }
-async function signOut(){await sb.auth.signOut();location.reload();}
+async function signOut(){ try { if (sb) await sb.auth.signOut(); } finally { location.reload(); } }
 
 // ─── LOAD DATA ────────────────────────────────────────────────────────────────
 async function loadData() {
@@ -902,8 +913,19 @@ function closeOverlay(id){document.getElementById(id).classList.remove('open');}
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 (async()=>{
-  const {data:{session}} = await sb.auth.getSession();
-  if (session?.user) await onLogin(session.user);
+  const errEl = document.getElementById('auth-error');
+  if (!sb){ if(errEl) errEl.textContent = SB_LOAD_ERROR; return; }
+  try {
+    const {data:{session}} = await sb.auth.getSession();
+    if (session?.user) await onLogin(session.user);
+  } catch (e) {
+    // Session restore / initial load failed — fall back to the sign-in form
+    // rather than a blank or half-rendered app.
+    document.getElementById('auth-wrap').style.display = '';
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('main-nav').style.display = 'none';
+    if (errEl) errEl.textContent = 'Could not restore your session. Please sign in.';
+  }
 })();
 </script>
 <!-- TradeDeck Shield UI (mountable module). Loaded after the main script so it
