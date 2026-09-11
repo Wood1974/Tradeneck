@@ -2,8 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <title>TradeDeck</title>
+<link rel="manifest" href="manifest.webmanifest"/>
+<meta name="theme-color" content="#0A0A0A"/>
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="TradeDeck"/>
+<meta name="mobile-web-app-capable" content="yes"/>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -931,5 +938,44 @@ function closeOverlay(id){document.getElementById(id).classList.remove('open');}
 <!-- TradeDeck Shield UI (mountable module). Loaded after the main script so it
      can read the shared `sb` client; functions attach to window. -->
 <script src="shield.js"></script>
+
+<!-- PWA: installable + auto-update. Service worker is network-first, so a new
+     deploy is fetched when online; this shows a one-tap refresh when a new
+     version is ready. -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      function showUpdate(worker) {
+        let bar = document.getElementById('pwa-update');
+        if (!bar) {
+          bar = document.createElement('div');
+          bar.id = 'pwa-update';
+          bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:78px;z-index:300;background:#0BBCD4;color:#0A0A0A;font-weight:700;font-size:14px;padding:12px 14px;border-radius:12px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.4)';
+          bar.innerHTML = '<span>New version available</span>';
+          const btn = document.createElement('button');
+          btn.textContent = 'Refresh';
+          btn.style.cssText = 'background:#0A0A0A;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer';
+          btn.onclick = () => worker.postMessage({ type: 'SKIP_WAITING' });
+          bar.appendChild(btn);
+          document.body.appendChild(bar);
+        }
+      }
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg.waiting);
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdate(nw);
+        });
+      });
+    }).catch(() => {});
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded) return; reloaded = true; window.location.reload();
+    });
+  });
+}
+</script>
 </body>
 </html>
