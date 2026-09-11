@@ -2,8 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <title>TradeDeck</title>
+<link rel="manifest" href="manifest.webmanifest"/>
+<meta name="theme-color" content="#0A0A0A"/>
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="TradeDeck"/>
+<meta name="mobile-web-app-capable" content="yes"/>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -69,6 +76,8 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 .county-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px}
 .county-tab{white-space:nowrap;padding:4px 10px;border-radius:14px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0}
 .county-tab.active{background:var(--teal);color:#000;border-color:var(--teal)}
+.trade-tab{white-space:nowrap;padding:4px 10px;border-radius:14px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0}
+.trade-tab.active{background:var(--teal);color:#000;border-color:var(--teal)}
 .applicant-count{font-size:12px;color:var(--muted)}
 .lead-category{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--teal);font-weight:700;margin:20px 0 8px;padding-top:4px}
 .lead-category:first-child{margin-top:0}
@@ -106,7 +115,12 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 
   <!-- HOME -->
   <div id="screen-home" class="screen active">
-    <div class="screen-header"><h2>Home</h2><span id="home-tier" class="badge badge-teal"></span></div>
+    <div class="screen-header"><h2>Home</h2>
+      <div class="flex gap8" style="align-items:center">
+        <span id="home-tier" class="badge badge-teal"></span>
+        <button class="btn btn-outline btn-sm" onclick="signOut()">Sign out</button>
+      </div>
+    </div>
     <div id="home-stats" class="card"></div>
     <div class="card">
       <h3>Quick Actions</h3>
@@ -126,6 +140,7 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
       <button class="tab-btn" onclick="workTab('leads',this)">Lead Sources</button>
     </div>
     <div class="county-tabs" id="county-tabs" style="display:none"></div>
+    <div class="county-tabs" id="trade-tabs" style="display:none"></div>
     <div id="work-content"></div>
   </div>
 
@@ -178,6 +193,12 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     <div id="draws-content"></div>
   </div>
 
+  <!-- SHIELD -->
+  <div id="screen-shield" class="screen">
+    <div class="screen-header"><h2>TradeDeck Shield</h2></div>
+    <div id="shield-dashboard-mount"></div>
+  </div>
+
   <!-- PROFILE -->
   <div id="screen-profile" class="screen">
     <div class="screen-header"><h2>Profile</h2></div>
@@ -211,6 +232,9 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   <button onclick="switchTab('draws')" id="nav-draws">
     <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Draws
   </button>
+  <button onclick="switchTab('shield')" id="nav-shield">
+    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>Shield
+  </button>
   <button onclick="switchTab('profile')" id="nav-profile">
     <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile
   </button>
@@ -236,19 +260,34 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   </div>
 </div>
 
+<div class="overlay" id="applicants-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <h3 id="applicants-title">Applicants</h3>
+      <button class="close-btn" onclick="closeOverlay('applicants-overlay')">×</button>
+    </div>
+    <div id="applicants-content"></div>
+  </div>
+</div>
+
 <script>
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const SUPABASE_URL     = 'https://jlaajejpqjldpbinktln.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW5rdGxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMDg3MTksImV4cCI6MjEwMTc4NDcxOX0.tP-seLGoJnivrYmNhhTDmDJw4Uk92D95-zrwWB1G_S4';
-const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Guard the single CDN dependency: if @supabase/supabase-js failed to load
+// (ad blocker, CSP, CDN outage), sb is null and the auth page shows a clear
+// message instead of dead buttons or a blank screen.
+const { createClient } = (typeof supabase !== 'undefined' && supabase) ? supabase : {};
+const sb = createClient ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+window.sb = sb; // shield.js (external script) reads the shared Supabase client
+const SB_LOAD_ERROR = 'Could not load the sign-in service. Check your connection or any ad blocker, then reload.';
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let STATE = {
   user:null, profile:null, isAdmin:false,
   jobs:[], kslJobs:[], draws:[],
-  appliedJobIds:{}, applicantCounts:{},
-  activeWorkTab:'open', activeCounty:'all', activeAdmTab:'users', admLoaded:false,
+  appliedJobIds:{}, applicantCounts:{}, payeeProfiles:{}, shieldLoaded:false,
+  activeWorkTab:'open', activeCounty:'all', activeTrade:'all', activeAdmTab:'users', admLoaded:false,
   currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0,
   milestones:[]
 };
@@ -264,7 +303,9 @@ async function authSubmit() {
   const email    = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
   const errEl    = document.getElementById('auth-error');
+  errEl.style.color = 'var(--danger)';
   errEl.textContent = '';
+  if (!sb){errEl.textContent=SB_LOAD_ERROR;return;}
   if (!email||!password){errEl.textContent='Email and password required';return;}
   const res = authMode==='signup'
     ? await sb.auth.signUp({email,password})
@@ -292,10 +333,10 @@ async function onLogin(user) {
   document.getElementById('auth-wrap').style.display = 'none';
   document.getElementById('app').style.display       = 'block';
   document.getElementById('main-nav').style.display  = 'flex';
-  await loadData();
+  try { await loadData(); } catch (e) { /* render with whatever loaded */ }
   render();
 }
-async function signOut(){await sb.auth.signOut();location.reload();}
+async function signOut(){ try { if (sb) await sb.auth.signOut(); } finally { location.reload(); } }
 
 // ─── LOAD DATA ────────────────────────────────────────────────────────────────
 async function loadData() {
@@ -307,6 +348,16 @@ async function loadData() {
   STATE.jobs    = jobsRes.data  || [];
   STATE.draws   = drawRes.data  || [];
   STATE.kslJobs = kslRes.data   || [];
+
+  /* Resolve the hired contractor (payee) for any draw schedule that has one,
+     so the Draw Manager can name who each schedule pays. profiles are
+     world-readable (profiles_select policy). */
+  STATE.payeeProfiles = {};
+  const payeeIds = [...new Set(STATE.draws.map(s=>s.payee_id).filter(Boolean))];
+  if (payeeIds.length){
+    const {data:payees} = await sb.from('profiles').select('id,full_name,email').in('id',payeeIds);
+    (payees||[]).forEach(p=>{STATE.payeeProfiles[p.id]=p;});
+  }
 
   /* Applied state (mine only -- RLS on applications only lets a user
      see their own rows or rows on a job they posted, so this can't leak
@@ -333,12 +384,26 @@ function switchTab(tab) {
   document.getElementById('screen-'+tab).classList.add('active');
   document.getElementById('nav-'+tab).classList.add('active');
   if (tab==='admin') loadAdmin();
+  if (tab==='shield') loadShield();
+}
+// Shield UI lives in shield.js (loaded after this script). Mount the homeowner
+// dashboard once on first open; the module reads the global `sb` client.
+function loadShield(){
+  const mount = document.getElementById('shield-dashboard-mount');
+  if (!mount || STATE.shieldLoaded) return;
+  if (typeof window.renderShieldDashboard !== 'function'){
+    mount.innerHTML = '<p class="text-muted" style="padding:20px 0">Shield module failed to load.</p>';
+    return;
+  }
+  STATE.shieldLoaded = true;
+  window.renderShieldDashboard(mount);
 }
 function workTab(tab,btn) {
   STATE.activeWorkTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('county-tabs').style.display = tab==='ksl'?'flex':'none';
+  document.getElementById('trade-tabs').style.display  = tab==='ksl'?'flex':'none';
   renderWork();
 }
 
@@ -358,6 +423,22 @@ function renderHome() {
 const COUNTIES = ['All','Box Elder','Cache','Carbon','Daggett','Davis','Duchesne','Emery',
   'Garfield','Grand','Iron','Juab','Kane','Millard','Morgan','Piute','Rich','Salt Lake',
   'San Juan','Sanpete','Sevier','Summit','Tooele','Uintah','Utah','Wasatch','Washington','Wayne','Weber'];
+
+// Construction trade categories present on scraped KSL listings (jobs.trade).
+// Most KSL rows are NOT trade-tagged -- the KSL scraper pulls the general job
+// board, not a construction-only feed, so untagged rows are mostly unrelated
+// listings (retail, medical, sales, etc.), not miscategorized trade jobs.
+// Default view ('All Trades') therefore excludes 'Other' so a county isn't a
+// long scroll of non-construction jobs; 'Other' stays one tap away rather
+// than being hidden outright, in keeping with full transparency.
+const TRADE_CATEGORIES = ['All Trades','General Labor','Electrical','Excavation','Concrete','HVAC',
+  'Framing','Plumbing','Flooring','Landscaping','Roofing','Drywall','Other'];
+const KNOWN_TRADES = new Set(TRADE_CATEGORIES.filter(t=>t!=='All Trades'&&t!=='Other'));
+function jobMatchesTrade(job, trade){
+  if (trade==='all') return KNOWN_TRADES.has(job.trade); // "All Trades" = every known category, NOT Other
+  if (trade==='Other') return !job.trade || !KNOWN_TRADES.has(job.trade);
+  return job.trade===trade;
+}
 
 const LEAD_CATEGORIES = [
   {cat:'Boots on the Ground — Free', items:[
@@ -441,21 +522,31 @@ const LEAD_CATEGORIES = [
 function renderWork() {
   const el = document.getElementById('work-content');
   const countyEl = document.getElementById('county-tabs');
+  const tradeEl = document.getElementById('trade-tabs');
   if (STATE.activeWorkTab==='ksl') {
     countyEl.style.display = 'flex';
     countyEl.innerHTML = COUNTIES.map(c=>`
       <button class="county-tab${(c==='All'&&STATE.activeCounty==='all')||(c===STATE.activeCounty)?' active':''}"
         onclick="filterCounty('${c==='All'?'all':c}',this)">${c}</button>`).join('');
-    const jobs = STATE.activeCounty==='all'?STATE.kslJobs:STATE.kslJobs.filter(j=>j.county===STATE.activeCounty);
+    const byCounty = STATE.activeCounty==='all'?STATE.kslJobs:STATE.kslJobs.filter(j=>j.county===STATE.activeCounty);
+    tradeEl.style.display = 'flex';
+    tradeEl.innerHTML = TRADE_CATEGORIES.map(t=>{
+      const val = t==='All Trades'?'all':t;
+      const count = byCounty.filter(j=>jobMatchesTrade(j,val)).length;
+      return `<button class="trade-tab${val===STATE.activeTrade?' active':''}"
+        onclick="filterTrade('${val}',this)">${t} (${count})</button>`;
+    }).join('');
+    const jobs = byCounty.filter(j=>jobMatchesTrade(j,STATE.activeTrade));
     el.innerHTML = jobs.length ? jobs.map(j=>`
       <div class="card">
-        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">KSL</span></div>
+        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">${j.trade||'KSL'}</span></div>
         <p>${j.company||''} · ${j.location||''}, ${j.county||''}</p>
         <p style="margin-top:6px">${(j.description||'').slice(0,120)}…</p>
         <p class="text-muted" style="margin-top:4px;font-size:12px">${j.rate||''}</p>
-      </div>`).join('') : '<p class="text-muted" style="padding:20px 0">No KSL jobs in this area yet.</p>';
+      </div>`).join('') : '<p class="text-muted" style="padding:20px 0">No KSL jobs in this category yet.</p>';
   } else if (STATE.activeWorkTab==='leads') {
     countyEl.style.display = 'none';
+    tradeEl.style.display = 'none';
     el.innerHTML = LEAD_CATEGORIES.map(group=>`
       <div class="lead-category">${group.cat}</div>
       ${group.items.map(l=>`
@@ -466,6 +557,7 @@ function renderWork() {
         </div>`).join('')}`).join('');
   } else {
     countyEl.style.display = 'none';
+    tradeEl.style.display = 'none';
     el.innerHTML = STATE.jobs.length ? STATE.jobs.map(j=>{
       const isOwn = !!(j.owner_id && STATE.user && j.owner_id === STATE.user.id);
       const canRate = !!(j.owner_id && STATE.user && j.owner_id !== STATE.user.id);
@@ -480,7 +572,7 @@ function renderWork() {
         <div class="flex between mt8" style="align-items:center">
           <span class="applicant-count">${count} applicant${count!==1?'s':''}</span>
           ${isOwn
-            ? '<span class="text-muted" style="font-size:12px">Your job post</span>'
+            ? `<button class="btn btn-primary btn-sm" onclick="openApplicants('${j.id}',this)">Manage applicant${count!==1?'s':''}</button>`
             : `<button class="btn ${applied?'btn-outline':'btn-primary'} btn-sm" ${applied?'disabled':''} onclick="applyToJob('${j.id}',this)">${applied?'Applied':'Apply'}</button>`}
         </div>
         ${canRate ? `<button class="btn btn-outline btn-sm mt8" onclick="openRating('${j.id}','${j.owner_id}')">Rate Job</button>` : ''}
@@ -490,8 +582,10 @@ function renderWork() {
 }
 function filterCounty(county,btn){
   STATE.activeCounty=county;
-  document.querySelectorAll('.county-tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
+  renderWork(); // rebuilds both tab rows (trade counts depend on county)
+}
+function filterTrade(trade,btn){
+  STATE.activeTrade=trade;
   renderWork();
 }
 
@@ -511,6 +605,79 @@ async function applyToJob(jobId,btn){
   STATE.appliedJobIds[jobId] = true;
   STATE.applicantCounts[jobId] = (STATE.applicantCounts[jobId]||0)+1;
   btn.textContent = 'Applied'; btn.classList.remove('btn-primary'); btn.classList.add('btn-outline');
+}
+
+// ─── MANAGE APPLICANTS (job owner) ──────────────────────────────────────────────
+// RLS lets a job poster SELECT applications on their own jobs; profiles are
+// world-readable. Accepting one calls the accept_application() RPC, which
+// atomically marks it accepted, rejects the rest, and sets the contractor as
+// payee on the job's draw schedule(s) and every draw under them.
+let currentApplicantsJobId = null;
+async function openApplicants(jobId){
+  currentApplicantsJobId = jobId;
+  document.getElementById('applicants-content').innerHTML =
+    '<p class="text-muted" style="padding:20px 0">Loading…</p>';
+  document.getElementById('applicants-overlay').classList.add('open');
+  const {data:apps,error} = await sb.from('applications')
+    .select('id,applicant_id,status,bid_amount,message,created_at')
+    .eq('job_id',jobId)
+    .order('created_at',{ascending:true});
+  if (error){
+    document.getElementById('applicants-content').innerHTML =
+      `<p class="text-muted" style="padding:20px 0">Could not load applicants. ${error.message}</p>`;
+    return;
+  }
+  const ids = [...new Set((apps||[]).map(a=>a.applicant_id).filter(Boolean))];
+  const profiles = {};
+  if (ids.length){
+    const {data:profs} = await sb.from('profiles')
+      .select('id,full_name,email,trade,tier,jobs_completed,rating').in('id',ids);
+    (profs||[]).forEach(p=>{profiles[p.id]=p;});
+  }
+  renderApplicants(apps||[],profiles);
+}
+function renderApplicants(apps,profiles){
+  const el = document.getElementById('applicants-content');
+  document.getElementById('applicants-title').textContent =
+    `Applicants (${apps.length})`;
+  if (!apps.length){
+    el.innerHTML='<p class="text-muted" style="padding:20px 0">No applicants yet.</p>';
+    return;
+  }
+  const tiers=['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
+  const someoneHired = apps.some(a=>a.status==='accepted');
+  el.innerHTML = apps.map(a=>{
+    const p = profiles[a.applicant_id]||{};
+    const name = p.full_name||p.email||'Applicant';
+    const accepted = a.status==='accepted';
+    const rejected = a.status==='rejected';
+    return `
+    <div class="card" style="${rejected?'opacity:.55':''}">
+      <div class="flex between"><h3>${name}</h3>
+        ${accepted?'<span class="badge badge-teal">Hired</span>'
+          :rejected?'<span class="text-muted" style="font-size:12px">Not selected</span>':''}
+      </div>
+      <p class="text-muted" style="font-size:12px;margin-top:2px">${p.trade||'No trade set'} · Tier: ${tiers[p.tier||1]||'Verified'} · ${p.jobs_completed||0} jobs done</p>
+      ${a.bid_amount!=null?`<p style="margin-top:6px">Bid: $${Number(a.bid_amount).toLocaleString()}</p>`:''}
+      ${a.message?`<p style="margin-top:6px;font-size:13px">${a.message}</p>`:''}
+      ${accepted
+        ? '<p class="text-muted" style="font-size:12px;margin-top:8px">Attached as payee on this job’s draws.</p>'
+        : rejected ? ''
+        : `<button class="btn btn-primary btn-sm mt8" onclick="acceptApplicant('${a.id}',this)">${someoneHired?'Hire instead':'Hire'}</button>`}
+    </div>`;
+  }).join('');
+}
+async function acceptApplicant(applicationId,btn){
+  if (!confirm('Hire this applicant? They will be set as the payee on this job’s draw schedule, and any other applicants will be declined.')) return;
+  btn.disabled = true; btn.textContent = 'Hiring…';
+  const {error} = await sb.rpc('accept_application',{p_application_id:applicationId});
+  if (error){
+    alert('Could not hire this applicant. '+error.message);
+    btn.disabled = false; btn.textContent = 'Hire';
+    return;
+  }
+  if (currentApplicantsJobId) await openApplicants(currentApplicantsJobId);
+  await loadData(); renderDraws();
 }
 
 // ─── POST JOB ─────────────────────────────────────────────────────────────────
@@ -592,15 +759,18 @@ function renderDraws(){
     return;
   }
   el.innerHTML = STATE.draws.map(s=>{
-    const draws = (s.draws||[]).sort((a,b)=>a.position-b.position);
-    const releasedPct = draws.filter(d=>d.status==='approved'||d.status==='released').reduce((sum,d)=>sum+d.pct,0);
+    const draws = (s.draws||[]).slice().sort((a,b)=>a.milestone_order-b.milestone_order);
+    const releasedPct = draws.filter(d=>d.status==='approved'||d.status==='released').reduce((sum,d)=>sum+(d.percentage||0),0);
+    const payee = s.payee_id ? STATE.payeeProfiles[s.payee_id] : null;
+    const payeeLabel = payee ? (payee.full_name||payee.email) : null;
     return `<div class="card">
       <div class="flex between"><h3>Draw Schedule</h3><span class="text-muted">$${(s.contract_value||0).toLocaleString()}</span></div>
+      <p class="text-muted" style="font-size:12px;margin-top:2px">${payeeLabel?`Contractor: ${payeeLabel}`:'No contractor hired yet'}</p>
       <div class="escrow-bar"><div class="escrow-fill" style="width:${releasedPct}%"></div></div>
       <p class="text-muted" style="font-size:12px;margin-bottom:12px">${releasedPct}% released</p>
       ${draws.map(d=>`
         <div class="flex between mt8" style="align-items:center">
-          <span style="font-size:14px">${d.position}. ${d.name} <span class="text-muted">(${d.pct}%)</span></span>
+          <span style="font-size:14px">${d.milestone_order}. ${d.milestone_name} <span class="text-muted">(${d.percentage}%)</span></span>
           <div class="flex gap8" style="align-items:center">
             <span class="draw-status ${d.status}">${d.status}</span>
             ${d.status==='pending'?`<button class="btn btn-outline btn-sm" onclick="drawAction('${d.id}','submitted')">Submit</button>`:''}
@@ -783,9 +953,62 @@ function closeOverlay(id){document.getElementById(id).classList.remove('open');}
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 (async()=>{
-  const {data:{session}} = await sb.auth.getSession();
-  if (session?.user) await onLogin(session.user);
+  const errEl = document.getElementById('auth-error');
+  if (!sb){ if(errEl) errEl.textContent = SB_LOAD_ERROR; return; }
+  try {
+    const {data:{session}} = await sb.auth.getSession();
+    if (session?.user) await onLogin(session.user);
+  } catch (e) {
+    // Session restore / initial load failed — fall back to the sign-in form
+    // rather than a blank or half-rendered app.
+    document.getElementById('auth-wrap').style.display = '';
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('main-nav').style.display = 'none';
+    if (errEl) errEl.textContent = 'Could not restore your session. Please sign in.';
+  }
 })();
+</script>
+<!-- TradeDeck Shield UI (mountable module). Loaded after the main script so it
+     can read the shared `sb` client; functions attach to window. -->
+<script src="shield.js"></script>
+
+<!-- PWA: installable + auto-update. Service worker is network-first, so a new
+     deploy is fetched when online; this shows a one-tap refresh when a new
+     version is ready. -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      function showUpdate(worker) {
+        let bar = document.getElementById('pwa-update');
+        if (!bar) {
+          bar = document.createElement('div');
+          bar.id = 'pwa-update';
+          bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:78px;z-index:300;background:#0BBCD4;color:#0A0A0A;font-weight:700;font-size:14px;padding:12px 14px;border-radius:12px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.4)';
+          bar.innerHTML = '<span>New version available</span>';
+          const btn = document.createElement('button');
+          btn.textContent = 'Refresh';
+          btn.style.cssText = 'background:#0A0A0A;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer';
+          btn.onclick = () => worker.postMessage({ type: 'SKIP_WAITING' });
+          bar.appendChild(btn);
+          document.body.appendChild(bar);
+        }
+      }
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg.waiting);
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdate(nw);
+        });
+      });
+    }).catch(() => {});
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded) return; reloaded = true; window.location.reload();
+    });
+  });
+}
 </script>
 </body>
 </html>

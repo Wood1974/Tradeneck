@@ -5,17 +5,18 @@ Guidance for Claude Code (or any agent) working in this repo. This is the
 general contractors, and workers, built around full transparency, a
 verified trust/tier system, and milestone-based escrow.
 
-This file reflects the **actual repo contents as of Aug 2026**, verified by
-reading the code directly — not carried over from planning notes, which
-had drifted significantly from what's actually committed. If you're
-picking this project back up, read this whole file before assuming
-anything is built.
+This file was **rewritten Sep 2026 against the live code and the live
+Supabase database** (both were verified directly). The previous version
+had drifted badly — it described a schema that "had not been run against
+real Supabase" and a backend that "has no escrow code," both of which are
+now false. **Verify against the code and the live DB, not against history
+or notes, before building on top of a feature.**
 
 ## Product context
 
-TradeDeck lets subs and contractors hire and be hired directly — benchmarked
-against heypros.com with the explicit goal of doing it better. Core
-principles baked into every feature decision:
+TradeDeck lets subs and contractors hire and be hired directly, benchmarked
+against heypros.com with the goal of doing it better. Principles baked into
+every feature decision:
 
 - **Full transparency**: homeowners see both contractor and worker tiers,
   contractors see worker tiers, workers see contractor tiers. Direct
@@ -29,99 +30,169 @@ principles baked into every feature decision:
 
 ## What's actually in this repo (verified)
 
-- `index.html` — **mobile-first SPA** (primary app). Uses Supabase Auth directly
-  (`@supabase/supabase-js@2` from jsDelivr), project `jlaajejpqjldpbinktln`.
-  Handles email+password sign-in and sign-up. On success it shows the in-page
-  app shell (Home, Find Work, Post Job, Draws, Profile, Admin). **Does not
-  redirect to `app.html`.**
-- `_headers` — Netlify response headers, sets a Content-Security-Policy for
-  the whole site.
-- `app.html` — **desktop marketing shell** with embedded sign-in, Find Work,
-  Post Job wizard, CompanyCam (mock), Draw Manager, and Admin. Also uses
-  Supabase directly. Both frontends must use the same live schema (see below).
-- `app.py` — Flask API (Stripe Connect, escrow, AI photo review). Belongs in
-  the `tradedeck-api` repo for deployment; included here for reference. All
-  routes except `/` and `/stripe/webhook` require a Supabase JWT.
-- CSP note: `_headers` and `app.html`'s own CSP meta tag were both updated
-  to allow `fonts.googleapis.com`/`fonts.gstatic.com` (Google Fonts, used
-  by `app.html`) and `tradedeck-api.onrender.com` (the backend's `/api/jobs`
-  call in the hero section) in addition to the existing Supabase allowance.
-  If you add a new external call from either file, you must add its host
-  to **both** `_headers` and the CSP meta tag, or Netlify's CSP header will
-  silently block it in production (a local `file://` test won't catch
-  this — CSP host-matching behaves differently there; test over http(s)).
+- `index.html` — **the single mobile-first SPA** and the whole app. Uses
+  Supabase directly (`@supabase/supabase-js@2` from jsDelivr, project
+  `jlaajejpqjldpbinktln`) for auth and all data. Email+password sign-in and
+  sign-up; on success it shows the in-page app shell. Screens: **Home,
+  Find Work, Post Job (with an optional draw-schedule builder), Draw
+  Manager, Profile, Admin**. The old `app.html` desktop shell has been
+  **deleted** — there is one frontend now, not two.
+- `shield.js` — the **TradeDeck Shield UI** (mountable module, ~95KB),
+  moved here Sep 2026 from the `tradedeck-api` repo. Loaded as a classic
+  script after the inline app script (so it can read the shared global `sb`
+  Supabase client); its functions attach to `window`
+  (`renderShieldDashboard`, `renderShieldBrief`, `purchaseShieldPerJob`,
+  `renderContractorUploadFlow`, `subscribeContractorToShield`,
+  `renderShieldBadge`, `renderShieldCloseOutModal`). It calls the `/shield`
+  backend endpoints and lazy-loads Stripe.js for payment. Wired into
+  `index.html` as a **Shield nav tab** → `renderShieldDashboard` on first
+  open (`loadShield`). The deeper hooks (per-job brief in Post Job,
+  contractor upload flow) are available but not yet wired into those flows.
+- `_headers` — Netlify response headers; sets the site-wide
+  Content-Security-Policy. Now allows Stripe (`js.stripe.com`,
+  `api.stripe.com`, `frame-src` for Elements iframes) for Shield.
+- `wrangler.jsonc` — Cloudflare (Wrangler) static-assets config
+  (`directory: "."`). The site is wired for **both** Netlify and Cloudflare
+  static hosting; confirm with the owner which is actually serving
+  production before assuming.
+- **No backend copy lives here anymore.** The stale `app.py` that used to
+  sit in this repo "for reference" has been removed — the real, current
+  backend is the `tradedeck-api` repo. Don't re-add a backend file here.
+
+### Backend wiring status
+
+`shield.js` **does** call the backend (`tradedeck-api.onrender.com/shield/*`)
+and Stripe. The rest of `index.html` still talks only to Supabase directly —
+so the **escrow flow (Stripe Connect onboarding, escrow create/release/refund,
+draw photo review) is not yet wired** to the Draw Manager. That's now the
+biggest remaining frontend piece. When you add an escrow call, add its host to
+the CSP in **both** `_headers` and any CSP `<meta>` tag (`index.html` currently
+has no meta CSP), or Netlify's CSP header will silently block it in production
+(a local `file://` test won't catch this — test over http(s)). Stripe hosts
+(`js.stripe.com`, `api.stripe.com`, Elements `frame-src`) are already allowed
+in `_headers` from the Shield work.
+
+### Admin tab is cosmetic only
+
+The Admin nav button is shown only when `profiles.is_admin` is true, and
+that check is **cosmetic** — it just shows/hides the tab. Real enforcement
+is the "Admins have full access" RLS policies (from an `admin-setup.sql`
+that may or may not have been run against the live DB). The code tolerates
+`profiles.is_admin` not existing yet. Never treat the hidden tab as a
+security boundary.
 
 ## Live Supabase schema (verified against production, Sep 2026)
 
-The live `jobs` table uses **`owner_id`**, **`trade`**, **`rate`** (not
-`posted_by`, `trade_type`, or `pay`). Draw milestones live in the **`draws`**
-table with columns `milestone_order`, `milestone_name`, `percentage`,
-`amount_cents`, `verifier_type`, `status`. Note: `draws.job_id` is a FK to
-`draw_schedules.id`, not `jobs.id`. A legacy `milestones` table also exists
-but the frontends should use `draws`.
+The schema is **live and far larger than old notes claimed — 25 tables,
+all with RLS enabled.** Highlights:
 
-## What's described elsewhere but NOT in this repo (verified absent)
+- `jobs` uses **`owner_id`**, **`trade`**, **`rate`** (not `posted_by`,
+  `trade_type`, `pay`). Also has a `source` column: **1,777 rows are
+  `source='ksl'`** (the KSL scraper has run) plus a handful of native
+  `source='tradedeck'` postings. Find Work has real content already.
+- Draw milestones live in **`draws`** (`milestone_order`, `milestone_name`,
+  `percentage`, `amount_cents`, `verifier_type`, `status`, and now
+  **`payee_id`** — added Sep 2026). **`draws.job_id` is a FK to
+  `draw_schedules.id`, not `jobs.id`** — `draw_schedules` is the layer
+  between a job and its draws and carries its own `owner_id`. `index.html`
+  already handles this correctly (`draws_schedule_id_fkey`); don't
+  "fix" it to point at `jobs.id`.
+- Escrow: `stripe_escrow`, `escrow_ledger`, `draw_events`,
+  `draw_photos`, and `stripe_webhook_events` (webhook idempotency —
+  created Sep 2026).
+- Messaging: `conversations`, `conversation_members`, `messages`.
+- Trust/social: `profiles` (tier + rating columns, rating recalculated by
+  DB functions), `reviews`, `worker_profiles`, `contact_requests`,
+  `connection_requests`, `applications`.
+- **TradeDeck Shield** suite: `shield_jobs`, `shield_pivotal_points`,
+  `shield_photos` (write-once, integrity columns trigger-locked),
+  `shield_subscriptions`, `shield_completion_reports`,
+  `shield_photo_custody_log`, `shield_custody_log` (append-only),
+  `site_photos`. Backed by the `tradedeck-api` `shield_api.py` blueprint.
+- Storage buckets: `draw-photos`, `shield-photos`, `site-photos`,
+  `verifications` (all private — serve via signed URLs).
+- A legacy `milestones` table still exists but the app uses `draws`.
 
-- No `tradedeck-app.html` mobile rebuild, no `draw_manager_frontend.html`,
-  no `tradedeck-pitch.html` marketing page. Draw Manager and Profile **are**
-  built into `index.html` and `app.html`.
-- No Stripe Connect / escrow / draw code anywhere in the frontend.
+Real-data counts as of this writing are tiny (2 profiles, 1 draw, 0
+applications, 0 photos) — nothing below the jobs table has been exercised
+end-to-end yet.
 
 ## Backend & data
 
 - Auth + data: **Supabase** project `jlaajejpqjldpbinktln` ("Tradedeck").
-  The anon key is hardcoded in `index.html` and `app.html` (safe — it's
-  meant to be public, protected by RLS — never put the service role key
-  here).
-- `tradedeck_schema.sql` (profiles, jobs, applications, draws, plus a
-  `draw-photos` storage bucket) was reconstructed fresh this session — the
-  originally-referenced file couldn't be found in either repo — and
-  verified by actually running it against a local Postgres instance
-  (idempotent, no errors). **It has not yet been run against the real
-  Supabase project.** Until it is, none of these tables exist there, and
-  none of `app.html`'s Supabase calls (once you wire them up) will work.
+  The anon key is hardcoded in `index.html` (safe — public, protected by
+  RLS — **never** put the service role key here).
+- **The dual-auth problem is resolved.** The backend was rewritten onto
+  Supabase Auth; there is now one user system (Supabase JWT) end to end.
 - Separate Flask API backend lives in the sibling repo **tradedeck-api**
-  (tradedeck-api.onrender.com) — uses its **own independent SQLite-backed
-  auth system**, completely disconnected from Supabase Auth. See that
-  repo's CLAUDE.md — this dual-auth situation is a real architectural
-  problem to resolve before going further, not a documentation gap.
+  (tradedeck-api.onrender.com), Supabase-native, with real Stripe escrow
+  and the Shield module. See that repo's CLAUDE.md.
 
-## Key features described in the product plan (not yet implemented in code)
+## Trust / tier / verification (partially built)
 
-These are real, well-specified plans — worth preserving — but confirmed
-**not yet built** in either repo as of this writing:
-
-- Verification stack (identity → background check → license cross-check →
-  COI upload/parse → quarterly monitoring).
-- Five-tier ranking (Verified → Active → Proven → Trusted → TradeDeck Pro)
-  computed from jobs completed, timeline adherence, cost variance, and
-  cleanliness sign-offs. The `tradedeck_schema.sql` `profiles` table has
-  columns for this, but nothing writes to them yet.
-- Draw/escrow system with milestone schedule, dual verification
-  (owner/inspector), and Stripe Connect payouts. Schema exists (`draws`
-  table); no application code exists yet in either repo.
-- KSL Jobs scraper writing external listings into the `jobs` table
-  (`source='ksl'`) — built as a separate standalone project (not part of
-  either repo), delivered this session, not yet calibrated against live
-  KSL markup or run.
+- Five-tier ranking (Verified → Active → Proven → Trusted → TradeDeck Pro):
+  now **derived automatically** (Sep 2026). `rating`/`repeat_hire_rate`
+  recompute from `reviews` (existing trigger); `jobs_completed` increments
+  for the payee when a job's draws are all `released`
+  (`bump_jobs_completed_on_release` trigger — active once escrow release is
+  wired); and `tier` is derived from `jobs_completed` + `rating` on every
+  profile write (`compute_profile_tier` + `set_profile_tier` BEFORE trigger).
+  Thresholds are a documented **starter** formula (migration
+  `20260911150000_tier_inputs.sql` in the API repo) — timeline adherence,
+  cost variance, and cleanliness sign-offs aren't captured yet and should
+  refine the formula when they are.
+- Verification stack (identity → background → license → COI → quarterly
+  monitoring): a `verifications` storage bucket exists; the flow is not
+  built in the frontend.
 
 ## Deployment
 
-- Hosted on Netlify: `calm-cupcake-a213bb.netlify.app`, custom domain
-  `tradedeckapp.com`.
+- Netlify: `calm-cupcake-a213bb.netlify.app`, custom domain
+  `tradedeckapp.com`. Cloudflare Wrangler config also present (see above).
 - DNS via GoDaddy: `A @ → 75.2.60.5` (Netlify), `CNAME www →
   calm-cupcake-a213bb.netlify.app`.
 
 ## Conventions / working notes
 
 - Solo-founder project (Joshua), iterating fast across many chat sessions
-  — expect drift between what's described as "done" in notes and what's
-  actually committed. **Verify against the code, not the history, before
-  building on top of a feature.**
+  — expect drift between what's described as "done" and what's committed.
+  **Verify against the code and the live DB.**
 - Hero copy (approved, don't rewrite without asking): *"Twenty years. Every
   nail. Every pour. Every roof. From foundation to ridge cap, I've built
   it, fixed it, and stood behind it — with hands that know the difference
   between a shortcut and a standard."*
 - Keep secrets (Supabase service role key, Stripe secret key, Anthropic API
-  key) out of this repo — those belong in the backend's environment
-  config only.
+  key) out of this repo — those belong in the backend's environment config.
+
+## Accept-application → payee flow (built Sep 2026)
+
+The homeowner hires a contractor from the Find Work tab: their own job cards
+show a **Manage applicants** button (`openApplicants`) that opens an overlay
+listing everyone who applied (name, trade, tier, bid, message), each with a
+**Hire** button. Hiring calls the `accept_application(p_application_id)`
+Supabase RPC (`acceptApplicant`), which atomically marks that application
+accepted, rejects the others on the job (single-hire model), and sets
+`payee_id` on the job's `draw_schedules` **and** every `draw` under them —
+the value the API's `require_draw_payee` reads. The Draw Manager then shows
+the hired contractor on each schedule. The RPC is `SECURITY DEFINER`,
+authorization-checked against `auth.uid()` (only the job owner can accept),
+and granted to `authenticated` only. It was verified end-to-end (happy path
++ non-owner denial) against the live DB. Its migration lives in the
+`tradedeck-api` repo (`supabase/migrations/`).
+
+## Known-good next steps (Sep 2026)
+
+1. Wire the Draw Manager to the escrow endpoints (fund via Stripe.js →
+   approve → release) and add draw photo upload. **This is now the biggest
+   remaining piece** — the payee is set and Stripe CSP hosts are already
+   allowed, so escrow create/release has everything it needs server-side.
+2. Wire Shield's deeper hooks: the per-job brief (`renderShieldBrief` /
+   `renderShieldToggle`) into the Post Job flow, and the contractor upload
+   flow (`renderContractorUploadFlow`) into the draw view. The Shield tab +
+   dashboard are already live; these hooks exist in `shield.js` but aren't
+   mounted into those screens yet.
+3. Run a full escrow cycle in Stripe test mode end-to-end.
+4. Consider transitioning `jobs.status` to `filled` on hire (deliberately
+   left `open` for now so the owner's Manage-applicants card stays visible;
+   `loadData` only loads `status='open'` jobs, so changing it interacts with
+   job visibility — decide that together).
