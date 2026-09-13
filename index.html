@@ -476,7 +476,9 @@ function renderWork() {
     countyEl.innerHTML = COUNTIES.map(c=>`
       <button class="county-tab${(c==='All'&&STATE.activeCounty==='all')||(c===STATE.activeCounty)?' active':''}"
         onclick="filterCounty('${c==='All'?'all':c}',this)">${c}</button>`).join('');
-    const jobs = STATE.activeCounty==='all'?STATE.kslJobs:STATE.kslJobs.filter(j=>j.county===STATE.activeCounty);
+    const nearbyCounties = ['Salt Lake','Wasatch','Utah','Weber','Davis','Summit'];
+    const filtered = STATE.kslJobs.filter(j=>nearbyCounties.includes(j.county));
+    const jobs = STATE.activeCounty==='all'?filtered:filtered.filter(j=>j.county===STATE.activeCounty);
     el.innerHTML = jobs.length ? jobs.map(j=>`
       <div class="card">
         <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">KSL</span></div>
