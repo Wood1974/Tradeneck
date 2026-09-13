@@ -645,7 +645,38 @@ function renderDraws(){
   }).join('');
 }
 async function drawAction(id,status){
-  await sb.from('draws').update({status,resolved_at:['approved','disputed'].includes(status)?new Date().toISOString():null}).eq('id',id);
+  if(status==='approved'){
+    // Must go through Flask so Stripe capture + transfer fires
+    const sess=await sb.auth.getSession();
+    const token=sess?.data?.session?.access_token;
+    if(!token){alert('Session expired. Please sign in again.');return;}
+    const btn=event?.target;if(btn){btn.disabled=true;btn.textContent='Releasing…';}
+    try{
+      const res=await fetch(`https://tradedeck-api.onrender.com/draws/${id}/approve`,{
+        method:'POST',
+        headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'}
+      });
+      const json=await res.json().catch(()=>({}));
+      if(!res.ok){
+        const msg=json.error||`Server error (${res.status})`;
+        alert(`Approval failed: ${msg}`);
+        if(btn){btn.disabled=false;btn.textContent='Approve';}
+        return;
+      }
+      // Flask handled Supabase update + Stripe transfer
+    }catch(e){
+      alert('Could not reach payment server. Check connection and try again.');
+      if(btn){btn.disabled=false;btn.textContent='Approve';}
+      return;
+    }
+  }else{
+    // Submit and Dispute write Supabase directly (no money movement)
+    const update={status};
+    if(status==='disputed')update.resolved_at=new Date().toISOString();
+    if(status==='submitted')update.submitted_at=new Date().toISOString();
+    const{error}=await sb.from('draws').update(update).eq('id',id);
+    if(error){alert('Update failed: '+error.message);return;}
+  }
   await loadData();renderDraws();
 }
 
