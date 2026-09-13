@@ -240,6 +240,24 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 </nav>
 
 <!-- RATING OVERLAY -->
+<div class="overlay" id="photo-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <h3>Submit Milestone Photos</h3>
+      <button class="close-btn" onclick="closeOverlay('photo-overlay')">×</button>
+    </div>
+    <p class="text-muted" id="photo-overlay-desc" style="margin-bottom:16px;font-size:14px"></p>
+    <div id="photo-preview-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px"></div>
+    <label style="display:block;padding:16px;border:2px dashed var(--border);border-radius:8px;text-align:center;cursor:pointer;margin-bottom:12px">
+      <input type="file" id="photo-file-input" accept="image/*" multiple style="display:none" onchange="previewPhotos(this)">
+      <span style="color:var(--teal);font-weight:600">📷 Tap to select photos</span>
+      <p class="text-muted" style="font-size:12px;margin-top:4px">JPG, PNG, HEIC — up to 5 photos</p>
+    </label>
+    <div id="photo-upload-error" style="color:var(--red);font-size:13px;margin-bottom:12px;display:none"></div>
+    <button class="btn btn-primary" style="width:100%" id="photo-submit-btn" onclick="submitDrawPhotos()">Submit for Approval</button>
+  </div>
+</div>
+
 <div class="overlay" id="escrow-overlay">
   <div class="overlay-inner">
     <div class="overlay-header">
@@ -674,7 +692,7 @@ function renderDraws(){
           <div class="flex gap8" style="align-items:center">
             <span class="draw-status ${d.status}">${d.status}</span>
             ${canFund?`<button class="btn btn-outline btn-sm" onclick="openEscrowFunding('${d.id}','${s.id}',${d.amount_cents||0},'${d.milestone_name||d.name||''}')">💳 Fund</button>`:''}
-            ${!iAmOwner&&d.status==='pending'?`<button class="btn btn-outline btn-sm" onclick="drawAction('${d.id}','submitted')">Submit</button>`:''}
+            ${!iAmOwner&&d.status==='pending'?`<button class="btn btn-outline btn-sm" onclick="openPhotoUpload('${d.id}','${d.milestone_name||d.name||''}')">📷 Submit</button>`:''}
             ${canApprove?`
               <button class="btn btn-primary btn-sm" onclick="drawAction('${d.id}','approved')">Approve</button>
               <button class="btn btn-danger btn-sm" onclick="drawAction('${d.id}','disputed')">Dispute</button>`:''}
@@ -719,6 +737,75 @@ async function drawAction(id,status){
     if(error){alert('Update failed: '+error.message);return;}
   }
   await loadData();renderDraws();
+}
+
+// ─── PHOTO UPLOAD ─────────────────────────────────────────────────────────────
+let _activePhotoDrawId = null;
+let _pendingPhotoFiles = [];
+
+function openPhotoUpload(drawId, milestoneName){
+  _activePhotoDrawId = drawId;
+  _pendingPhotoFiles = [];
+  document.getElementById('photo-overlay-desc').textContent = `${milestoneName} — attach photos showing completed work. Claude AI will review them before the GC approves.`;
+  document.getElementById('photo-preview-grid').innerHTML = '';
+  document.getElementById('photo-file-input').value = '';
+  document.getElementById('photo-upload-error').style.display = 'none';
+  document.getElementById('photo-submit-btn').disabled = false;
+  document.getElementById('photo-submit-btn').textContent = 'Submit for Approval';
+  openOverlay('photo-overlay');
+}
+
+function previewPhotos(input){
+  const files = Array.from(input.files).slice(0,5);
+  _pendingPhotoFiles = files;
+  const grid = document.getElementById('photo-preview-grid');
+  grid.innerHTML = files.map((_,i)=>`<div style="background:var(--border);border-radius:6px;aspect-ratio:1;overflow:hidden"><img id="prev-${i}" style="width:100%;height:100%;object-fit:cover"/></div>`).join('');
+  files.forEach((f,i)=>{
+    const r=new FileReader(); r.onload=e=>{document.getElementById('prev-'+i).src=e.target.result;}; r.readAsDataURL(f);
+  });
+}
+
+async function submitDrawPhotos(){
+  if(!_pendingPhotoFiles.length){alert('Select at least one photo.');return;}
+  const sess = await sb.auth.getSession();
+  const token = sess?.data?.session?.access_token;
+  if(!token){alert('Sign in required');return;}
+  const btn = document.getElementById('photo-submit-btn');
+  const errEl = document.getElementById('photo-upload-error');
+  btn.disabled=true; errEl.style.display='none';
+  let uploaded=0;
+  for(const file of _pendingPhotoFiles){
+    btn.textContent=`Uploading ${uploaded+1}/${_pendingPhotoFiles.length}…`;
+    try{
+      const b64 = await new Promise((res,rej)=>{
+        const r=new FileReader();
+        r.onload=e=>res(e.target.result.split(',')[1]);
+        r.onerror=rej;
+        r.readAsDataURL(file);
+      });
+      const ext = file.name.split('.').pop().toLowerCase()||'jpg';
+      const res = await fetch(`${API}/draws/${_activePhotoDrawId}/photos/upload`,{
+        method:'POST',
+        headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+        body: JSON.stringify({image_base64:b64, storage_path:`draws/${_activePhotoDrawId}/${Date.now()}-${uploaded}.${ext}`})
+      });
+      const json = await res.json().catch(()=>({}));
+      if(!res.ok){
+        errEl.textContent = json.error||`Upload failed (${res.status})`;
+        errEl.style.display='block';
+        btn.disabled=false; btn.textContent='Submit for Approval';
+        return;
+      }
+      uploaded++;
+    }catch(e){
+      errEl.textContent='Upload failed. Check connection.';
+      errEl.style.display='block';
+      btn.disabled=false; btn.textContent='Submit for Approval';
+      return;
+    }
+  }
+  closeOverlay('photo-overlay');
+  await loadData(); renderDraws();
 }
 
 // ─── ESCROW FUNDING ───────────────────────────────────────────────────────────
@@ -877,6 +964,19 @@ function renderProfile(){
       <button class="btn btn-primary btn-block" onclick="saveProfile()">Save</button>
     </div>
     <div class="card">
+      <h3>Payouts</h3>
+      <p class="text-muted" style="font-size:14px;margin-bottom:12px">Connect your bank account to receive draw payments when GCs approve milestones.</p>
+      ${p.stripe_account_id?`
+        <div style="padding:12px;background:#1a3a1a;border:1px solid #4ade80;border-radius:4px">
+          <p style="color:#4ade80;font-weight:bold">✓ Bank account connected</p>
+          <p class="text-muted" style="font-size:12px;margin-top:4px">Payments will transfer automatically on approval.</p>
+        </div>
+      `:`
+        <button class="btn btn-primary btn-block" onclick="connectStripe()">Connect Bank Account</button>
+        <p class="text-muted" style="font-size:12px;margin-top:8px">Required to receive draw payments. Powered by Stripe.</p>
+      `}
+    </div>
+    <div class="card">
       <h3>Background Verification</h3>
       <p class="text-muted">Verified contractors earn trust badges and appear higher in worker searches.</p>
       ${p.checkr_status==='cleared'?`
@@ -897,6 +997,26 @@ function renderProfile(){
     <button class="btn btn-outline btn-block mt8" onclick="signOut()">Sign Out</button>
   `;
 }
+async function connectStripe(){
+  const sess = await sb.auth.getSession();
+  const token = sess?.data?.session?.access_token;
+  if(!token){alert('Sign in required');return;}
+  const btn = event?.target; if(btn){btn.disabled=true;btn.textContent='Connecting…';}
+  try{
+    const res = await fetch(`${API}/stripe/connect/onboard`,{
+      method:'POST',
+      headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+      body: JSON.stringify({user_id: STATE.user.id, email: STATE.profile.email, base_url: window.location.origin})
+    });
+    const json = await res.json().catch(()=>({}));
+    if(!res.ok){alert(json.error||'Could not start Stripe onboarding');if(btn){btn.disabled=false;btn.textContent='Connect Bank Account';}return;}
+    window.location.href = json.url;
+  }catch(e){
+    alert('Could not reach server. Try again.');
+    if(btn){btn.disabled=false;btn.textContent='Connect Bank Account';}
+  }
+}
+
 async function saveProfile(){
   const updates = {
     full_name: document.getElementById('edit-name').value,
