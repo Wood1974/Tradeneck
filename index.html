@@ -1,4 +1,14 @@
 <!DOCTYPE html>
+<!--
+TradeDeck — Marketplace + Escrow + Shield
+SCHEMA MIGRATIONS REQUIRED (run in Supabase SQL Editor):
+1. ALTER TABLE profiles ADD COLUMN IF NOT EXISTS checkr_candidate_id text;
+2. ALTER TABLE profiles ADD COLUMN IF NOT EXISTS checkr_status text DEFAULT 'not_started';
+3. ALTER TABLE profiles ADD COLUMN IF NOT EXISTS checkr_cleared_at timestamptz;
+4. CREATE TABLE IF NOT EXISTS worker_profiles (id uuid PRIMARY KEY, user_id uuid REFERENCES auth.users, trade text, years_experience int, verification_status text, created_at timestamptz DEFAULT now());
+5. CREATE TABLE IF NOT EXISTS contact_requests (id uuid PRIMARY KEY, requester_id uuid REFERENCES auth.users, worker_id uuid REFERENCES auth.users, status text, created_at timestamptz DEFAULT now());
+6. Add RLS policies (see admin-setup.sql for pattern)
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -155,7 +165,7 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
         <option>Emery</option><option>Carbon</option><option>Grand</option>
         <option>San Juan</option><option>Uintah</option><option>Duchesne</option>
         <option>Daggett</option><option>Morgan</option><option>Rich</option>
-        <option>Box Elder</option><option>Other</option>
+        <option>Box Elder</option><option>Beaver</option><option>Other</option>
       </select>
       <label>Description</label>
       <textarea id="post-desc" placeholder="Scope, timeline, crew size…"></textarea>
@@ -179,6 +189,12 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   </div>
 
   <!-- PROFILE -->
+  <div id="screen-workers" class="screen">
+    <div class="screen-header"><h2>Worker Directory</h2></div>
+    <div style="padding:0 16px;margin:16px 0"><input id="worker-search" type="text" placeholder="Search by name, trade, or city" style="width:100%;padding:10px;border:1px solid #333;border-radius:4px;background:#1a1a1a;color:#fff"/></div>
+    <div id="workers-grid" style="display:grid;grid-template-columns:1fr;gap:12px;padding:0 16px"></div>
+  </div>
+
   <div id="screen-profile" class="screen">
     <div class="screen-header"><h2>Profile</h2></div>
     <div id="profile-content"></div>
@@ -211,6 +227,9 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   <button onclick="switchTab('draws')" id="nav-draws">
     <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Draws
   </button>
+  <button onclick="switchTab('workers')" id="nav-workers">
+    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Workers
+  </button>
   <button onclick="switchTab('profile')" id="nav-profile">
     <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile
   </button>
@@ -233,6 +252,17 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     </div>
     <textarea id="review-text" placeholder="Share your experience (optional)…"></textarea>
     <button class="btn btn-primary btn-block" onclick="submitRating()">Submit Rating</button>
+  </div>
+</div>
+
+<!-- APPLICANTS OVERLAY -->
+<div class="overlay" id="applicants-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <h3>Applicants</h3>
+      <button class="close-btn" onclick="closeOverlay('applicants-overlay')">×</button>
+    </div>
+    <div id="applicants-list"><p class="text-muted">Loading…</p></div>
   </div>
 </div>
 
@@ -343,7 +373,7 @@ function workTab(tab,btn) {
 }
 
 // ─── RENDER ───────────────────────────────────────────────────────────────────
-function render(){renderHome();renderWork();renderDraws();renderProfile();}
+function render(){renderHome();renderWork();renderDraws();renderWorkers();renderProfile();}
 
 function renderHome() {
   if (!STATE.profile) return;
@@ -355,7 +385,7 @@ function renderHome() {
   `;
 }
 
-const COUNTIES = ['All','Box Elder','Cache','Carbon','Daggett','Davis','Duchesne','Emery',
+const COUNTIES = ['All','Beaver','Box Elder','Cache','Carbon','Daggett','Davis','Duchesne','Emery',
   'Garfield','Grand','Iron','Juab','Kane','Millard','Morgan','Piute','Rich','Salt Lake',
   'San Juan','Sanpete','Sevier','Summit','Tooele','Uintah','Utah','Wasatch','Washington','Wayne','Weber'];
 
@@ -480,7 +510,7 @@ function renderWork() {
         <div class="flex between mt8" style="align-items:center">
           <span class="applicant-count">${count} applicant${count!==1?'s':''}</span>
           ${isOwn
-            ? '<span class="text-muted" style="font-size:12px">Your job post</span>'
+            ? `<button class="btn btn-outline btn-sm" onclick="openApplicants('${j.id}')">View Applicants</button>`
             : `<button class="btn ${applied?'btn-outline':'btn-primary'} btn-sm" ${applied?'disabled':''} onclick="applyToJob('${j.id}',this)">${applied?'Applied':'Apply'}</button>`}
         </div>
         ${canRate ? `<button class="btn btn-outline btn-sm mt8" onclick="openRating('${j.id}','${j.owner_id}')">Rate Job</button>` : ''}
@@ -617,6 +647,53 @@ async function drawAction(id,status){
   await loadData();renderDraws();
 }
 
+// ─── WORKER DIRECTORY ─────────────────────────────────────────────────────────
+async function renderWorkers(){
+  const el=document.getElementById('workers-grid');
+  if(!STATE.user){el.innerHTML='<p class="text-muted" style="padding:20px">Sign in to view workers.</p>';return;}
+  const search=document.getElementById('worker-search')?.value||'';
+  let q=sb.from('profiles').select('id,email,full_name,trade,phone,tier,jobs_completed,created_at,checkr_status').gt('jobs_completed',0);
+  if(search){q=q.or(`full_name.ilike.%${search}%,trade.ilike.%${search}%`);}
+  const {data:workers,error}=await q.order('jobs_completed',{ascending:false}).limit(50);
+  if(error||!workers?.length){el.innerHTML='<p class="text-muted" style="padding:20px">No workers found.</p>';return;}
+  el.innerHTML=workers.map(w=>`
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <h3>${w.full_name||w.email}</h3>
+        <p class="text-muted">${w.trade||'–'} · ${w.jobs_completed||0} jobs · Tier ${w.tier||1}</p>
+        ${w.checkr_status==='cleared'?'<p style="color:#4ade80;font-size:12px;margin-top:4px">✓ Background verified</p>':''}
+      </div>
+      <button class="btn btn-sm btn-outline" onclick="contactWorker('${w.id}')">Contact</button>
+    </div>
+  `).join('');
+}
+document.addEventListener('input',e=>{if(e.target.id==='worker-search')renderWorkers();});
+async function contactWorker(wid){
+  const {error}=await sb.from('contact_requests').insert({
+    requester_id:STATE.user.id,
+    worker_id:wid,
+    status:'pending',
+    created_at:new Date().toISOString()
+  });
+  if(error){alert(error.message);return;}
+  alert('Contact request sent!');
+}
+
+// ─── CHECKR INTEGRATION ────────────────────────────────────────────────────────
+async function startCheckr(){
+  if(!STATE.user?.id){alert('Sign in required');return;}
+  const btn=event.target;btn.disabled=true;btn.textContent='Starting…';
+  const {data,error}=await fetch('/api/checkr/start',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({user_id:STATE.user.id,email:STATE.user.email,name:STATE.profile.full_name||'User'})
+  }).then(r=>r.json());
+  if(error||!data?.candidate_id){alert('Could not start background check. Try again later.');btn.disabled=false;btn.textContent='Start Background Check';return;}
+  STATE.profile.checkr_candidate_id=data.candidate_id;
+  await sb.from('profiles').update({checkr_candidate_id:data.candidate_id,checkr_status:'pending'}).eq('id',STATE.user.id);
+  renderProfile();
+}
+
 // ─── PROFILE ──────────────────────────────────────────────────────────────────
 function renderProfile(){
   const el = document.getElementById('profile-content');
@@ -643,6 +720,24 @@ function renderProfile(){
       <label>Phone</label>
       <input id="edit-phone" value="${p.phone||''}" placeholder="435-555-0100"/>
       <button class="btn btn-primary btn-block" onclick="saveProfile()">Save</button>
+    </div>
+    <div class="card">
+      <h3>Background Verification</h3>
+      <p class="text-muted">Verified contractors earn trust badges and appear higher in worker searches.</p>
+      ${p.checkr_status==='cleared'?`
+        <div style="padding:12px;background:#1a3a1a;border:1px solid #4ade80;border-radius:4px;margin:12px 0">
+          <p style="color:#4ade80;font-weight:bold">✓ Background verified</p>
+          <p class="text-muted" style="font-size:12px;margin-top:4px">Cleared on ${new Date(p.checkr_cleared_at).toLocaleDateString()}</p>
+        </div>
+      `:p.checkr_status==='pending'?`
+        <div style="padding:12px;background:#3a3a1a;border:1px solid #facc15;border-radius:4px;margin:12px 0">
+          <p style="color:#facc15;font-weight:bold">⏱ Verification pending</p>
+          <p class="text-muted" style="font-size:12px;margin-top:4px">Check back in 1-2 business days</p>
+        </div>
+      `:`
+        <button class="btn btn-primary btn-block" onclick="startCheckr()">Start Background Check</button>
+        <p class="text-muted" style="font-size:12px;margin-top:8px">Takes 1-2 business days. Required for verified badges.</p>
+      `}
     </div>
     <button class="btn btn-outline btn-block mt8" onclick="signOut()">Sign Out</button>
   `;
@@ -780,6 +875,63 @@ async function submitRating(){
   closeOverlay('rating-overlay');
 }
 function closeOverlay(id){document.getElementById(id).classList.remove('open');}
+
+// ─── APPLICANTS / HIRE ────────────────────────────────────────────────────────
+// A job owner views who applied to their own posted job and hires one. Hiring:
+//   1. marks that application 'accepted' and every other applicant 'rejected'
+//      (RLS: "Job posters can update applications on their jobs", added
+//      Sep 2, 2026 — before this, owners could not update applications at all)
+//   2. marks the job 'filled'
+//   3. sets draw_schedules.payee_id to the hired worker — this is the column
+//      the Flask backend's require_draw_payee() checks before letting anyone
+//      upload draw photos, so hiring here is what unblocks that.
+async function openApplicants(jobId){
+  STATE.currentApplicantsJobId = jobId;
+  document.getElementById('applicants-list').innerHTML = '<p class="text-muted">Loading…</p>';
+  document.getElementById('applicants-overlay').classList.add('open');
+  const {data, error} = await sb.from('applications')
+    .select('id,applicant_id,status,bid_amount,message,created_at,profiles:applicant_id(full_name,trade,tier,rating,jobs_completed)')
+    .eq('job_id', jobId)
+    .order('created_at',{ascending:true});
+  if (error){
+    document.getElementById('applicants-list').innerHTML = `<p class="text-muted">Could not load applicants. ${error.message}</p>`;
+    return;
+  }
+  renderApplicantsList(data||[]);
+}
+function renderApplicantsList(apps){
+  const el = document.getElementById('applicants-list');
+  if (!apps.length){el.innerHTML = '<p class="text-muted">No applicants yet.</p>';return;}
+  const hired = apps.find(a=>a.status==='accepted');
+  el.innerHTML = apps.map(a=>{
+    const p = a.profiles||{};
+    const isHired = a.status==='accepted';
+    const isRejected = a.status==='rejected';
+    return `
+    <div class="card" style="margin-bottom:8px">
+      <div class="flex between"><h3>${p.full_name||'Worker'}</h3>${isHired?'<span class="badge badge-teal">Hired</span>':''}</div>
+      <p class="text-muted" style="font-size:13px">${p.trade||''}${p.tier?' · Tier '+p.tier:''}${p.rating>0?' · ★ '+p.rating:''}</p>
+      ${a.bid_amount?`<p style="margin-top:4px">Bid: $${a.bid_amount}</p>`:''}
+      ${a.message?`<p class="text-muted" style="margin-top:4px;font-size:13px">"${a.message}"</p>`:''}
+      ${!hired && !isRejected ? `<button class="btn btn-primary btn-sm mt8" onclick="hireApplicant('${a.id}','${a.applicant_id}')">Hire</button>` : ''}
+      ${isRejected?'<p class="text-muted" style="font-size:12px;margin-top:6px">Not selected</p>':''}
+    </div>`;
+  }).join('');
+}
+async function hireApplicant(applicationId, applicantId){
+  if (!confirm('Hire this worker? Other applicants will be marked as not selected, and this job will be marked filled.')) return;
+  const jobId = STATE.currentApplicantsJobId;
+  const {error:e1} = await sb.from('applications').update({status:'accepted'}).eq('id', applicationId);
+  if (e1){alert('Could not hire: '+e1.message);return;}
+  await sb.from('applications').update({status:'rejected'}).eq('job_id', jobId).neq('id', applicationId);
+  await sb.from('jobs').update({status:'filled'}).eq('id', jobId);
+  const {data:sched} = await sb.from('draw_schedules').select('id').eq('job_id', jobId).maybeSingle();
+  if (sched) {
+    await sb.from('draw_schedules').update({payee_id: applicantId}).eq('id', sched.id);
+  }
+  await openApplicants(jobId);
+  await loadData();render();
+}
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 (async()=>{
