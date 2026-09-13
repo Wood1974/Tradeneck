@@ -15,6 +15,7 @@ SCHEMA MIGRATIONS REQUIRED (run in Supabase SQL Editor):
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>TradeDeck</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://js.stripe.com/v3/"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -239,6 +240,19 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 </nav>
 
 <!-- RATING OVERLAY -->
+<div class="overlay" id="escrow-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <h3>Fund Draw Escrow</h3>
+      <button class="close-btn" onclick="closeOverlay('escrow-overlay')">×</button>
+    </div>
+    <p class="text-muted" id="escrow-overlay-desc" style="margin-bottom:16px;font-size:14px"></p>
+    <div id="escrow-payment-element" style="margin-bottom:16px"></div>
+    <div id="escrow-error" style="color:var(--red);font-size:13px;margin-bottom:12px;display:none"></div>
+    <button class="btn btn-primary" style="width:100%" id="escrow-pay-btn" onclick="confirmEscrowPayment()">Fund Escrow</button>
+  </div>
+</div>
+
 <div class="overlay" id="rating-overlay">
   <div class="overlay-inner">
     <div class="overlay-header">
@@ -280,7 +294,8 @@ let STATE = {
   appliedJobIds:{}, applicantCounts:{},
   activeWorkTab:'open', activeCounty:'all', activeAdmTab:'users', admLoaded:false,
   currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0,
-  milestones:[]
+  milestones:[],
+  escrowMap:{} // draw_id → escrow status ('pending'|'held'|'released'|'refunded')
 };
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
@@ -337,6 +352,14 @@ async function loadData() {
   STATE.jobs    = jobsRes.data  || [];
   STATE.draws   = drawRes.data  || [];
   STATE.kslJobs = kslRes.data   || [];
+
+  // Load escrow status for all draws
+  STATE.escrowMap = {};
+  const allDrawIds = STATE.draws.flatMap(s=>(s.draws||[]).map(d=>d.id)).filter(Boolean);
+  if(allDrawIds.length){
+    const {data:escrows} = await sb.from('stripe_escrow').select('draw_id,status').in('draw_id',allDrawIds);
+    (escrows||[]).forEach(e=>{STATE.escrowMap[e.draw_id]=e.status;});
+  }
 
   /* Applied state (mine only -- RLS on applications only lets a user
      see their own rows or rows on a job they posted, so this can't leak
@@ -623,24 +646,42 @@ function renderDraws(){
     el.innerHTML='<p class="text-muted" style="padding:20px 0">No draw schedules yet. Add milestones when posting a job.</p>';
     return;
   }
+  const isOwner = STATE.user && STATE.draws.some(s=>s.owner_id===STATE.user.id);
   el.innerHTML = STATE.draws.map(s=>{
-    const draws = (s.draws||[]).sort((a,b)=>a.position-b.position);
-    const releasedPct = draws.filter(d=>d.status==='approved'||d.status==='released').reduce((sum,d)=>sum+d.pct,0);
+    const draws = (s.draws||[]).sort((a,b)=>a.milestone_order-b.milestone_order);
+    const releasedPct = draws.filter(d=>d.status==='approved'||d.status==='released').reduce((sum,d)=>sum+(d.percentage||0),0);
+    const iAmOwner = STATE.user && s.owner_id===STATE.user.id;
+    const hasPayee = !!s.payee_id;
     return `<div class="card">
       <div class="flex between"><h3>Draw Schedule</h3><span class="text-muted">$${(s.contract_value||0).toLocaleString()}</span></div>
+      ${hasPayee?'':`<p class="text-muted" style="font-size:12px;margin-bottom:8px">⏳ Awaiting contractor assignment</p>`}
       <div class="escrow-bar"><div class="escrow-fill" style="width:${releasedPct}%"></div></div>
       <p class="text-muted" style="font-size:12px;margin-bottom:12px">${releasedPct}% released</p>
-      ${draws.map(d=>`
+      ${draws.map(d=>{
+        const dollarAmt = ((d.amount_cents||0)/100).toLocaleString('en-US',{style:'currency',currency:'USD'});
+        const escrowStatus = STATE.escrowMap[d.id];
+        const escrowHeld = escrowStatus==='held'||escrowStatus==='released';
+        const escrowPending = escrowStatus==='pending';
+        const canFund = iAmOwner && hasPayee && d.status==='pending' && !escrowStatus;
+        const canApprove = iAmOwner && d.status==='submitted' && escrowHeld;
+        return `
         <div class="flex between mt8" style="align-items:center">
-          <span style="font-size:14px">${d.position}. ${d.name} <span class="text-muted">(${d.pct}%)</span></span>
+          <div>
+            <span style="font-size:14px">${d.milestone_order||''}. ${d.milestone_name||d.name||''} <span class="text-muted">(${d.percentage||d.pct||0}% · ${dollarAmt})</span></span>
+            ${escrowPending?`<br><span style="font-size:11px;color:#ffb400">💳 Escrow pending payment</span>`:''}
+            ${escrowHeld?`<br><span style="font-size:11px;color:var(--green)">✓ Escrow funded</span>`:''}
+          </div>
           <div class="flex gap8" style="align-items:center">
             <span class="draw-status ${d.status}">${d.status}</span>
-            ${d.status==='pending'?`<button class="btn btn-outline btn-sm" onclick="drawAction('${d.id}','submitted')">Submit</button>`:''}
-            ${d.status==='submitted'?`
+            ${canFund?`<button class="btn btn-outline btn-sm" onclick="openEscrowFunding('${d.id}','${s.id}',${d.amount_cents||0},'${d.milestone_name||d.name||''}')">💳 Fund</button>`:''}
+            ${!iAmOwner&&d.status==='pending'?`<button class="btn btn-outline btn-sm" onclick="drawAction('${d.id}','submitted')">Submit</button>`:''}
+            ${canApprove?`
               <button class="btn btn-primary btn-sm" onclick="drawAction('${d.id}','approved')">Approve</button>
               <button class="btn btn-danger btn-sm" onclick="drawAction('${d.id}','disputed')">Dispute</button>`:''}
+            ${iAmOwner&&d.status==='submitted'&&!escrowHeld?`<span style="font-size:11px;color:var(--danger)">Fund escrow first</span>`:''}
           </div>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
     </div>`;
   }).join('');
 }
@@ -678,6 +719,87 @@ async function drawAction(id,status){
     if(error){alert('Update failed: '+error.message);return;}
   }
   await loadData();renderDraws();
+}
+
+// ─── ESCROW FUNDING ───────────────────────────────────────────────────────────
+const STRIPE_PK = 'pk_test_51TLWkTDNZcAJj6Kyd84RVIQ0qPO1iHP109ccBL4P9OQvShE21T291c4BhhtC8Z6CEYQKqmtjj2b6UZQe1n1CusGC00KNY7CwAl';
+const API = 'https://tradedeck-api.onrender.com';
+let _stripe=null, _stripeElements=null, _activeEscrowDrawId=null;
+
+async function openEscrowFunding(drawId, scheduleId, amountCents, milestoneName){
+  _activeEscrowDrawId = drawId;
+  const sess = await sb.auth.getSession();
+  const token = sess?.data?.session?.access_token;
+  if(!token){alert('Sign in required');return;}
+
+  const desc = document.getElementById('escrow-overlay-desc');
+  const payEl = document.getElementById('escrow-payment-element');
+  const errEl = document.getElementById('escrow-error');
+  const btn   = document.getElementById('escrow-pay-btn');
+  const dollarAmt = (amountCents/100).toLocaleString('en-US',{style:'currency',currency:'USD'});
+  desc.textContent = `${milestoneName} — ${dollarAmt}. Funds held in escrow until you approve the milestone.`;
+  payEl.innerHTML = '<p class="text-muted" style="text-align:center;padding:20px">Loading payment form…</p>';
+  errEl.style.display='none';
+  btn.disabled=true;
+  openOverlay('escrow-overlay');
+
+  // Call Flask to create escrow & get client_secret
+  let clientSecret;
+  try{
+    const res = await fetch(`${API}/stripe/escrow/create`,{
+      method:'POST',
+      headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+      body: JSON.stringify({draw_id:drawId})
+    });
+    const json = await res.json().catch(()=>({}));
+    if(!res.ok){
+      payEl.innerHTML='';
+      errEl.textContent = json.error||`Error ${res.status}`;
+      errEl.style.display='block';
+      return;
+    }
+    clientSecret = json.client_secret;
+  }catch(e){
+    payEl.innerHTML='';
+    errEl.textContent='Could not reach server. Try again.';
+    errEl.style.display='block';
+    return;
+  }
+
+  // Mount Stripe Payment Element
+  if(!_stripe) _stripe = Stripe(STRIPE_PK);
+  _stripeElements = _stripe.elements({clientSecret, appearance:{theme:'night',variables:{colorPrimary:'#0bbcd4',colorBackground:'#1e2a3a',colorText:'#e2e8f0',borderRadius:'8px'}}});
+  const payment = _stripeElements.create('payment');
+  payEl.innerHTML='';
+  payment.mount(payEl);
+  btn.disabled=false;
+}
+
+async function confirmEscrowPayment(){
+  const btn=document.getElementById('escrow-pay-btn');
+  const errEl=document.getElementById('escrow-error');
+  if(!_stripeElements||!_stripe){return;}
+  btn.disabled=true; btn.textContent='Processing…';
+  errEl.style.display='none';
+
+  const {error} = await _stripe.confirmPayment({
+    elements: _stripeElements,
+    confirmParams:{return_url: window.location.href},
+    redirect:'if_required'
+  });
+
+  if(error){
+    errEl.textContent = error.message||'Payment failed';
+    errEl.style.display='block';
+    btn.disabled=false; btn.textContent='Fund Escrow';
+    return;
+  }
+
+  // Payment confirmed — escrow now pending webhook to mark held
+  STATE.escrowMap[_activeEscrowDrawId]='pending';
+  closeOverlay('escrow-overlay');
+  btn.textContent='Fund Escrow';
+  await loadData(); renderDraws();
 }
 
 // ─── WORKER DIRECTORY ─────────────────────────────────────────────────────────
