@@ -97,8 +97,12 @@ but the frontends should use `draws`.
   production, not just in the migration files.
 - `tradedeck_schema.sql` is **not in this repo** — do not go looking for it.
 - **Row counts, 2026-09-15 — read these before planning any migration.**
-  `jobs` 138 (all scraped from KSL, `source='ksl'`, none user-posted),
+  `jobs` 138 — of which **137 are `source='ksl'` and exactly one is not**;
+  that single row is the only job in the system not produced by the scraper.
   `profiles` 4, `shield_jobs` 1, `shield_pivotal_points` 5, `shield_photos` 2.
+  (Counts are exact `count(*)`, not the `reltuples` estimate the table
+  listing returns — those two can disagree badly, so check with a real
+  count before quoting a number in a document.)
   **Every other table is empty**: zero applications, conversations, messages,
   reviews, connection requests, draw schedules, draws, milestones, escrow
   rows, contact requests, worker profiles or verification docs.
