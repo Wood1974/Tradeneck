@@ -91,7 +91,7 @@ but the frontends should use `draws`.
 These are real, well-specified plans — worth preserving — but confirmed
 **not yet built** in either repo as of this writing:
 
-- Verification stack (identity → background check → license cross-check →
+- Verification stack (identity → license cross-check →
   COI upload/parse → quarterly monitoring).
 - Five-tier ranking (Verified → Active → Proven → Trusted → TradeDeck Pro)
   computed from jobs completed, timeline adherence, cost variance, and
@@ -118,10 +118,6 @@ These are real, well-specified plans — worth preserving — but confirmed
   — expect drift between what's described as "done" in notes and what's
   actually committed. **Verify against the code, not the history, before
   building on top of a feature.**
-- Hero copy (approved, don't rewrite without asking): *"Twenty years. Every
-  nail. Every pour. Every roof. From foundation to ridge cap, I've built
-  it, fixed it, and stood behind it — with hands that know the difference
-  between a shortcut and a standard."*
 - Keep secrets (Supabase service role key, Stripe secret key, Anthropic API
   key) out of this repo — those belong in the backend's environment
   config only.
