@@ -134,10 +134,13 @@ These are real, well-specified plans — worth preserving — but confirmed
   calm-cupcake-a213bb.netlify.app`.
 - `tradedeckapp.com` is the **canonical host**. `_redirects` 301s the
   `.netlify.app` hostname and `www.` to it so link equity does not split.
-- `wrangler.jsonc` also configures a Cloudflare Workers deploy
-  (`hidden-meadow-a4db`). **Unresolved:** if that deploy is live it is a third
-  host serving identical content. Either delete `wrangler.jsonc` and tear the
-  Worker down, or add it to the `_redirects` 301 list.
+- **Netlify is the only host.** A Cloudflare Workers deploy
+  (`hidden-meadow-a4db`, configured by a now-deleted `wrangler.jsonc`) used to
+  build from this repo and serve the same static files — a duplicate host
+  splitting link equity. It was torn down Sep 2026. Do not re-add a second
+  static host without a 301 story; if you ever want Cloudflare in front of
+  this site, put it in front of Netlify as a CDN/DNS layer rather than as a
+  second origin.
 
 ## SEO
 
