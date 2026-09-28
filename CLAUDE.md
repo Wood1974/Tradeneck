@@ -125,14 +125,16 @@ but operating completely independently:
 2. **TradeDeck** (`/`): Simple job marketplace. Post fixed-price job → apply → 
    hire → pay via Stripe. No draws/milestones/escrow.
 
-**Removed**: Draw/escrow/milestone functionality from backend (escrow.py deleted, 
-no `/api/draws/*` endpoints). This aligns with Shield being a standalone evidence 
-verification system independent from job payment workflows.
+**Removed**: Draw/escrow/milestone functionality from both backend and frontend:
+- Backend: escrow.py deleted, no `/api/draws/*` endpoints
+- Frontend: All draw/escrow UI code removed (Sep 28, 2026)
+  - Deleted: renderDraws(), drawAction(), photo upload, escrow funding functions
+  - Deleted: milestone functions (addMilestone, removeMilestone, renderMilestones)
+  - Cleaned: submitJob() no longer inserts draw_schedules or draws
+  - Updated: Profile payout section reflects fixed-price job payments, not draws
 
-**Frontend cleanup needed**: index.html still contains some draw UI remnants 
-(Draws tab, milestone UI, photo uploads, escrow funding) that should be removed 
-in a follow-up pass. Current state: app runs without draw functionality; using 
-draw features (if UI remains) will fail with backend 404s.
+This aligns with Shield being a standalone evidence verification system 
+independent from job payment workflows.
 
 ## Conventions / working notes
 
