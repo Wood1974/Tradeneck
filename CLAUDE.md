@@ -100,10 +100,6 @@ These are real, well-specified plans — worth preserving — but confirmed
 - Draw/escrow system with milestone schedule, dual verification
   (owner/inspector), and Stripe Connect payouts. Schema exists (`draws`
   table); no application code exists yet in either repo.
-- KSL Jobs scraper writing external listings into the `jobs` table
-  (`source='ksl'`) — built as a separate standalone project (not part of
-  either repo), delivered this session, not yet calibrated against live
-  KSL markup or run.
 
 ## Deployment
 

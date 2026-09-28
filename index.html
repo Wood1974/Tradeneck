@@ -48,7 +48,6 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 .tab-btn.active{background:var(--teal);color:#000;border-color:var(--teal)}
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
 .badge-teal{background:rgba(11,188,212,.15);color:var(--teal)}
-.badge-ksl{background:rgba(255,180,0,.15);color:#ffb400}
 .screen-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
 .screen-header h2{font-size:20px;font-weight:700}
 #auth-wrap{max-width:400px;margin:60px auto;padding:0 16px}
@@ -133,7 +132,6 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     <div class="screen-header"><h2>Find Work</h2></div>
     <div class="tab-bar">
       <button class="tab-btn active" onclick="workTab('open',this)">Open Jobs</button>
-      <button class="tab-btn" onclick="workTab('ksl',this)">KSL Jobs</button>
       <button class="tab-btn" onclick="workTab('leads',this)">Lead Sources</button>
     </div>
     <div class="county-tabs" id="county-tabs" style="display:none"></div>
@@ -308,9 +306,9 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let STATE = {
   user:null, profile:null, isAdmin:false,
-  jobs:[], kslJobs:[], draws:[],
+  jobs:[], draws:[],
   appliedJobIds:{}, applicantCounts:{},
-  activeWorkTab:'open', activeCounty:'all', activeAdmTab:'users', admLoaded:false,
+  activeWorkTab:'open', activeAdmTab:'users', admLoaded:false,
   currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0,
   milestones:[],
   escrowMap:{} // draw_id → escrow status ('pending'|'held'|'released'|'refunded')
@@ -362,14 +360,12 @@ async function signOut(){await sb.auth.signOut();location.reload();}
 
 // ─── LOAD DATA ────────────────────────────────────────────────────────────────
 async function loadData() {
-  const [jobsRes, drawRes, kslRes] = await Promise.all([
+  const [jobsRes, drawRes] = await Promise.all([
     sb.from('jobs').select('*').eq('status','open').eq('source','tradedeck').order('created_at',{ascending:false}).limit(50),
     sb.from('draw_schedules').select('*, draws(*)').order('created_at',{ascending:false}).limit(30),
-    sb.from('jobs').select('*').eq('source','ksl').order('created_at',{ascending:false}).limit(200),
   ]);
   STATE.jobs    = jobsRes.data  || [];
   STATE.draws   = drawRes.data  || [];
-  STATE.kslJobs = kslRes.data   || [];
 
   // Load escrow status for all draws
   STATE.escrowMap = {};
@@ -409,7 +405,6 @@ function workTab(tab,btn) {
   STATE.activeWorkTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('county-tabs').style.display = tab==='ksl'?'flex':'none';
   renderWork();
 }
 
@@ -511,24 +506,7 @@ const LEAD_CATEGORIES = [
 
 function renderWork() {
   const el = document.getElementById('work-content');
-  const countyEl = document.getElementById('county-tabs');
-  if (STATE.activeWorkTab==='ksl') {
-    countyEl.style.display = 'flex';
-    countyEl.innerHTML = COUNTIES.map(c=>`
-      <button class="county-tab${(c==='All'&&STATE.activeCounty==='all')||(c===STATE.activeCounty)?' active':''}"
-        onclick="filterCounty('${c==='All'?'all':c}',this)">${c}</button>`).join('');
-    const nearbyCounties = ['Salt Lake','Wasatch','Utah','Weber','Davis','Summit'];
-    const filtered = STATE.kslJobs.filter(j=>nearbyCounties.includes(j.county));
-    const jobs = STATE.activeCounty==='all'?filtered:filtered.filter(j=>j.county===STATE.activeCounty);
-    el.innerHTML = jobs.length ? jobs.map(j=>`
-      <div class="card">
-        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">KSL</span></div>
-        <p>${j.company||''} · ${j.location||''}, ${j.county||''}</p>
-        <p style="margin-top:6px">${(j.description||'').slice(0,120)}…</p>
-        <p class="text-muted" style="margin-top:4px;font-size:12px">${j.rate||''}</p>
-      </div>`).join('') : '<p class="text-muted" style="padding:20px 0">No KSL jobs in this area yet.</p>';
-  } else if (STATE.activeWorkTab==='leads') {
-    countyEl.style.display = 'none';
+  if (STATE.activeWorkTab==='leads') {
     el.innerHTML = LEAD_CATEGORIES.map(group=>`
       <div class="lead-category">${group.cat}</div>
       ${group.items.map(l=>`
@@ -538,7 +516,6 @@ function renderWork() {
           <a class="lead-link" href="${l.link}" target="_blank" rel="noopener">${l.linkLabel} →</a>
         </div>`).join('')}`).join('');
   } else {
-    countyEl.style.display = 'none';
     el.innerHTML = STATE.jobs.length ? STATE.jobs.map(j=>{
       const isOwn = !!(j.owner_id && STATE.user && j.owner_id === STATE.user.id);
       const canRate = !!(j.owner_id && STATE.user && j.owner_id !== STATE.user.id);
@@ -560,12 +537,6 @@ function renderWork() {
       </div>`;
     }).join('') : '<p class="text-muted" style="padding:20px 0">No open jobs yet. Be the first to post.</p>';
   }
-}
-function filterCounty(county,btn){
-  STATE.activeCounty=county;
-  document.querySelectorAll('.county-tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  renderWork();
 }
 
 // ─── APPLY ────────────────────────────────────────────────────────────────────
