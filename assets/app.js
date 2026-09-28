@@ -9,7 +9,8 @@ let STATE = {
   user:null, profile:null, isAdmin:false,
   jobs:[], kslJobs:[], draws:[],
   appliedJobIds:{}, applicantCounts:{},
-  activeWorkTab:'open', activeCounty:'all', activeAdmTab:'users', admLoaded:false,
+  activeWorkTab:'open', activeCounty:'all', activeTrade:'all', activeAdmTab:'users', admLoaded:false,
+  shieldLoaded:false,
   currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0,
   milestones:[],
   escrowMap:{} // draw_id → escrow status ('pending'|'held'|'released'|'refunded')
@@ -101,7 +102,7 @@ async function loadData() {
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const TAB_PATHS = {home:'/home', work:'/find-work', post:'/post-job', draws:'/draws',
-                   workers:'/workers', profile:'/profile', admin:'/admin'};
+                   workers:'/workers', profile:'/profile', shield:'/shield', admin:'/admin'};
 const PATH_TABS = Object.fromEntries(Object.entries(TAB_PATHS).map(([k,v])=>[v,k]));
 
 function screenFromPath(path){
@@ -125,6 +126,20 @@ function switchTab(tab, opts) {
 
   window.scrollTo(0,0);
   if (tab==='admin') loadAdmin();
+  if (tab==='shield') loadShield();
+}
+
+// Shield UI lives in shield.js (loaded after this script). Mount the
+// dashboard into its container the first time the tab is opened.
+function loadShield(){
+  const mount = document.getElementById('shield-dashboard-mount');
+  if (!mount || STATE.shieldLoaded) return;
+  if (typeof window.renderShieldDashboard !== 'function'){
+    mount.innerHTML = '<p class="text-muted" style="padding:20px 0">Shield module failed to load.</p>';
+    return;
+  }
+  STATE.shieldLoaded = true;
+  window.renderShieldDashboard(mount);
 }
 
 window.addEventListener('popstate', e => {
@@ -136,6 +151,26 @@ function workTab(tab,btn) {
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('county-tabs').style.display = tab==='ksl'?'flex':'none';
+  document.getElementById('trade-tabs').style.display = tab==='ksl'?'flex':'none';
+  renderWork();
+}
+
+// ─── KSL TRADE CATEGORIES ───────────────────────────────────────────────────
+// KSL's own job board mixes construction listings in with everything else
+// (retail, driving, warehouse...) under one firehose. These categories let
+// "Find Work" filter down to trades instead of scrolling hundreds of jobs.
+const TRADE_CATEGORIES = ['All Trades','General Labor','Electrical','Excavation','Concrete',
+  'HVAC','Framing','Plumbing','Flooring','Landscaping','Roofing','Drywall','Other'];
+const KNOWN_TRADES = new Set(TRADE_CATEGORIES.filter(t=>t!=='All Trades'&&t!=='Other'));
+function jobMatchesTrade(job, trade){
+  if (trade==='all') return KNOWN_TRADES.has(job.trade); // hide "Other" noise by default
+  if (trade==='Other') return !job.trade || !KNOWN_TRADES.has(job.trade);
+  return job.trade===trade;
+}
+function filterTrade(trade,btn){
+  STATE.activeTrade = trade;
+  document.querySelectorAll('#trade-tabs .county-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
   renderWork();
 }
 
@@ -238,23 +273,33 @@ const LEAD_CATEGORIES = [
 function renderWork() {
   const el = document.getElementById('work-content');
   const countyEl = document.getElementById('county-tabs');
+  const tradeEl = document.getElementById('trade-tabs');
   if (STATE.activeWorkTab==='ksl') {
     countyEl.style.display = 'flex';
+    tradeEl.style.display = 'flex';
     countyEl.innerHTML = COUNTIES.map(c=>`
       <button class="county-tab${(c==='All'&&STATE.activeCounty==='all')||(c===STATE.activeCounty)?' active':''}"
         onclick="filterCounty('${c==='All'?'all':c}',this)">${c}</button>`).join('');
     const nearbyCounties = ['Salt Lake','Wasatch','Utah','Weber','Davis','Summit'];
-    const filtered = STATE.kslJobs.filter(j=>nearbyCounties.includes(j.county));
-    const jobs = STATE.activeCounty==='all'?filtered:filtered.filter(j=>j.county===STATE.activeCounty);
+    const byCounty = STATE.kslJobs.filter(j=>nearbyCounties.includes(j.county));
+    tradeEl.innerHTML = TRADE_CATEGORIES.map(t=>{
+      const key = t==='All Trades' ? 'all' : t;
+      const count = byCounty.filter(j=>jobMatchesTrade(j,key)).length;
+      return `<button class="county-tab${key===STATE.activeTrade?' active':''}"
+        onclick="filterTrade('${key}',this)">${t} (${count})</button>`;
+    }).join('');
+    const byTrade = byCounty.filter(j=>jobMatchesTrade(j,STATE.activeTrade));
+    const jobs = STATE.activeCounty==='all'?byTrade:byTrade.filter(j=>j.county===STATE.activeCounty);
     el.innerHTML = jobs.length ? jobs.map(j=>`
       <div class="card">
         <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">KSL</span></div>
-        <p>${j.company||''} · ${j.location||''}, ${j.county||''}</p>
+        <p>${j.company||''} · ${j.location||''}, ${j.county||''}${j.trade?' · '+j.trade:''}</p>
         <p style="margin-top:6px">${(j.description||'').slice(0,120)}…</p>
         <p class="text-muted" style="margin-top:4px;font-size:12px">${j.rate||''}</p>
-      </div>`).join('') : '<p class="text-muted" style="padding:20px 0">No KSL jobs in this area yet.</p>';
+      </div>`).join('') : '<p class="text-muted" style="padding:20px 0">No KSL jobs match this filter yet.</p>';
   } else if (STATE.activeWorkTab==='leads') {
     countyEl.style.display = 'none';
+    tradeEl.style.display = 'none';
     el.innerHTML = LEAD_CATEGORIES.map(group=>`
       <div class="lead-category">${group.cat}</div>
       ${group.items.map(l=>`
@@ -265,6 +310,7 @@ function renderWork() {
         </div>`).join('')}`).join('');
   } else {
     countyEl.style.display = 'none';
+    tradeEl.style.display = 'none';
     el.innerHTML = STATE.jobs.length ? STATE.jobs.map(j=>{
       const isOwn = !!(j.owner_id && STATE.user && j.owner_id === STATE.user.id);
       const canRate = !!(j.owner_id && STATE.user && j.owner_id !== STATE.user.id);
@@ -907,14 +953,9 @@ async function submitRating(){
 function closeOverlay(id){document.getElementById(id).classList.remove('open');}
 
 // ─── APPLICANTS / HIRE ────────────────────────────────────────────────────────
-// A job owner views who applied to their own posted job and hires one. Hiring:
-//   1. marks that application 'accepted' and every other applicant 'rejected'
-//      (RLS: "Job posters can update applications on their jobs", added
-//      Sep 2, 2026 — before this, owners could not update applications at all)
-//   2. marks the job 'filled'
-//   3. sets draw_schedules.payee_id to the hired worker — this is the column
-//      the Flask backend's require_draw_payee() checks before letting anyone
-//      upload draw photos, so hiring here is what unblocks that.
+// A job owner views who applied to their own posted job and hires one. Hiring
+// calls the accept_application RPC (see hireApplicant below), then marks the
+// job 'filled' client-side.
 async function openApplicants(jobId){
   STATE.currentApplicantsJobId = jobId;
   document.getElementById('applicants-list').innerHTML = '<p class="text-muted">Loading…</p>';
@@ -948,17 +989,19 @@ function renderApplicantsList(apps){
     </div>`;
   }).join('');
 }
+// Hiring goes through the accept_application(p_application_id) RPC rather
+// than separate client-side writes: it's SECURITY DEFINER, checks
+// auth.uid() against the job owner server-side, and atomically accepts this
+// application, rejects the rest, and sets payee_id on the draw_schedules row
+// *and* every draw under it (the column-per-draw the Flask API's
+// require_draw_payee() actually checks — a schedule-only write like the
+// previous version used left individual draws without a payee).
 async function hireApplicant(applicationId, applicantId){
   if (!confirm('Hire this worker? Other applicants will be marked as not selected, and this job will be marked filled.')) return;
   const jobId = STATE.currentApplicantsJobId;
-  const {error:e1} = await sb.from('applications').update({status:'accepted'}).eq('id', applicationId);
-  if (e1){alert('Could not hire: '+e1.message);return;}
-  await sb.from('applications').update({status:'rejected'}).eq('job_id', jobId).neq('id', applicationId);
+  const {error} = await sb.rpc('accept_application', {p_application_id: applicationId});
+  if (error){alert('Could not hire: '+error.message);return;}
   await sb.from('jobs').update({status:'filled'}).eq('id', jobId);
-  const {data:sched} = await sb.from('draw_schedules').select('id').eq('job_id', jobId).maybeSingle();
-  if (sched) {
-    await sb.from('draw_schedules').update({payee_id: applicantId}).eq('id', sched.id);
-  }
   await openApplicants(jobId);
   await loadData();render();
 }
