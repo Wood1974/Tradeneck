@@ -5,8 +5,8 @@
 // intercepted — the browser handles them normally.
 const CACHE = 'tradedeck-v1';
 const CORE = [
-  './', './index.html', './shield.js', './manifest.webmanifest',
-  './icons/icon-192.png', './icons/icon-512.png'
+  '/', '/index.html', '/assets/app.js', '/assets/site.css', '/shield.js',
+  '/site.webmanifest', '/icon-192.png', '/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {

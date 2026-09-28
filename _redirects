@@ -1,0 +1,17 @@
+# Canonical host is tradedeckapp.com — 301 everything else so link equity
+# consolidates on one hostname instead of splitting three ways.
+https://calm-cupcake-a213bb.netlify.app/*   https://tradedeckapp.com/:splat   301!
+http://calm-cupcake-a213bb.netlify.app/*    https://tradedeckapp.com/:splat   301!
+https://www.tradedeckapp.com/*              https://tradedeckapp.com/:splat   301!
+http://www.tradedeckapp.com/*               https://tradedeckapp.com/:splat   301!
+
+# Deep links into the app. The SPA reads the path on boot and opens that
+# screen, so these must serve index.html with a 200 (not a redirect) to
+# keep the URL in the address bar.
+/home       /index.html   200
+/find-work  /index.html   200
+/post-job   /index.html   200
+/draws      /index.html   200
+/workers    /index.html   200
+/profile    /index.html   200
+/admin      /index.html   200

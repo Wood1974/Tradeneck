@@ -1,17 +1,96 @@
 <!DOCTYPE html>
+<!--
+TradeDeck — Marketplace + Escrow + Shield
+SCHEMA MIGRATIONS REQUIRED (run in Supabase SQL Editor):
+1. ALTER TABLE profiles ADD COLUMN IF NOT EXISTS checkr_candidate_id text;
+2. ALTER TABLE profiles ADD COLUMN IF NOT EXISTS checkr_status text DEFAULT 'not_started';
+3. ALTER TABLE profiles ADD COLUMN IF NOT EXISTS checkr_cleared_at timestamptz;
+4. CREATE TABLE IF NOT EXISTS worker_profiles (id uuid PRIMARY KEY, user_id uuid REFERENCES auth.users, trade text, years_experience int, verification_status text, created_at timestamptz DEFAULT now());
+5. CREATE TABLE IF NOT EXISTS contact_requests (id uuid PRIMARY KEY, requester_id uuid REFERENCES auth.users, worker_id uuid REFERENCES auth.users, status text, created_at timestamptz DEFAULT now());
+6. Add RLS policies (see admin-setup.sql for pattern)
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>TradeDeck</title>
-<link rel="manifest" href="manifest.webmanifest"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+
+<title>Hire Verified Trades in Utah, Escrow Protected | TradeDeck</title>
+<meta name="description" content="Connect directly with Utah homeowners, contractors and trade workers. Verified track records, milestone escrow, no lead fees. Post a job free."/>
+<link rel="canonical" href="https://tradedeckapp.com/"/>
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1"/>
+<meta name="google-site-verification" content="SzAdJeR4vVzuwZh6p6yP4XIC_9jmNmJ-orzKmN3xiPA"/>
 <meta name="theme-color" content="#0A0A0A"/>
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png"/>
+
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="TradeDeck"/>
+<meta property="og:url" content="https://tradedeckapp.com/"/>
+<meta property="og:title" content="TradeDeck — Hire Verified Trades in Utah"/>
+<meta property="og:description" content="Direct hiring for the trades. Verified profiles, milestone escrow, no lead fees."/>
+<meta property="og:image" content="https://tradedeckapp.com/og-image.png"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:image:alt" content="TradeDeck — hire verified trades in Utah, with your money in escrow."/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="TradeDeck — Hire Verified Trades in Utah"/>
+<meta name="twitter:description" content="Direct hiring for the trades. Verified profiles, milestone escrow, no lead fees."/>
+<meta name="twitter:image" content="https://tradedeckapp.com/og-image.png"/>
+
+<link rel="icon" href="/favicon.ico" sizes="any"/>
+<link rel="icon" href="/icon.svg" type="image/svg+xml"/>
+<link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
+<link rel="manifest" href="/site.webmanifest"/>
+<!-- site.webmanifest already covers PWA install (standalone display, icons,
+     theme/background color) -- these just add iOS-specific install polish. -->
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="TradeDeck"/>
 <meta name="mobile-web-app-capable" content="yes"/>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<link rel="preconnect" href="https://jlaajejpqjldpbinktln.supabase.co" crossorigin/>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin/>
+<link rel="dns-prefetch" href="https://tradedeck-api.onrender.com"/>
+
+<script type="application/ld+json">
+{
+  "@context":"https://schema.org",
+  "@graph":[
+    {
+      "@type":"WebSite",
+      "@id":"https://tradedeckapp.com/#website",
+      "url":"https://tradedeckapp.com/",
+      "name":"TradeDeck",
+      "publisher":{"@id":"https://tradedeckapp.com/#org"}
+    },
+    {
+      "@type":"Organization",
+      "@id":"https://tradedeckapp.com/#org",
+      "name":"TradeDeck",
+      "url":"https://tradedeckapp.com/",
+      "logo":"https://tradedeckapp.com/icon-512.png",
+      "image":"https://tradedeckapp.com/og-image.png",
+      "description":"Marketplace connecting homeowners, general contractors, and trade workers in Utah with verified profiles and milestone-based escrow payments.",
+      "areaServed":{"@type":"State","name":"Utah"},
+      "sameAs":[]
+    },
+    {
+      "@type":"WebPage",
+      "@id":"https://tradedeckapp.com/#webpage",
+      "url":"https://tradedeckapp.com/",
+      "name":"TradeDeck — Hire Verified Trades in Utah",
+      "isPartOf":{"@id":"https://tradedeckapp.com/#website"},
+      "about":{"@id":"https://tradedeckapp.com/#org"}
+    }
+  ]
+}
+</script>
+
+<link rel="stylesheet" href="/assets/site.css"/>
+<!-- Supabase is deferred; assets/app.js is deferred too, and deferred
+     scripts run in document order, so `supabase` is defined before app.js
+     touches it. Stripe is NOT loaded here — assets/app.js injects it on
+     demand when the escrow overlay opens (~40 KB saved on every other view). -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4" defer></script>
+<script src="/assets/analytics.js" data-manual-pageview defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -19,10 +98,10 @@
   --teal:#0BBCD4;--text:#F0F0F0;--muted:#888;--danger:#e05555;--green:#4ADE80;
 }
 body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh}
-nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--surface);border-top:1px solid var(--border);z-index:100}
-nav button{flex:1;padding:12px 4px 10px;background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
-nav button.active{color:var(--teal)}
-nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
+#main-nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--surface);border-top:1px solid var(--border);z-index:100}
+#main-nav button{flex:1;padding:12px 4px 10px;background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
+#main-nav button.active{color:var(--teal)}
+#main-nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
 #app{padding:16px 16px 80px}
 .screen{display:none}.screen.active{display:block}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
@@ -47,11 +126,13 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 .badge-ksl{background:rgba(255,180,0,.15);color:#ffb400}
 .screen-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
 .screen-header h2{font-size:20px;font-weight:700}
-#auth-wrap{max-width:400px;margin:60px auto;padding:0 16px}
-#auth-wrap h1{font-size:26px;font-weight:800;margin-bottom:6px}
+#auth-wrap{max-width:none;margin:0;padding:0}
+#auth-wrap h2{font-size:22px;font-weight:800;margin:0 0 6px;letter-spacing:-.01em}
 #auth-wrap p.sub{color:var(--muted);margin-bottom:24px}
-.auth-toggle{font-size:13px;color:var(--muted);margin-top:12px;text-align:center;cursor:pointer}
-.auth-toggle span{color:var(--teal)}
+.auth-toggle{font-size:13px;color:var(--muted);margin-top:12px;text-align:center}
+.auth-toggle-btn{background:none;border:none;color:var(--teal);font:inherit;font-weight:600;cursor:pointer;padding:2px 4px;text-decoration:underline}
+.auth-toggle-btn:hover{opacity:.85}
+#landing[hidden]{display:none}
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:flex-end}
 .overlay.open{display:flex}
 .overlay-inner{background:var(--surface);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-height:90vh;overflow-y:auto}
@@ -76,8 +157,6 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 .county-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px}
 .county-tab{white-space:nowrap;padding:4px 10px;border-radius:14px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0}
 .county-tab.active{background:var(--teal);color:#000;border-color:var(--teal)}
-.trade-tab{white-space:nowrap;padding:4px 10px;border-radius:14px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0}
-.trade-tab.active{background:var(--teal);color:#000;border-color:var(--teal)}
 .applicant-count{font-size:12px;color:var(--muted)}
 .lead-category{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--teal);font-weight:700;margin:20px 0 8px;padding-top:4px}
 .lead-category:first-child{margin-top:0}
@@ -97,30 +176,223 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 </head>
 <body>
 
-<!-- AUTH -->
-<div id="auth-wrap">
-  <h1>TradeDeck</h1>
-  <p class="sub">The marketplace built for the trades.</p>
-  <label>Email</label>
-  <input id="auth-email" type="email" placeholder="you@example.com"/>
-  <label>Password</label>
-  <input id="auth-password" type="password" placeholder="••••••••"/>
-  <button class="btn btn-primary btn-block" onclick="authSubmit()">Sign In</button>
-  <p id="auth-error" style="color:var(--danger);font-size:13px;margin-top:8px"></p>
-  <p class="auth-toggle">No account? <span onclick="toggleAuth()">Sign up</span></p>
+<!-- ══ LANDING (static, crawlable, shown to logged-out visitors) ══════════ -->
+<div id="landing" class="mk">
+<a class="mk-skip" href="#signin">Skip to sign in</a>
+
+<header class="mk-header">
+  <div class="mk-wrap">
+    <a class="mk-logo" href="/"><img src="/icon.svg" width="26" height="26" alt=""/> TradeDeck</a>
+    <nav class="mk-nav" aria-label="Primary">
+      <a href="/how-it-works">How it works</a>
+      <a href="/for-homeowners">Homeowners</a>
+      <a href="/for-contractors">Contractors</a>
+      <a href="/for-workers">Workers</a>
+      <a href="/escrow">Escrow</a>
+      <a href="/pricing">Pricing</a>
+    </nav>
+  </div>
+</header>
+
+<main class="mk-main" id="main">
+  <div class="mk-wrap">
+
+    <section class="mk-hero">
+      <span class="mk-eyebrow">Built in Utah, for Utah trades</span>
+      <h1>Hire verified trades in Utah — with your money held in escrow.</h1>
+      <p class="mk-lede">
+        TradeDeck connects homeowners, general contractors, and trade workers
+        directly. You see each other's real track record before anyone shakes
+        hands, and payment sits in escrow until the milestone is actually done.
+        No lead fees, no bidding wars, no platform standing between you and the
+        person doing the work.
+      </p>
+      <div class="mk-cta">
+        <a class="mk-btn mk-btn-primary" href="#signin">Post a job — free</a>
+        <a class="mk-btn mk-btn-outline" href="/how-it-works">See how it works</a>
+      </div>
+    </section>
+
+    <h2>Why TradeDeck is different</h2>
+    <div class="mk-grid mk-grid-3">
+      <div class="mk-card">
+        <h3>You don't pay for leads</h3>
+        <p>Angi, Thumbtack and HomeAdvisor charge contractors per lead whether
+        the job closes or not. TradeDeck doesn't sell leads at all — posting a
+        job and applying to one are both free.</p>
+      </div>
+      <div class="mk-card">
+        <h3>Transparency runs both ways</h3>
+        <p>Homeowners see contractor <em>and</em> worker tiers. Contractors see
+        worker tiers. Workers see who they'd be working for. Nobody is bidding
+        blind.</p>
+      </div>
+      <div class="mk-card">
+        <h3>Escrow, not promises</h3>
+        <p>Funds are held against a milestone draw schedule and released when
+        the work is signed off — so homeowners aren't prepaying strangers and
+        crews aren't chasing checks.</p>
+      </div>
+    </div>
+
+    <h2>How a job runs, start to finish</h2>
+    <div class="mk-grid mk-grid-2">
+      <div class="mk-card">
+        <span class="mk-card-num">1</span>
+        <h3>Post the scope</h3>
+        <p>Trade, city, county, scope and budget. Optionally split the budget
+        into milestone draws that must total 100%.</p>
+      </div>
+      <div class="mk-card">
+        <span class="mk-card-num">2</span>
+        <h3>Review who applies</h3>
+        <p>Every applicant carries a tier built from jobs completed, timeline
+        adherence, cost variance against their bid, and site-cleanliness
+        sign-offs — not from who bought ads.</p>
+      </div>
+      <div class="mk-card">
+        <span class="mk-card-num">3</span>
+        <h3>Fund the first draw</h3>
+        <p>Money moves into escrow. The crew starts knowing the funds for that
+        milestone already exist.</p>
+      </div>
+      <div class="mk-card">
+        <span class="mk-card-num">4</span>
+        <h3>Submit, approve, release</h3>
+        <p>Crew submits milestone photos, the owner approves, escrow releases.
+        Repeat until the job closes out.</p>
+      </div>
+    </div>
+
+    <div class="mk-callout">
+      <p><strong>Reviews here are optional and never nagged for.</strong> A
+      three-question close-out — on time? site left clean? would hire again? —
+      quietly feeds the tier score. A written review is opt-in, and because it's
+      voluntary it carries more weight.</p>
+    </div>
+
+    <h2>Trades and counties we cover</h2>
+    <p class="mk-lede">Framing, concrete, roofing, electrical, plumbing, HVAC,
+    drywall, flooring, excavation, landscaping, finish carpentry, siding,
+    painting and general labor — across Salt Lake, Utah, Davis, Weber, Summit,
+    Wasatch, Tooele, Cache, Washington and the rest of Utah's 29 counties.</p>
+
+    <h2 id="faq">Common questions</h2>
+    <div class="mk-faq">
+      <details>
+        <summary>What does TradeDeck cost?</summary>
+        <p>Posting a job, applying to a job, and browsing the worker directory
+        are free. TradeDeck makes money on escrow processing, not on selling
+        your contact details to five contractors at once. See
+        <a href="/pricing">pricing</a>.</p>
+      </details>
+      <details>
+        <summary>How is escrow actually held?</summary>
+        <p>Through Stripe. Funds for a milestone are authorised and held against
+        that draw, then released to the worker's connected account on approval.
+        TradeDeck never takes custody of the money itself. More on the
+        <a href="/escrow">escrow page</a>.</p>
+      </details>
+      <details>
+        <summary>What if the work isn't right?</summary>
+        <p>A draw stays unreleased until the owner approves it. If a milestone
+        is disputed, the funds stay put while it's worked out — which is exactly
+        the leverage a homeowner loses the moment they prepay.</p>
+      </details>
+      <details>
+        <summary>Can I contact a worker directly?</summary>
+        <p>Yes. TradeDeck doesn't gatekeep communication or mask phone numbers.
+        Once you're connected on a job you deal with each other directly.</p>
+      </details>
+      <details>
+        <summary>Is TradeDeck only in Utah?</summary>
+        <p>For now, yes — Utah is where the crews, the permit data and the
+        verification sources are. Statewide coverage first, other states later.</p>
+      </details>
+    </div>
+
+    <!-- SIGN IN ----------------------------------------------------------- -->
+    <h2 id="signin">Get started</h2>
+    <div class="mk-auth-anchor">
+      <div id="auth-wrap">
+        <h2>Sign in to TradeDeck</h2>
+        <p class="sub">Free to post a job or apply for work.</p>
+        <label for="auth-email">Email</label>
+        <input id="auth-email" name="email" type="email" autocomplete="email" placeholder="you@example.com"/>
+        <label for="auth-password">Password</label>
+        <input id="auth-password" name="password" type="password" autocomplete="current-password" placeholder="••••••••"/>
+        <button class="btn btn-primary btn-block" id="auth-submit" onclick="authSubmit()">Sign In</button>
+        <p id="auth-error" role="alert" style="color:var(--danger);font-size:13px;margin-top:8px"></p>
+        <p class="auth-toggle">No account?
+          <button type="button" class="auth-toggle-btn" onclick="toggleAuth()">Sign up</button>
+        </p>
+      </div>
+    </div>
+
+    <div class="mk-band">
+      <h2>Stop paying for leads that go nowhere.</h2>
+      <p class="mk-lede" style="margin:0 auto">Post a job free, see real track
+      records, and keep the money safe until the work is done.</p>
+      <div class="mk-cta"><a class="mk-btn mk-btn-primary" href="#signin">Get started</a></div>
+    </div>
+
+  </div>
+</main>
+
+<footer class="mk-footer">
+  <div class="mk-wrap">
+    <div class="mk-grid mk-grid-3">
+      <div>
+        <h4>Product</h4>
+        <ul>
+          <li><a href="/how-it-works">How it works</a></li>
+          <li><a href="/escrow">Escrow &amp; draws</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Who it's for</h4>
+        <ul>
+          <li><a href="/for-homeowners">Homeowners</a></li>
+          <li><a href="/for-contractors">General contractors</a></li>
+          <li><a href="/for-workers">Trade workers</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>TradeDeck</h4>
+        <ul>
+          <li><a href="/#faq">FAQ</a></li>
+          <li><a href="/#signin">Sign in</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="mk-footer-base">TradeDeck — the marketplace built for the trades. Serving Utah.</p>
+  </div>
+</footer>
+
+<script type="application/ld+json">
+{
+  "@context":"https://schema.org",
+  "@type":"FAQPage",
+  "@id":"https://tradedeckapp.com/#faq",
+  "mainEntity":[
+    {"@type":"Question","name":"What does TradeDeck cost?","acceptedAnswer":{"@type":"Answer","text":"Posting a job, applying to a job, and browsing the worker directory are free. TradeDeck makes money on escrow processing, not on selling contact details to multiple contractors."}},
+    {"@type":"Question","name":"How is escrow actually held?","acceptedAnswer":{"@type":"Answer","text":"Through Stripe. Funds for a milestone are held against that draw, then released to the worker's connected account on approval. TradeDeck never takes custody of the money itself."}},
+    {"@type":"Question","name":"What if the work isn't right?","acceptedAnswer":{"@type":"Answer","text":"A draw stays unreleased until the owner approves it. If a milestone is disputed, the funds stay put while it is worked out."}},
+    {"@type":"Question","name":"Can I contact a worker directly?","acceptedAnswer":{"@type":"Answer","text":"Yes. TradeDeck does not gatekeep communication or mask phone numbers. Once you are connected on a job you deal with each other directly."}},
+    {"@type":"Question","name":"Is TradeDeck only in Utah?","acceptedAnswer":{"@type":"Answer","text":"For now, yes. Utah is where the crews, permit data and verification sources are. Statewide coverage first, other states later."}}
+  ]
+}
+</script>
 </div>
+<!-- ══ END LANDING ═══════════════════════════════════════════════════════ -->
 
 <!-- APP -->
-<div id="app" style="display:none">
+<main id="app" style="display:none">
 
   <!-- HOME -->
   <div id="screen-home" class="screen active">
-    <div class="screen-header"><h2>Home</h2>
-      <div class="flex gap8" style="align-items:center">
-        <span id="home-tier" class="badge badge-teal"></span>
-        <button class="btn btn-outline btn-sm" onclick="signOut()">Sign out</button>
-      </div>
-    </div>
+    <div class="screen-header"><h2>Home</h2><span id="home-tier" class="badge badge-teal"></span></div>
     <div id="home-stats" class="card"></div>
     <div class="card">
       <h3>Quick Actions</h3>
@@ -170,7 +442,7 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
         <option>Emery</option><option>Carbon</option><option>Grand</option>
         <option>San Juan</option><option>Uintah</option><option>Duchesne</option>
         <option>Daggett</option><option>Morgan</option><option>Rich</option>
-        <option>Box Elder</option><option>Other</option>
+        <option>Box Elder</option><option>Beaver</option><option>Other</option>
       </select>
       <label>Description</label>
       <textarea id="post-desc" placeholder="Scope, timeline, crew size…"></textarea>
@@ -193,16 +465,22 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     <div id="draws-content"></div>
   </div>
 
+  <!-- PROFILE -->
+  <div id="screen-workers" class="screen">
+    <div class="screen-header"><h2>Worker Directory</h2></div>
+    <div style="padding:0 16px;margin:16px 0"><input id="worker-search" type="text" placeholder="Search by name, trade, or city" style="width:100%;padding:10px;border:1px solid #333;border-radius:4px;background:#1a1a1a;color:#fff"/></div>
+    <div id="workers-grid" style="display:grid;grid-template-columns:1fr;gap:12px;padding:0 16px"></div>
+  </div>
+
+  <div id="screen-profile" class="screen">
+    <div class="screen-header"><h2>Profile</h2></div>
+    <div id="profile-content"></div>
+  </div>
+
   <!-- SHIELD -->
   <div id="screen-shield" class="screen">
     <div class="screen-header"><h2>TradeDeck Shield</h2></div>
     <div id="shield-dashboard-mount"></div>
-  </div>
-
-  <!-- PROFILE -->
-  <div id="screen-profile" class="screen">
-    <div class="screen-header"><h2>Profile</h2></div>
-    <div id="profile-content"></div>
   </div>
 
   <!-- ADMIN -->
@@ -216,10 +494,10 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     <div class="adm-subview" id="adm-jobs"></div>
   </div>
 
-</div>
+</main>
 
 <!-- NAV -->
-<nav id="main-nav" style="display:none">
+<nav id="main-nav" aria-label="App sections" style="display:none">
   <button class="active" onclick="switchTab('home')" id="nav-home">
     <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home
   </button>
@@ -232,11 +510,14 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   <button onclick="switchTab('draws')" id="nav-draws">
     <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Draws
   </button>
-  <button onclick="switchTab('shield')" id="nav-shield">
-    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>Shield
+  <button onclick="switchTab('workers')" id="nav-workers">
+    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Workers
   </button>
   <button onclick="switchTab('profile')" id="nav-profile">
     <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile
+  </button>
+  <button onclick="switchTab('shield')" id="nav-shield">
+    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>Shield
   </button>
   <button onclick="switchTab('admin')" id="nav-admin" style="display:none">
     <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Admin
@@ -244,770 +525,102 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 </nav>
 
 <!-- RATING OVERLAY -->
+<div class="overlay" id="photo-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <h3>Submit Milestone Photos</h3>
+      <button class="close-btn" type="button" aria-label="Close" onclick="closeOverlay('photo-overlay')">×</button>
+    </div>
+    <p class="text-muted" id="photo-overlay-desc" style="margin-bottom:16px;font-size:14px"></p>
+    <div id="photo-preview-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px"></div>
+    <label style="display:block;padding:16px;border:2px dashed var(--border);border-radius:8px;text-align:center;cursor:pointer;margin-bottom:12px">
+      <input type="file" id="photo-file-input" accept="image/*" multiple style="display:none" onchange="previewPhotos(this)">
+      <span style="color:var(--teal);font-weight:600">📷 Tap to select photos</span>
+      <p class="text-muted" style="font-size:12px;margin-top:4px">JPG, PNG, HEIC — up to 5 photos</p>
+    </label>
+    <div id="photo-upload-error" style="color:var(--red);font-size:13px;margin-bottom:12px;display:none"></div>
+    <button class="btn btn-primary" style="width:100%" id="photo-submit-btn" onclick="submitDrawPhotos()">Submit for Approval</button>
+  </div>
+</div>
+
+<div class="overlay" id="escrow-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <h3>Fund Draw Escrow</h3>
+      <button class="close-btn" type="button" aria-label="Close" onclick="closeOverlay('escrow-overlay')">×</button>
+    </div>
+    <p class="text-muted" id="escrow-overlay-desc" style="margin-bottom:16px;font-size:14px"></p>
+    <div id="escrow-payment-element" style="margin-bottom:16px"></div>
+    <div id="escrow-error" style="color:var(--red);font-size:13px;margin-bottom:12px;display:none"></div>
+    <button class="btn btn-primary" style="width:100%" id="escrow-pay-btn" onclick="confirmEscrowPayment()">Fund Escrow</button>
+  </div>
+</div>
+
 <div class="overlay" id="rating-overlay">
   <div class="overlay-inner">
     <div class="overlay-header">
       <h3>Rate this Job</h3>
-      <button class="close-btn" onclick="closeOverlay('rating-overlay')">×</button>
+      <button class="close-btn" type="button" aria-label="Close" onclick="closeOverlay('rating-overlay')">×</button>
     </div>
-    <div class="stars" id="star-picker">
-      <span onclick="setRating(1)">★</span><span onclick="setRating(2)">★</span>
-      <span onclick="setRating(3)">★</span><span onclick="setRating(4)">★</span>
-      <span onclick="setRating(5)">★</span>
+    <div class="stars" id="star-picker" role="radiogroup" aria-label="Rating out of 5">
+      <span role="radio" tabindex="0" aria-checked="false" aria-label="1 star" onclick="setRating(1)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setRating(1);}">★</span>
+      <span role="radio" tabindex="0" aria-checked="false" aria-label="2 stars" onclick="setRating(2)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setRating(2);}">★</span>
+      <span role="radio" tabindex="0" aria-checked="false" aria-label="3 stars" onclick="setRating(3)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setRating(3);}">★</span>
+      <span role="radio" tabindex="0" aria-checked="false" aria-label="4 stars" onclick="setRating(4)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setRating(4);}">★</span>
+      <span role="radio" tabindex="0" aria-checked="false" aria-label="5 stars" onclick="setRating(5)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setRating(5);}">★</span>
     </div>
     <textarea id="review-text" placeholder="Share your experience (optional)…"></textarea>
     <button class="btn btn-primary btn-block" onclick="submitRating()">Submit Rating</button>
   </div>
 </div>
 
+<!-- APPLICANTS OVERLAY -->
 <div class="overlay" id="applicants-overlay">
   <div class="overlay-inner">
     <div class="overlay-header">
-      <h3 id="applicants-title">Applicants</h3>
-      <button class="close-btn" onclick="closeOverlay('applicants-overlay')">×</button>
+      <h3>Applicants</h3>
+      <button class="close-btn" type="button" aria-label="Close" onclick="closeOverlay('applicants-overlay')">×</button>
     </div>
-    <div id="applicants-content"></div>
+    <div id="applicants-list"><p class="text-muted">Loading…</p></div>
   </div>
 </div>
 
-<script>
-// ─── CONFIG ───────────────────────────────────────────────────────────────────
-const SUPABASE_URL     = 'https://jlaajejpqjldpbinktln.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW5rdGxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMDg3MTksImV4cCI6MjEwMTc4NDcxOX0.tP-seLGoJnivrYmNhhTDmDJw4Uk92D95-zrwWB1G_S4';
-// Guard the single CDN dependency: if @supabase/supabase-js failed to load
-// (ad blocker, CSP, CDN outage), sb is null and the auth page shows a clear
-// message instead of dead buttons or a blank screen.
-const { createClient } = (typeof supabase !== 'undefined' && supabase) ? supabase : {};
-const sb = createClient ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-window.sb = sb; // shield.js (external script) reads the shared Supabase client
-const SB_LOAD_ERROR = 'Could not load the sign-in service. Check your connection or any ad blocker, then reload.';
-
-// ─── STATE ────────────────────────────────────────────────────────────────────
-let STATE = {
-  user:null, profile:null, isAdmin:false,
-  jobs:[], kslJobs:[], draws:[],
-  appliedJobIds:{}, applicantCounts:{}, payeeProfiles:{}, shieldLoaded:false,
-  activeWorkTab:'open', activeCounty:'all', activeTrade:'all', activeAdmTab:'users', admLoaded:false,
-  currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0,
-  milestones:[]
-};
-
-// ─── AUTH ─────────────────────────────────────────────────────────────────────
-let authMode = 'signin';
-function toggleAuth() {
-  authMode = authMode==='signin'?'signup':'signin';
-  document.querySelector('#auth-wrap button').textContent = authMode==='signin'?'Sign In':'Create Account';
-  document.querySelector('.auth-toggle span').textContent = authMode==='signin'?'Sign up':'Sign in';
-}
-async function authSubmit() {
-  const email    = document.getElementById('auth-email').value.trim();
-  const password = document.getElementById('auth-password').value;
-  const errEl    = document.getElementById('auth-error');
-  errEl.style.color = 'var(--danger)';
-  errEl.textContent = '';
-  if (!sb){errEl.textContent=SB_LOAD_ERROR;return;}
-  if (!email||!password){errEl.textContent='Email and password required';return;}
-  const res = authMode==='signup'
-    ? await sb.auth.signUp({email,password})
-    : await sb.auth.signInWithPassword({email,password});
-  if (res.error){errEl.textContent=res.error.message;return;}
-  if (authMode==='signup'&&!res.error){errEl.style.color='var(--green)';errEl.textContent='Check your email to confirm.';return;}
-  await onLogin(res.data.user);
-}
-async function onLogin(user) {
-  STATE.user = user;
-  let {data:profile} = await sb.from('profiles').select('*').eq('id',user.id).single();
-  if (!profile) {
-    await sb.from('profiles').insert({id:user.id,email:user.email});
-    profile = {id:user.id,email:user.email,tier:1};
-  }
-  STATE.profile = profile;
-  /* Admin check is cosmetic only -- it shows/hides the tab. Real
-     enforcement is the "Admins have full access" RLS policies from
-     admin-setup.sql; nothing here grants any actual permission. This
-     also tolerates profiles.is_admin not existing yet on the live
-     database (admin-setup.sql not run) -- profile.is_admin is just
-     undefined/falsy in that case, so the tab simply stays hidden. */
-  STATE.isAdmin = !!profile.is_admin;
-  if (STATE.isAdmin) document.getElementById('nav-admin').style.display = '';
-  document.getElementById('auth-wrap').style.display = 'none';
-  document.getElementById('app').style.display       = 'block';
-  document.getElementById('main-nav').style.display  = 'flex';
-  try { await loadData(); } catch (e) { /* render with whatever loaded */ }
-  render();
-}
-async function signOut(){ try { if (sb) await sb.auth.signOut(); } finally { location.reload(); } }
-
-// ─── LOAD DATA ────────────────────────────────────────────────────────────────
-async function loadData() {
-  const [jobsRes, drawRes, kslRes] = await Promise.all([
-    sb.from('jobs').select('*').eq('status','open').eq('source','tradedeck').order('created_at',{ascending:false}).limit(50),
-    sb.from('draw_schedules').select('*, draws(*)').order('created_at',{ascending:false}).limit(30),
-    sb.from('jobs').select('*').eq('source','ksl').order('created_at',{ascending:false}).limit(200),
-  ]);
-  STATE.jobs    = jobsRes.data  || [];
-  STATE.draws   = drawRes.data  || [];
-  STATE.kslJobs = kslRes.data   || [];
-
-  /* Resolve the hired contractor (payee) for any draw schedule that has one,
-     so the Draw Manager can name who each schedule pays. profiles are
-     world-readable (profiles_select policy). */
-  STATE.payeeProfiles = {};
-  const payeeIds = [...new Set(STATE.draws.map(s=>s.payee_id).filter(Boolean))];
-  if (payeeIds.length){
-    const {data:payees} = await sb.from('profiles').select('id,full_name,email').in('id',payeeIds);
-    (payees||[]).forEach(p=>{STATE.payeeProfiles[p.id]=p;});
-  }
-
-  /* Applied state (mine only -- RLS on applications only lets a user
-     see their own rows or rows on a job they posted, so this can't leak
-     anyone else's applications) + privacy-safe applicant counts via the
-     job_application_counts() RPC, which returns totals only, never who
-     applied. */
-  const jobIds = STATE.jobs.map(j=>j.id);
-  STATE.appliedJobIds = {};
-  STATE.applicantCounts = {};
-  if (jobIds.length && STATE.user) {
-    const [mineRes, countsRes] = await Promise.all([
-      sb.from('applications').select('job_id').eq('applicant_id',STATE.user.id).in('job_id',jobIds),
-      sb.rpc('job_application_counts',{p_job_ids:jobIds}),
-    ]);
-    (mineRes.data||[]).forEach(a=>{STATE.appliedJobIds[a.job_id]=true;});
-    (countsRes.data||[]).forEach(row=>{STATE.applicantCounts[row.job_id]=row.applicant_count;});
-  }
-}
-
-// ─── TABS ─────────────────────────────────────────────────────────────────────
-function switchTab(tab) {
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
-  document.getElementById('screen-'+tab).classList.add('active');
-  document.getElementById('nav-'+tab).classList.add('active');
-  if (tab==='admin') loadAdmin();
-  if (tab==='shield') loadShield();
-}
-// Shield UI lives in shield.js (loaded after this script). Mount the homeowner
-// dashboard once on first open; the module reads the global `sb` client.
-function loadShield(){
-  const mount = document.getElementById('shield-dashboard-mount');
-  if (!mount || STATE.shieldLoaded) return;
-  if (typeof window.renderShieldDashboard !== 'function'){
-    mount.innerHTML = '<p class="text-muted" style="padding:20px 0">Shield module failed to load.</p>';
-    return;
-  }
-  STATE.shieldLoaded = true;
-  window.renderShieldDashboard(mount);
-}
-function workTab(tab,btn) {
-  STATE.activeWorkTab = tab;
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('county-tabs').style.display = tab==='ksl'?'flex':'none';
-  document.getElementById('trade-tabs').style.display  = tab==='ksl'?'flex':'none';
-  renderWork();
-}
-
-// ─── RENDER ───────────────────────────────────────────────────────────────────
-function render(){renderHome();renderWork();renderDraws();renderProfile();}
-
-function renderHome() {
-  if (!STATE.profile) return;
-  const tiers = ['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
-  document.getElementById('home-tier').textContent = tiers[STATE.profile.tier||1]||'Verified';
-  document.getElementById('home-stats').innerHTML = `
-    <div class="flex between"><span class="text-muted">Jobs available</span><strong>${STATE.jobs.length}</strong></div>
-    <div class="flex between mt8"><span class="text-muted">Active draws</span><strong>${STATE.draws.length}</strong></div>
-  `;
-}
-
-const COUNTIES = ['All','Box Elder','Cache','Carbon','Daggett','Davis','Duchesne','Emery',
-  'Garfield','Grand','Iron','Juab','Kane','Millard','Morgan','Piute','Rich','Salt Lake',
-  'San Juan','Sanpete','Sevier','Summit','Tooele','Uintah','Utah','Wasatch','Washington','Wayne','Weber'];
-
-// Construction trade categories present on scraped KSL listings (jobs.trade).
-// Most KSL rows are NOT trade-tagged -- the KSL scraper pulls the general job
-// board, not a construction-only feed, so untagged rows are mostly unrelated
-// listings (retail, medical, sales, etc.), not miscategorized trade jobs.
-// Default view ('All Trades') therefore excludes 'Other' so a county isn't a
-// long scroll of non-construction jobs; 'Other' stays one tap away rather
-// than being hidden outright, in keeping with full transparency.
-const TRADE_CATEGORIES = ['All Trades','General Labor','Electrical','Excavation','Concrete','HVAC',
-  'Framing','Plumbing','Flooring','Landscaping','Roofing','Drywall','Other'];
-const KNOWN_TRADES = new Set(TRADE_CATEGORIES.filter(t=>t!=='All Trades'&&t!=='Other'));
-function jobMatchesTrade(job, trade){
-  if (trade==='all') return KNOWN_TRADES.has(job.trade); // "All Trades" = every known category, NOT Other
-  if (trade==='Other') return !job.trade || !KNOWN_TRADES.has(job.trade);
-  return job.trade===trade;
-}
-
-const LEAD_CATEGORIES = [
-  {cat:'Boots on the Ground — Free', items:[
-    {name:'Jobsite Cold Outreach', cost:'free', link:'https://tradedeckapp.com', linkLabel:'Post on TradeDeck',
-     desc:"Drive active job sites. Write down names and numbers from sub trucks. Call the numbers, visit the websites. Ask the landscaper if he knows an electrician — the highest-close-rate lead in the trades is a warm referral from another sub on the same site."},
-    {name:'Lumber Yards & Supply Houses', cost:'free', link:'https://www.84lumber.com', linkLabel:'Visit',
-     desc:"Counter staff at ProDesk, 84 Lumber, Marjam, and local yards know every GC in the market. Drop cards, build relationships, ask directly."},
-    {name:'Equipment Rental Yards', cost:'free', link:'https://www.unitedrentals.com', linkLabel:'Visit',
-     desc:"Anyone renting gear is actively working a job right now. United Rentals, Sunbelt, local yards — drop cards and QR codes at the counter."},
-    {name:'Local Home & Trade Shows', cost:'free', link:'https://www.utahnahb.org', linkLabel:'Utah HBA Events',
-     desc:"Home and garden shows, builder expos, and local trade events draw GCs, developers, and homeowners in the same room."},
-    {name:'City & County Permit Records', cost:'free', link:'https://www.utah.gov', linkLabel:'Utah.gov',
-     desc:"Building permits are public record. Search your city or county permitting portal — they show the GC, address, and project scope before the GC even needs you."},
-  ]},
-  {cat:'Digital — Free', items:[
-    {name:'Google Business Profile', cost:'free', link:'https://business.google.com', linkLabel:'Visit',
-     desc:'The most important free tool in the trades. When someone searches "contractor near me," your GBP determines whether you show up. Fill every field, add 20+ project photos, post updates weekly.'},
-    {name:'PlanHub', cost:'free', link:'https://planhub.com/subcontractors', linkLabel:'Visit',
-     desc:"Free sub plan — receive bid invitations from GCs in your trade and region. Check planhub.com for current network size."},
-    {name:'LookingForSubs.com', cost:'free', link:'https://lookingforsubs.com', linkLabel:'Visit',
-     desc:"GCs search this directory by ZIP code and trade to find subs directly. Free listing, no verification."},
-    {name:'LinkedIn', cost:'free', link:'https://linkedin.com', linkLabel:'Visit',
-     desc:'Search "General Contractor Utah" and send direct messages offering to fill their trade gaps.'},
-    {name:'Facebook Groups', cost:'free', link:'https://facebook.com/groups', linkLabel:'Visit',
-     desc:'Search "[Trade] Contractors [City/State]" — dozens of active groups. Engage as a member first, do not just post ads.'},
-    {name:'Craigslist — Skilled Trades', cost:'free', link:'https://craigslist.org', linkLabel:'Visit',
-     desc:"Subs still browse it. Post open jobs at low cost to seed your pipeline during launch. Check craigslist.org for current posting fees."},
-    {name:'Nextdoor Pro', cost:'free', link:'https://nextdoor.com/business', linkLabel:'Visit',
-     desc:"Hyperlocal community with high trust signal. Homeowners ask neighbors for contractor recs constantly."},
-    {name:'SAM.gov', cost:'free', link:'https://sam.gov', linkLabel:'Visit',
-     desc:"Federal system for government contract notices. Free to search and register — federal facilities need every trade."},
-    {name:'State & DOT Bid Portals', cost:'free', link:'https://purchasing.utah.gov', linkLabel:'Utah Purchasing',
-     desc:"State procurement portals and DOT lettings list public construction opportunities — parks, facilities, sidewalks, roofing."},
-    {name:'BuildingConnected', cost:'free', link:'https://app.buildingconnected.com', linkLabel:'Visit',
-     desc:"Free sub profile — GCs using BuildingConnected (Autodesk) invite subs from its directory."},
-    {name:'ContractorTalk Forum', cost:'free', link:'https://www.contractortalk.com', linkLabel:'Visit',
-     desc:"Active forum where trades professionals discuss finding subs, referrals, and work."},
-  ]},
-  {cat:'Digital — Paid', items:[
-    {name:'Google LSA', cost:'paid', link:'https://ads.google.com/local-services-ads', linkLabel:'Visit',
-     desc:"Local Services Ads — Google-verified badge, pay-per-lead. Best for urgent residential jobs; first caller wins. Check ads.google.com/local-services-ads for current pricing."},
-    {name:'Thumbtack', cost:'paid', link:'https://thumbtack.com', linkLabel:'Visit',
-     desc:"Pay-per-lead. Good for residential trades at every level. Check thumbtack.com for current pricing."},
-    {name:'Angi', cost:'paid', link:'https://angi.com', linkLabel:'Visit',
-     desc:"Homeowner directory built around reviews — the more reviews you have, the higher you rank. Check angi.com for current plans, pricing, and review policies."},
-    {name:'Houzz Pro', cost:'paid', link:'https://houzz.com/pro', linkLabel:'Visit',
-     desc:"Best for high-end residential. Photo portfolio quality is the feature here. Check houzz.com/pro for current pricing."},
-    {name:'Construct-A-Lead', cost:'paid', link:'https://constructalead.com', linkLabel:'Visit',
-     desc:"Human-verified commercial project intelligence across the US and Canada. Check constructalead.com for current plans and pricing."},
-    {name:'ConstructConnect', cost:'paid', link:'https://constructconnect.com', linkLabel:'Visit',
-     desc:"Largest North American commercial bid database. Get in front of GCs before they finalize their sub list."},
-    {name:'Dodge Construction Network', cost:'paid', link:'https://construction.com', linkLabel:'Visit',
-     desc:"Strongest pre-planning intelligence — find projects at the design phase, months before anyone else bids."},
-    {name:'ConstructionBids.ai', cost:'paid', link:'https://constructionbids.ai', linkLabel:'Visit',
-     desc:"AI-powered bid matching across procurement sources. Check constructionbids.ai for current pricing and trial terms."},
-    {name:'HomeAdvisor', cost:'paid', link:'https://homeadvisor.com', linkLabel:'Visit',
-     desc:"Pay-per-lead, shared leads. First caller wins — speed-to-lead is the main differentiator here. Check homeadvisor.com for current pricing."},
-    {name:'BuildMapper', cost:'paid', link:'https://buildmapper.com', linkLabel:'Visit',
-     desc:"AI reads every permit pull, scores it against your trade and timing window, tells you who to call first. Check buildmapper.com for current coverage areas."},
-  ]},
-  {cat:'Associations & Trade Networks', items:[
-    {name:'AGC Utah', cost:'paid', link:'https://agcutah.com', linkLabel:'Visit',
-     desc:"Associated General Contractors — Utah chapter. Direct warm-intro channel to GCs who hire subs."},
-    {name:'Home Builders Association of Utah', cost:'paid', link:'https://www.utahnahb.org', linkLabel:'Visit',
-     desc:"Residential-focused and aligned with the Wasatch Back custom home market."},
-    {name:'ABC (Associated Builders & Contractors)', cost:'paid', link:'https://abc.org', linkLabel:'Visit',
-     desc:"Nationwide network with local chapters. Strong for commercial sub networks."},
-    {name:'Local Union Halls', cost:'free', link:'https://www.ibew.org', linkLabel:'IBEW',
-     desc:"IBEW, UA, Carpenters, Laborers — union halls post work boards for licensed members (electrical, plumbing, piping)."},
-  ]},
-  {cat:'Job Boards', items:[
-    {name:'Indeed', cost:'free', link:'https://indeed.com', linkLabel:'Visit',
-     desc:"GCs post sub and crew positions here constantly. Search your trade + city and set a daily email alert."},
-    {name:'ZipRecruiter', cost:'free', link:'https://ziprecruiter.com', linkLabel:'Visit',
-     desc:"AI-powered job matching with better quality filtering than raw boards."},
-    {name:'Monster', cost:'free', link:'https://monster.com', linkLabel:'Visit',
-     desc:"Older but still active for construction trades — more traction for licensed tradespeople."},
-  ]},
-];
-
-function renderWork() {
-  const el = document.getElementById('work-content');
-  const countyEl = document.getElementById('county-tabs');
-  const tradeEl = document.getElementById('trade-tabs');
-  if (STATE.activeWorkTab==='ksl') {
-    countyEl.style.display = 'flex';
-    countyEl.innerHTML = COUNTIES.map(c=>`
-      <button class="county-tab${(c==='All'&&STATE.activeCounty==='all')||(c===STATE.activeCounty)?' active':''}"
-        onclick="filterCounty('${c==='All'?'all':c}',this)">${c}</button>`).join('');
-    const byCounty = STATE.activeCounty==='all'?STATE.kslJobs:STATE.kslJobs.filter(j=>j.county===STATE.activeCounty);
-    tradeEl.style.display = 'flex';
-    tradeEl.innerHTML = TRADE_CATEGORIES.map(t=>{
-      const val = t==='All Trades'?'all':t;
-      const count = byCounty.filter(j=>jobMatchesTrade(j,val)).length;
-      return `<button class="trade-tab${val===STATE.activeTrade?' active':''}"
-        onclick="filterTrade('${val}',this)">${t} (${count})</button>`;
-    }).join('');
-    const jobs = byCounty.filter(j=>jobMatchesTrade(j,STATE.activeTrade));
-    el.innerHTML = jobs.length ? jobs.map(j=>`
-      <div class="card">
-        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">${j.trade||'KSL'}</span></div>
-        <p>${j.company||''} · ${j.location||''}, ${j.county||''}</p>
-        <p style="margin-top:6px">${(j.description||'').slice(0,120)}…</p>
-        <p class="text-muted" style="margin-top:4px;font-size:12px">${j.rate||''}</p>
-      </div>`).join('') : '<p class="text-muted" style="padding:20px 0">No KSL jobs in this category yet.</p>';
-  } else if (STATE.activeWorkTab==='leads') {
-    countyEl.style.display = 'none';
-    tradeEl.style.display = 'none';
-    el.innerHTML = LEAD_CATEGORIES.map(group=>`
-      <div class="lead-category">${group.cat}</div>
-      ${group.items.map(l=>`
-        <div class="card">
-          <div class="flex between"><h3>${l.name}</h3><span class="lead-tag lead-tag-${l.cost}">${l.cost}</span></div>
-          <p style="margin-top:4px">${l.desc}</p>
-          <a class="lead-link" href="${l.link}" target="_blank" rel="noopener">${l.linkLabel} →</a>
-        </div>`).join('')}`).join('');
-  } else {
-    countyEl.style.display = 'none';
-    tradeEl.style.display = 'none';
-    el.innerHTML = STATE.jobs.length ? STATE.jobs.map(j=>{
-      const isOwn = !!(j.owner_id && STATE.user && j.owner_id === STATE.user.id);
-      const canRate = !!(j.owner_id && STATE.user && j.owner_id !== STATE.user.id);
-      const applied = !!STATE.appliedJobIds[j.id];
-      const count = STATE.applicantCounts[j.id]||0;
-      return `
-      <div class="card">
-        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-teal">${j.trade||'Trade'}</span></div>
-        <p>${j.location||''}, ${j.county||''}</p>
-        <p style="margin-top:4px">${j.rate||j.budget||''}</p>
-        <p class="text-muted" style="margin-top:6px;font-size:12px">${(j.description||'').slice(0,100)}</p>
-        <div class="flex between mt8" style="align-items:center">
-          <span class="applicant-count">${count} applicant${count!==1?'s':''}</span>
-          ${isOwn
-            ? `<button class="btn btn-primary btn-sm" onclick="openApplicants('${j.id}',this)">Manage applicant${count!==1?'s':''}</button>`
-            : `<button class="btn ${applied?'btn-outline':'btn-primary'} btn-sm" ${applied?'disabled':''} onclick="applyToJob('${j.id}',this)">${applied?'Applied':'Apply'}</button>`}
-        </div>
-        ${canRate ? `<button class="btn btn-outline btn-sm mt8" onclick="openRating('${j.id}','${j.owner_id}')">Rate Job</button>` : ''}
-      </div>`;
-    }).join('') : '<p class="text-muted" style="padding:20px 0">No open jobs yet. Be the first to post.</p>';
-  }
-}
-function filterCounty(county,btn){
-  STATE.activeCounty=county;
-  renderWork(); // rebuilds both tab rows (trade counts depend on county)
-}
-function filterTrade(trade,btn){
-  STATE.activeTrade=trade;
-  renderWork();
-}
-
-// ─── APPLY ────────────────────────────────────────────────────────────────────
-async function applyToJob(jobId,btn){
-  if (!STATE.user){alert('Please sign in again to apply.');return;}
-  if (STATE.appliedJobIds[jobId]) return;
-  btn.disabled = true;
-  const existing = await sb.from('applications').select('id').eq('job_id',jobId).eq('applicant_id',STATE.user.id).maybeSingle();
-  if (existing.data) {
-    STATE.appliedJobIds[jobId] = true;
-    btn.textContent = 'Applied'; btn.classList.remove('btn-primary'); btn.classList.add('btn-outline');
-    return;
-  }
-  const {error} = await sb.from('applications').insert({job_id:jobId,applicant_id:STATE.user.id});
-  if (error){alert('Could not submit your application. '+error.message);btn.disabled=false;return;}
-  STATE.appliedJobIds[jobId] = true;
-  STATE.applicantCounts[jobId] = (STATE.applicantCounts[jobId]||0)+1;
-  btn.textContent = 'Applied'; btn.classList.remove('btn-primary'); btn.classList.add('btn-outline');
-}
-
-// ─── MANAGE APPLICANTS (job owner) ──────────────────────────────────────────────
-// RLS lets a job poster SELECT applications on their own jobs; profiles are
-// world-readable. Accepting one calls the accept_application() RPC, which
-// atomically marks it accepted, rejects the rest, and sets the contractor as
-// payee on the job's draw schedule(s) and every draw under them.
-let currentApplicantsJobId = null;
-async function openApplicants(jobId){
-  currentApplicantsJobId = jobId;
-  document.getElementById('applicants-content').innerHTML =
-    '<p class="text-muted" style="padding:20px 0">Loading…</p>';
-  document.getElementById('applicants-overlay').classList.add('open');
-  const {data:apps,error} = await sb.from('applications')
-    .select('id,applicant_id,status,bid_amount,message,created_at')
-    .eq('job_id',jobId)
-    .order('created_at',{ascending:true});
-  if (error){
-    document.getElementById('applicants-content').innerHTML =
-      `<p class="text-muted" style="padding:20px 0">Could not load applicants. ${error.message}</p>`;
-    return;
-  }
-  const ids = [...new Set((apps||[]).map(a=>a.applicant_id).filter(Boolean))];
-  const profiles = {};
-  if (ids.length){
-    const {data:profs} = await sb.from('profiles')
-      .select('id,full_name,email,trade,tier,jobs_completed,rating').in('id',ids);
-    (profs||[]).forEach(p=>{profiles[p.id]=p;});
-  }
-  renderApplicants(apps||[],profiles);
-}
-function renderApplicants(apps,profiles){
-  const el = document.getElementById('applicants-content');
-  document.getElementById('applicants-title').textContent =
-    `Applicants (${apps.length})`;
-  if (!apps.length){
-    el.innerHTML='<p class="text-muted" style="padding:20px 0">No applicants yet.</p>';
-    return;
-  }
-  const tiers=['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
-  const someoneHired = apps.some(a=>a.status==='accepted');
-  el.innerHTML = apps.map(a=>{
-    const p = profiles[a.applicant_id]||{};
-    const name = p.full_name||p.email||'Applicant';
-    const accepted = a.status==='accepted';
-    const rejected = a.status==='rejected';
-    return `
-    <div class="card" style="${rejected?'opacity:.55':''}">
-      <div class="flex between"><h3>${name}</h3>
-        ${accepted?'<span class="badge badge-teal">Hired</span>'
-          :rejected?'<span class="text-muted" style="font-size:12px">Not selected</span>':''}
-      </div>
-      <p class="text-muted" style="font-size:12px;margin-top:2px">${p.trade||'No trade set'} · Tier: ${tiers[p.tier||1]||'Verified'} · ${p.jobs_completed||0} jobs done</p>
-      ${a.bid_amount!=null?`<p style="margin-top:6px">Bid: $${Number(a.bid_amount).toLocaleString()}</p>`:''}
-      ${a.message?`<p style="margin-top:6px;font-size:13px">${a.message}</p>`:''}
-      ${accepted
-        ? '<p class="text-muted" style="font-size:12px;margin-top:8px">Attached as payee on this job’s draws.</p>'
-        : rejected ? ''
-        : `<button class="btn btn-primary btn-sm mt8" onclick="acceptApplicant('${a.id}',this)">${someoneHired?'Hire instead':'Hire'}</button>`}
-    </div>`;
-  }).join('');
-}
-async function acceptApplicant(applicationId,btn){
-  if (!confirm('Hire this applicant? They will be set as the payee on this job’s draw schedule, and any other applicants will be declined.')) return;
-  btn.disabled = true; btn.textContent = 'Hiring…';
-  const {error} = await sb.rpc('accept_application',{p_application_id:applicationId});
-  if (error){
-    alert('Could not hire this applicant. '+error.message);
-    btn.disabled = false; btn.textContent = 'Hire';
-    return;
-  }
-  if (currentApplicantsJobId) await openApplicants(currentApplicantsJobId);
-  await loadData(); renderDraws();
-}
-
-// ─── POST JOB ─────────────────────────────────────────────────────────────────
-let milestones = [];
-function addMilestone(){milestones.push({name:'',pct:0,verifier:'owner'});renderMilestones();}
-function removeMilestone(i){milestones.splice(i,1);renderMilestones();}
-function renderMilestones(){
-  const el = document.getElementById('milestone-rows');
-  el.innerHTML = milestones.map((m,i)=>`
-    <div class="milestone-row">
-      <input placeholder="Name" value="${m.name}" oninput="milestones[${i}].name=this.value"/>
-      <input class="pct-input" type="number" placeholder="%" value="${m.pct||''}" min="1" max="100"
-        oninput="milestones[${i}].pct=+this.value;updatePct()"/>
-      <select style="width:100px;margin-bottom:0" onchange="milestones[${i}].verifier=this.value">
-        <option value="owner" ${m.verifier==='owner'?'selected':''}>Owner</option>
-        <option value="inspector" ${m.verifier==='inspector'?'selected':''}>Inspector</option>
-      </select>
-      <button class="btn btn-outline btn-sm" onclick="removeMilestone(${i})">✕</button>
-    </div>`).join('');
-  updatePct();
-}
-function updatePct(){
-  const total = milestones.reduce((s,m)=>s+(+m.pct||0),0);
-  const el = document.getElementById('pct-total');
-  el.textContent = milestones.length?`${total}% of 100%`:'';
-  el.style.color = total===100?'var(--green)':total>100?'var(--danger)':'var(--muted)';
-}
-async function submitJob(){
-  const title = document.getElementById('post-title').value.trim();
-  if (!title){alert('Title required');return;}
-  const total = milestones.reduce((s,m)=>s+(+m.pct||0),0);
-  if (milestones.length&&total!==100){alert('Draw percentages must total 100%');return;}
-  const {data:job,error} = await sb.from('jobs').insert({
-    title,
-    trade:    document.getElementById('post-trade').value,
-    location: document.getElementById('post-city').value,
-    county:   document.getElementById('post-county').value,
-    state:    'UT',
-    description: document.getElementById('post-desc').value,
-    rate:     document.getElementById('post-budget').value,
-    owner_id: STATE.user.id,
-    source:   'tradedeck',
-    status:   'open'
-  }).select().single();
-  if (error){alert('Error: '+error.message);return;}
-  if (milestones.length) {
-    const budget = parseInt(document.getElementById('post-budget').value.replace(/\D/g,''))||0;
-    const {data:sched} = await sb.from('draw_schedules').insert({
-      job_id:         job.id,
-      owner_id:       STATE.user.id,
-      contract_value: budget||1
-    }).select().single();
-    if (sched) {
-      // NOTE: draws.job_id is misleadingly named -- its FK actually points
-      // at draw_schedules.id, not jobs.id (confirmed via the live FK
-      // constraint "draws_schedule_id_fkey"). sched.id is correct here.
-      await sb.from('draws').insert(milestones.map((m,i)=>({
-        job_id:          sched.id,
-        milestone_order: i+1,
-        milestone_name:  m.name,
-        percentage:      m.pct,
-        amount_cents:    Math.round((budget||1)*100*(m.pct/100)),
-        verifier_type:   m.verifier,
-        status:          'pending'
-      })));
-    }
-  }
-  milestones=[];renderMilestones();
-  ['post-title','post-city','post-desc','post-budget'].forEach(id=>document.getElementById(id).value='');
-  await loadData();render();
-  switchTab('work');
-}
-
-// ─── DRAW MANAGER ─────────────────────────────────────────────────────────────
-function renderDraws(){
-  const el = document.getElementById('draws-content');
-  if (!STATE.draws.length){
-    el.innerHTML='<p class="text-muted" style="padding:20px 0">No draw schedules yet. Add milestones when posting a job.</p>';
-    return;
-  }
-  el.innerHTML = STATE.draws.map(s=>{
-    const draws = (s.draws||[]).slice().sort((a,b)=>a.milestone_order-b.milestone_order);
-    const releasedPct = draws.filter(d=>d.status==='approved'||d.status==='released').reduce((sum,d)=>sum+(d.percentage||0),0);
-    const payee = s.payee_id ? STATE.payeeProfiles[s.payee_id] : null;
-    const payeeLabel = payee ? (payee.full_name||payee.email) : null;
-    return `<div class="card">
-      <div class="flex between"><h3>Draw Schedule</h3><span class="text-muted">$${(s.contract_value||0).toLocaleString()}</span></div>
-      <p class="text-muted" style="font-size:12px;margin-top:2px">${payeeLabel?`Contractor: ${payeeLabel}`:'No contractor hired yet'}</p>
-      <div class="escrow-bar"><div class="escrow-fill" style="width:${releasedPct}%"></div></div>
-      <p class="text-muted" style="font-size:12px;margin-bottom:12px">${releasedPct}% released</p>
-      ${draws.map(d=>`
-        <div class="flex between mt8" style="align-items:center">
-          <span style="font-size:14px">${d.milestone_order}. ${d.milestone_name} <span class="text-muted">(${d.percentage}%)</span></span>
-          <div class="flex gap8" style="align-items:center">
-            <span class="draw-status ${d.status}">${d.status}</span>
-            ${d.status==='pending'?`<button class="btn btn-outline btn-sm" onclick="drawAction('${d.id}','submitted')">Submit</button>`:''}
-            ${d.status==='submitted'?`
-              <button class="btn btn-primary btn-sm" onclick="drawAction('${d.id}','approved')">Approve</button>
-              <button class="btn btn-danger btn-sm" onclick="drawAction('${d.id}','disputed')">Dispute</button>`:''}
-          </div>
-        </div>`).join('')}
-    </div>`;
-  }).join('');
-}
-async function drawAction(id,status){
-  await sb.from('draws').update({status,resolved_at:['approved','disputed'].includes(status)?new Date().toISOString():null}).eq('id',id);
-  await loadData();renderDraws();
-}
-
-// ─── PROFILE ──────────────────────────────────────────────────────────────────
-function renderProfile(){
-  const el = document.getElementById('profile-content');
-  if (!STATE.profile){el.innerHTML='';return;}
-  const p = STATE.profile;
-  const tiers=['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
-  el.innerHTML=`
-    <div class="card">
-      <h3>${p.full_name||p.email}</h3>
-      <p class="text-muted">${p.trade||'No trade set'} · Tier: ${tiers[p.tier||1]||'Verified'}</p>
-      ${p.rating>0?`<p class="text-muted" style="margin-top:4px">★ ${p.rating} · ${p.repeat_hire_rate}% repeat hire</p>`:''}
-    </div>
-    <div class="card">
-      <h3>Edit Profile</h3>
-      <label>Full Name</label>
-      <input id="edit-name" value="${p.full_name||''}"/>
-      <label>Company</label>
-      <input id="edit-company" value="${p.company||''}"/>
-      <label>Trade</label>
-      <select id="edit-trade">
-        ${['Framing','Concrete','Roofing','Electrical','Plumbing','HVAC','Drywall','Flooring','Excavation','Landscaping','General Contractor','Other']
-          .map(t=>`<option ${p.trade===t?'selected':''}>${t}</option>`).join('')}
-      </select>
-      <label>Phone</label>
-      <input id="edit-phone" value="${p.phone||''}" placeholder="435-555-0100"/>
-      <button class="btn btn-primary btn-block" onclick="saveProfile()">Save</button>
-    </div>
-    <button class="btn btn-outline btn-block mt8" onclick="signOut()">Sign Out</button>
-  `;
-}
-async function saveProfile(){
-  const updates = {
-    full_name: document.getElementById('edit-name').value,
-    company:   document.getElementById('edit-company').value,
-    trade:     document.getElementById('edit-trade').value,
-    phone:     document.getElementById('edit-phone').value,
-  };
-  const {error} = await sb.from('profiles').update(updates).eq('id',STATE.user.id);
-  if (error){alert(error.message);return;}
-  STATE.profile = {...STATE.profile,...updates};
-  renderProfile();
-}
-
-// ─── ADMIN ────────────────────────────────────────────────────────────────────
-// Ported from app.html's Admin tab, adapted to the columns actually
-// confirmed live (no jobs.hired_by/trade_type — those never existed on
-// the real table). Gated cosmetically on STATE.isAdmin (nav button
-// hidden unless profiles.is_admin is true) -- real enforcement is the
-// "Admins have full access" RLS policies from admin-setup.sql.
-function loadAdmin(){
-  if (STATE.admLoaded) return;
-  STATE.admLoaded = true;
-  admLoadUsers();
-}
-function admTab(tab,btn){
-  STATE.activeAdmTab = tab;
-  document.querySelectorAll('.adm-subtab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  document.querySelectorAll('.adm-subview').forEach(v=>v.classList.remove('active'));
-  document.getElementById('adm-'+tab).classList.add('active');
-  if (tab==='jobs') admLoadJobs(); else admLoadUsers();
-}
-async function admLoadUsers(){
-  const el = document.getElementById('adm-users');
-  el.innerHTML = '<p class="text-muted" style="padding:20px 0">Loading…</p>';
-  const {data,error} = await sb.from('profiles').select('id,email,full_name,tier,jobs_completed,is_admin').order('created_at',{ascending:false});
-  if (error){el.innerHTML = `<p class="text-muted" style="padding:20px 0">Could not load users. ${error.message}</p>`;return;}
-  admRenderUsers(data||[]);
-}
-function admRenderUsers(users){
-  const el = document.getElementById('adm-users');
-  if (!users.length){el.innerHTML='<p class="text-muted" style="padding:20px 0">No users yet.</p>';return;}
-  el.innerHTML = users.map(u=>`
-    <div class="card">
-      <div class="adm-row">
-        <div>
-          <h3>${u.full_name||u.email}</h3>
-          <p class="text-muted">Tier ${u.tier!=null?u.tier:'--'} · ${u.jobs_completed||0} jobs done</p>
-        </div>
-        <span class="adm-badge ${u.is_admin?'adm-badge-admin':'adm-badge-user'}">${u.is_admin?'Admin':'User'}</span>
-      </div>
-      <button class="btn btn-sm mt8 ${u.is_admin?'btn-outline':'btn-primary'}" onclick="admSetAdmin('${u.id}',${!u.is_admin})">${u.is_admin?'Revoke Admin':'Make Admin'}</button>
-    </div>`).join('');
-}
-async function admSetAdmin(id,value){
-  if (!confirm(value?'Grant full administrator access to this user?':'Revoke administrator access from this user?')) return;
-  const {error} = await sb.from('profiles').update({is_admin:value}).eq('id',id);
-  if (error){alert('Could not update admin status. '+error.message);return;}
-  admLoadUsers();
-}
-async function admLoadJobs(){
-  const el = document.getElementById('adm-jobs');
-  el.innerHTML = '<p class="text-muted" style="padding:20px 0">Loading…</p>';
-  const {data,error} = await sb.from('jobs').select('id,title,trade,owner_id,status').order('created_at',{ascending:false});
-  if (error){el.innerHTML = `<p class="text-muted" style="padding:20px 0">Could not load jobs. ${error.message}</p>`;return;}
-  const jobs = data||[];
-  const ids = [...new Set(jobs.map(j=>j.owner_id).filter(Boolean))];
-  const profiles = await admFetchProfiles(ids);
-  admRenderJobs(jobs,profiles);
-}
-async function admFetchProfiles(ids){
-  const map = {};
-  if (!ids.length) return map;
-  const {data} = await sb.from('profiles').select('id,full_name,email').in('id',ids);
-  (data||[]).forEach(p=>{map[p.id]=p;});
-  return map;
-}
-function admRenderJobs(jobs,profiles){
-  const el = document.getElementById('adm-jobs');
-  if (!jobs.length){el.innerHTML='<p class="text-muted" style="padding:20px 0">No jobs yet.</p>';return;}
-  const statuses = ['open','filled','closed'];
-  el.innerHTML = jobs.map(j=>{
-    const poster = profiles[j.owner_id];
-    const posterName = poster ? (poster.full_name||poster.email) : '--';
-    return `
-    <div class="card">
-      <h3>${j.title}</h3>
-      <p class="text-muted">${j.trade||'--'} · Posted by ${posterName}</p>
-      <div class="flex gap8 mt8" style="align-items:center;flex-wrap:wrap">
-        <select style="width:auto;margin-bottom:0" onchange="admUpdateJobStatus('${j.id}',this.value)">
-          ${statuses.map(s=>`<option value="${s}" ${s===j.status?'selected':''}>${s}</option>`).join('')}
-        </select>
-        <button class="btn btn-danger btn-sm" onclick="admDeleteJob('${j.id}')">Delete</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-async function admUpdateJobStatus(id,status){
-  const {error} = await sb.from('jobs').update({status}).eq('id',id);
-  if (error){alert('Could not update job status. '+error.message);admLoadJobs();}
-}
-async function admDeleteJob(id){
-  if (!confirm('Permanently delete this job? This cannot be undone.')) return;
-  const {error} = await sb.from('jobs').delete().eq('id',id);
-  if (error){alert('Could not delete job. '+error.message);return;}
-  admLoadJobs();
-}
-
-// ─── RATINGS ──────────────────────────────────────────────────────────────────
-function openRating(jobId,revieweeId){
-  STATE.currentRatingJobId=jobId;STATE.currentRatingRevieweeId=revieweeId;STATE.currentRating=0;
-  document.querySelectorAll('#star-picker span').forEach(s=>s.classList.remove('on'));
-  document.getElementById('review-text').value='';
-  document.getElementById('rating-overlay').classList.add('open');
-}
-function setRating(n){
-  STATE.currentRating=n;
-  document.querySelectorAll('#star-picker span').forEach((s,i)=>s.classList.toggle('on',i<n));
-}
-async function submitRating(){
-  if (!STATE.currentRating){alert('Select a rating');return;}
-  if (!STATE.currentRatingRevieweeId){alert('Could not determine who this review is for.');return;}
-  const {error} = await sb.from('reviews').insert({
-    job_id:      STATE.currentRatingJobId,
-    reviewer_id: STATE.user.id,
-    reviewee_id: STATE.currentRatingRevieweeId, // the job's poster — set by openRating(), not the reviewer
-    rating:      STATE.currentRating,
-    body:        document.getElementById('review-text').value
-  });
-  if (error){alert(error.message);return;}
-  closeOverlay('rating-overlay');
-}
-function closeOverlay(id){document.getElementById(id).classList.remove('open');}
-
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-(async()=>{
-  const errEl = document.getElementById('auth-error');
-  if (!sb){ if(errEl) errEl.textContent = SB_LOAD_ERROR; return; }
-  try {
-    const {data:{session}} = await sb.auth.getSession();
-    if (session?.user) await onLogin(session.user);
-  } catch (e) {
-    // Session restore / initial load failed — fall back to the sign-in form
-    // rather than a blank or half-rendered app.
-    document.getElementById('auth-wrap').style.display = '';
-    document.getElementById('app').style.display = 'none';
-    document.getElementById('main-nav').style.display = 'none';
-    if (errEl) errEl.textContent = 'Could not restore your session. Please sign in.';
-  }
-})();
-</script>
-<!-- TradeDeck Shield UI (mountable module). Loaded after the main script so it
-     can read the shared `sb` client; functions attach to window. -->
-<script src="shield.js"></script>
-
-<!-- PWA: installable + auto-update. Service worker is network-first, so a new
-     deploy is fetched when online; this shows a one-tap refresh when a new
-     version is ready. -->
+<script src="/assets/app.js" defer></script>
+<!-- TradeDeck Shield UI (mountable module). Loaded after assets/app.js so
+     the top-level `sb` Supabase client it declares is already defined when
+     this runs -- both are `defer`, and defer scripts execute in document
+     order, so this is safe without exporting sb onto window. -->
+<script src="shield.js" defer></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').then((reg) => {
-      function showUpdate(worker) {
-        let bar = document.getElementById('pwa-update');
-        if (!bar) {
-          bar = document.createElement('div');
-          bar.id = 'pwa-update';
-          bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:78px;z-index:300;background:#0BBCD4;color:#0A0A0A;font-weight:700;font-size:14px;padding:12px 14px;border-radius:12px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.4)';
-          bar.innerHTML = '<span>New version available</span>';
-          const btn = document.createElement('button');
-          btn.textContent = 'Refresh';
-          btn.style.cssText = 'background:#0A0A0A;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer';
-          btn.onclick = () => worker.postMessage({ type: 'SKIP_WAITING' });
-          bar.appendChild(btn);
-          document.body.appendChild(bar);
-        }
-      }
-      if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg.waiting);
+    navigator.serviceWorker.register('/sw.js').then(reg => {
       reg.addEventListener('updatefound', () => {
-        const nw = reg.installing;
-        if (!nw) return;
-        nw.addEventListener('statechange', () => {
-          if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdate(nw);
+        const worker = reg.installing;
+        if (!worker) return;
+        worker.addEventListener('statechange', () => {
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+            showUpdateBanner(worker);
+          }
         });
       });
     }).catch(() => {});
-    let reloaded = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (reloaded) return; reloaded = true; window.location.reload();
-    });
   });
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return;
+    reloading = true;
+    location.reload();
+  });
+}
+function showUpdateBanner(worker) {
+  if (document.getElementById('update-banner')) return;
+  const bar = document.createElement('div');
+  bar.id = 'update-banner';
+  bar.style.cssText = 'position:fixed;left:0;right:0;bottom:64px;z-index:150;background:var(--teal);color:#000;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:600';
+  bar.innerHTML = '<span>A new version is available.</span><button style="background:#000;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:600;cursor:pointer">Refresh</button>';
+  bar.querySelector('button').onclick = () => worker.postMessage({type:'SKIP_WAITING'});
+  document.body.appendChild(bar);
 }
 </script>
 </body>
