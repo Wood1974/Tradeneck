@@ -5,11 +5,16 @@ Guidance for Claude Code (or any agent) working in this repo. This is the
 general contractors, and workers, built around full transparency, a
 verified trust/tier system, and milestone-based escrow.
 
-This file reflects the **actual repo contents as of Aug 2026**, verified by
+This file reflects the **actual repo contents as of Sep 2026**, verified by
 reading the code directly — not carried over from planning notes, which
 had drifted significantly from what's actually committed. If you're
 picking this project back up, read this whole file before assuming
 anything is built.
+
+**Sep 2026 update**: Draw/escrow functionality has been removed from the
+backend API (tradedeck-api). The frontend index.html still contains draw/escrow
+UI code for reference, but those endpoints no longer exist. See "Architectural
+Changes" section below.
 
 ## Product context
 
@@ -107,6 +112,25 @@ These are real, well-specified plans — worth preserving — but confirmed
   `tradedeckapp.com`.
 - DNS via GoDaddy: `A @ → 75.2.60.5` (Netlify), `CNAME www →
   calm-cupcake-a213bb.netlify.app`.
+
+## Architectural Changes (Sep 2026)
+
+**Draw/Escrow Removed**: Draw/milestone/escrow functionality has been removed 
+from the backend (tradedeck-api) because Shield is a standalone evidence 
+verification system independent from TradeDeck job payment workflows. 
+Draw/escrow concepts belong to job-workflow payment splits, not to evidence 
+collection and integrity verification.
+
+The frontend's index.html still contains draw UI code (Draw Manager tab, 
+milestone posting, photo upload, escrow funding) for reference or future use, 
+but the backend endpoints those features depend on (`POST /stripe/escrow/*`, 
+`GET /draws/*`, `POST /draws/*/photos/upload`) no longer exist. The app will 
+run without draw functionality; attempting to use draw features will fail 
+with backend errors.
+
+**Future**: Either (1) remove the draw UI from index.html for a clean codebase, 
+or (2) port draws to a separate service if they become relevant again (e.g., 
+as an add-on to TradeDeck jobs independent of Shield).
 
 ## Conventions / working notes
 
