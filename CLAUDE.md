@@ -113,24 +113,26 @@ These are real, well-specified plans — worth preserving — but confirmed
 - DNS via GoDaddy: `A @ → 75.2.60.5` (Netlify), `CNAME www →
   calm-cupcake-a213bb.netlify.app`.
 
-## Architectural Changes (Sep 2026)
+## Architecture (Sep 2026)
 
-**Draw/Escrow Removed**: Draw/milestone/escrow functionality has been removed 
-from the backend (tradedeck-api) because Shield is a standalone evidence 
-verification system independent from TradeDeck job payment workflows. 
-Draw/escrow concepts belong to job-workflow payment splits, not to evidence 
-collection and integrity verification.
+**Shield and TradeDeck are standalone applications**, sharing tradedeckapp.com 
+but operating completely independently:
 
-The frontend's index.html still contains draw UI code (Draw Manager tab, 
-milestone posting, photo upload, escrow funding) for reference or future use, 
-but the backend endpoints those features depend on (`POST /stripe/escrow/*`, 
-`GET /draws/*`, `POST /draws/*/photos/upload`) no longer exist. The app will 
-run without draw functionality; attempting to use draw features will fail 
-with backend errors.
+1. **Shield** (`/shield`): Evidence verification system with photo upload, AI 
+   analysis, integrity verification, contractor scoring. No integration with 
+   TradeDeck jobs.
 
-**Future**: Either (1) remove the draw UI from index.html for a clean codebase, 
-or (2) port draws to a separate service if they become relevant again (e.g., 
-as an add-on to TradeDeck jobs independent of Shield).
+2. **TradeDeck** (`/`): Simple job marketplace. Post fixed-price job → apply → 
+   hire → pay via Stripe. No draws/milestones/escrow.
+
+**Removed**: Draw/escrow/milestone functionality from backend (escrow.py deleted, 
+no `/api/draws/*` endpoints). This aligns with Shield being a standalone evidence 
+verification system independent from job payment workflows.
+
+**Frontend cleanup needed**: index.html still contains some draw UI remnants 
+(Draws tab, milestone UI, photo uploads, escrow funding) that should be removed 
+in a follow-up pass. Current state: app runs without draw functionality; using 
+draw features (if UI remains) will fail with backend 404s.
 
 ## Conventions / working notes
 
