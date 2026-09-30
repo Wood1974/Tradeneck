@@ -141,19 +141,9 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 .close-btn{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer}
 .flex{display:flex}.between{justify-content:space-between}.gap8{gap:8px}.mt8{margin-top:8px}.mt16{margin-top:16px}
 .text-muted{color:var(--muted);font-size:13px}
-.draw-status{padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase}
-.draw-status.pending{background:rgba(255,180,0,.15);color:#ffb400}
-.draw-status.submitted{background:rgba(11,188,212,.15);color:var(--teal)}
-.draw-status.approved{background:rgba(74,222,128,.15);color:var(--green)}
-.draw-status.disputed{background:rgba(224,85,85,.15);color:var(--danger)}
-.escrow-bar{background:var(--border);border-radius:4px;height:8px;margin:8px 0}
-.escrow-fill{background:var(--teal);height:100%;border-radius:4px;transition:width .4s}
 .stars{display:flex;gap:6px;font-size:28px;cursor:pointer;margin:10px 0}
 .stars span{color:var(--border);transition:color .1s}
 .stars span.on{color:#ffb400}
-.milestone-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
-.milestone-row input{margin-bottom:0}
-.milestone-row .pct-input{width:65px;flex-shrink:0;text-align:center}
 .county-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px}
 .county-tab{white-space:nowrap;padding:4px 10px;border-radius:14px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;flex-shrink:0}
 .county-tab.active{background:var(--teal);color:#000;border-color:var(--teal)}
@@ -459,12 +449,6 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     </div>
   </div>
 
-  <!-- DRAW MANAGER -->
-  <div id="screen-draws" class="screen">
-    <div class="screen-header"><h2>Draw Manager</h2></div>
-    <div id="draws-content"></div>
-  </div>
-
   <!-- PROFILE -->
   <div id="screen-workers" class="screen">
     <div class="screen-header"><h2>Worker Directory</h2></div>
@@ -507,9 +491,6 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   <button onclick="switchTab('post')" id="nav-post">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Post Job
   </button>
-  <button onclick="switchTab('draws')" id="nav-draws">
-    <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Draws
-  </button>
   <button onclick="switchTab('workers')" id="nav-workers">
     <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Workers
   </button>
@@ -525,36 +506,6 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 </nav>
 
 <!-- RATING OVERLAY -->
-<div class="overlay" id="photo-overlay">
-  <div class="overlay-inner">
-    <div class="overlay-header">
-      <h3>Submit Milestone Photos</h3>
-      <button class="close-btn" type="button" aria-label="Close" onclick="closeOverlay('photo-overlay')">×</button>
-    </div>
-    <p class="text-muted" id="photo-overlay-desc" style="margin-bottom:16px;font-size:14px"></p>
-    <div id="photo-preview-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px"></div>
-    <label style="display:block;padding:16px;border:2px dashed var(--border);border-radius:8px;text-align:center;cursor:pointer;margin-bottom:12px">
-      <input type="file" id="photo-file-input" accept="image/*" multiple style="display:none" onchange="previewPhotos(this)">
-      <span style="color:var(--teal);font-weight:600">📷 Tap to select photos</span>
-      <p class="text-muted" style="font-size:12px;margin-top:4px">JPG, PNG, HEIC — up to 5 photos</p>
-    </label>
-    <div id="photo-upload-error" style="color:var(--red);font-size:13px;margin-bottom:12px;display:none"></div>
-    <button class="btn btn-primary" style="width:100%" id="photo-submit-btn" onclick="submitDrawPhotos()">Submit for Approval</button>
-  </div>
-</div>
-
-<div class="overlay" id="escrow-overlay">
-  <div class="overlay-inner">
-    <div class="overlay-header">
-      <h3>Fund Draw Escrow</h3>
-      <button class="close-btn" type="button" aria-label="Close" onclick="closeOverlay('escrow-overlay')">×</button>
-    </div>
-    <p class="text-muted" id="escrow-overlay-desc" style="margin-bottom:16px;font-size:14px"></p>
-    <div id="escrow-payment-element" style="margin-bottom:16px"></div>
-    <div id="escrow-error" style="color:var(--red);font-size:13px;margin-bottom:12px;display:none"></div>
-    <button class="btn btn-primary" style="width:100%" id="escrow-pay-btn" onclick="confirmEscrowPayment()">Fund Escrow</button>
-  </div>
-</div>
 
 <div class="overlay" id="rating-overlay">
   <div class="overlay-inner">
