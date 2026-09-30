@@ -7,13 +7,11 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let STATE = {
   user:null, profile:null, isAdmin:false,
-  jobs:[], kslJobs:[], draws:[],
+  jobs:[], kslJobs:[],
   appliedJobIds:{}, applicantCounts:{},
   activeWorkTab:'open', activeCounty:'all', activeTrade:'all', activeAdmTab:'users', admLoaded:false,
   shieldLoaded:false,
-  currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0,
-  milestones:[],
-  escrowMap:{} // draw_id → escrow status ('pending'|'held'|'released'|'refunded')
+  currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0
 };
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
@@ -65,22 +63,12 @@ async function signOut(){await sb.auth.signOut();location.reload();}
 
 // ─── LOAD DATA ────────────────────────────────────────────────────────────────
 async function loadData() {
-  const [jobsRes, drawRes, kslRes] = await Promise.all([
+  const [jobsRes, kslRes] = await Promise.all([
     sb.from('jobs').select('*').eq('status','open').eq('source','tradedeck').order('created_at',{ascending:false}).limit(50),
-    sb.from('draw_schedules').select('*, draws(*)').order('created_at',{ascending:false}).limit(30),
     sb.from('jobs').select('*').eq('source','ksl').order('created_at',{ascending:false}).limit(200),
   ]);
-  STATE.jobs    = jobsRes.data  || [];
-  STATE.draws   = drawRes.data  || [];
-  STATE.kslJobs = kslRes.data   || [];
-
-  // Load escrow status for all draws
-  STATE.escrowMap = {};
-  const allDrawIds = STATE.draws.flatMap(s=>(s.draws||[]).map(d=>d.id)).filter(Boolean);
-  if(allDrawIds.length){
-    const {data:escrows} = await sb.from('stripe_escrow').select('draw_id,status').in('draw_id',allDrawIds);
-    (escrows||[]).forEach(e=>{STATE.escrowMap[e.draw_id]=e.status;});
-  }
+  STATE.jobs    = jobsRes.data || [];
+  STATE.kslJobs = kslRes.data  || [];
 
   /* Applied state (mine only -- RLS on applications only lets a user
      see their own rows or rows on a job they posted, so this can't leak
@@ -101,7 +89,7 @@ async function loadData() {
 }
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
-const TAB_PATHS = {home:'/home', work:'/find-work', post:'/post-job', draws:'/draws',
+const TAB_PATHS = {home:'/home', work:'/find-work', post:'/post-job',
                    workers:'/workers', profile:'/profile', shield:'/shield', admin:'/admin'};
 const PATH_TABS = Object.fromEntries(Object.entries(TAB_PATHS).map(([k,v])=>[v,k]));
 
@@ -175,7 +163,7 @@ function filterTrade(trade,btn){
 }
 
 // ─── RENDER ───────────────────────────────────────────────────────────────────
-function render(){renderHome();renderWork();renderDraws();renderWorkers();renderProfile();}
+function render(){renderHome();renderWork();renderWorkers();renderProfile();}
 
 function renderHome() {
   if (!STATE.profile) return;
@@ -183,7 +171,6 @@ function renderHome() {
   document.getElementById('home-tier').textContent = tiers[STATE.profile.tier||1]||'Verified';
   document.getElementById('home-stats').innerHTML = `
     <div class="flex between"><span class="text-muted">Jobs available</span><strong>${STATE.jobs.length}</strong></div>
-    <div class="flex between mt8"><span class="text-muted">Active draws</span><strong>${STATE.draws.length}</strong></div>
   `;
 }
 
@@ -360,35 +347,9 @@ async function applyToJob(jobId,btn){
 }
 
 // ─── POST JOB ─────────────────────────────────────────────────────────────────
-let milestones = [];
-function addMilestone(){milestones.push({name:'',pct:0,verifier:'owner'});renderMilestones();}
-function removeMilestone(i){milestones.splice(i,1);renderMilestones();}
-function renderMilestones(){
-  const el = document.getElementById('milestone-rows');
-  el.innerHTML = milestones.map((m,i)=>`
-    <div class="milestone-row">
-      <input placeholder="Name" value="${m.name}" oninput="milestones[${i}].name=this.value"/>
-      <input class="pct-input" type="number" placeholder="%" value="${m.pct||''}" min="1" max="100"
-        oninput="milestones[${i}].pct=+this.value;updatePct()"/>
-      <select style="width:100px;margin-bottom:0" onchange="milestones[${i}].verifier=this.value">
-        <option value="owner" ${m.verifier==='owner'?'selected':''}>Owner</option>
-        <option value="inspector" ${m.verifier==='inspector'?'selected':''}>Inspector</option>
-      </select>
-      <button class="btn btn-outline btn-sm" onclick="removeMilestone(${i})">✕</button>
-    </div>`).join('');
-  updatePct();
-}
-function updatePct(){
-  const total = milestones.reduce((s,m)=>s+(+m.pct||0),0);
-  const el = document.getElementById('pct-total');
-  el.textContent = milestones.length?`${total}% of 100%`:'';
-  el.style.color = total===100?'var(--green)':total>100?'var(--danger)':'var(--muted)';
-}
 async function submitJob(){
   const title = document.getElementById('post-title').value.trim();
   if (!title){alert('Title required');return;}
-  const total = milestones.reduce((s,m)=>s+(+m.pct||0),0);
-  if (milestones.length&&total!==100){alert('Draw percentages must total 100%');return;}
   const {data:job,error} = await sb.from('jobs').insert({
     title,
     trade:    document.getElementById('post-trade').value,
@@ -403,291 +364,11 @@ async function submitJob(){
   }).select().single();
   if (error){alert('Error: '+error.message);return;}
   td.jobPosted(job.trade, job.county, parseInt(String(job.rate||'').replace(/\D/g,''))||0);
-  if (milestones.length) {
-    const budget = parseInt(document.getElementById('post-budget').value.replace(/\D/g,''))||0;
-    const {data:sched} = await sb.from('draw_schedules').insert({
-      job_id:         job.id,
-      owner_id:       STATE.user.id,
-      contract_value: budget||1
-    }).select().single();
-    if (sched) {
-      // NOTE: draws.job_id is misleadingly named -- its FK actually points
-      // at draw_schedules.id, not jobs.id (confirmed via the live FK
-      // constraint "draws_schedule_id_fkey"). sched.id is correct here.
-      await sb.from('draws').insert(milestones.map((m,i)=>({
-        job_id:          sched.id,
-        milestone_order: i+1,
-        milestone_name:  m.name,
-        percentage:      m.pct,
-        amount_cents:    Math.round((budget||1)*100*(m.pct/100)),
-        verifier_type:   m.verifier,
-        status:          'pending'
-      })));
-    }
-  }
-  milestones=[];renderMilestones();
   ['post-title','post-city','post-desc','post-budget'].forEach(id=>document.getElementById(id).value='');
   await loadData();render();
   switchTab('work');
 }
 
-// ─── DRAW MANAGER ─────────────────────────────────────────────────────────────
-function renderDraws(){
-  const el = document.getElementById('draws-content');
-  if (!STATE.draws.length){
-    el.innerHTML='<p class="text-muted" style="padding:20px 0">No draw schedules yet. Add milestones when posting a job.</p>';
-    return;
-  }
-  const isOwner = STATE.user && STATE.draws.some(s=>s.owner_id===STATE.user.id);
-  el.innerHTML = STATE.draws.map(s=>{
-    const draws = (s.draws||[]).sort((a,b)=>a.milestone_order-b.milestone_order);
-    const releasedPct = draws.filter(d=>d.status==='approved'||d.status==='released').reduce((sum,d)=>sum+(d.percentage||0),0);
-    const iAmOwner = STATE.user && s.owner_id===STATE.user.id;
-    const hasPayee = !!s.payee_id;
-    return `<div class="card">
-      <div class="flex between"><h3>Draw Schedule</h3><span class="text-muted">$${(s.contract_value||0).toLocaleString()}</span></div>
-      ${hasPayee?'':`<p class="text-muted" style="font-size:12px;margin-bottom:8px">⏳ Awaiting contractor assignment</p>`}
-      <div class="escrow-bar"><div class="escrow-fill" style="width:${releasedPct}%"></div></div>
-      <p class="text-muted" style="font-size:12px;margin-bottom:12px">${releasedPct}% released</p>
-      ${draws.map(d=>{
-        const dollarAmt = ((d.amount_cents||0)/100).toLocaleString('en-US',{style:'currency',currency:'USD'});
-        const escrowStatus = STATE.escrowMap[d.id];
-        const escrowHeld = escrowStatus==='held'||escrowStatus==='released';
-        const escrowPending = escrowStatus==='pending';
-        const canFund = iAmOwner && hasPayee && d.status==='pending' && !escrowStatus;
-        const canApprove = iAmOwner && d.status==='submitted' && escrowHeld;
-        return `
-        <div class="flex between mt8" style="align-items:center">
-          <div>
-            <span style="font-size:14px">${d.milestone_order||''}. ${d.milestone_name||d.name||''} <span class="text-muted">(${d.percentage||d.pct||0}% · ${dollarAmt})</span></span>
-            ${escrowPending?`<br><span style="font-size:11px;color:#ffb400">💳 Escrow pending payment</span>`:''}
-            ${escrowHeld?`<br><span style="font-size:11px;color:var(--green)">✓ Escrow funded</span>`:''}
-          </div>
-          <div class="flex gap8" style="align-items:center">
-            <span class="draw-status ${d.status}">${d.status}</span>
-            ${canFund?`<button class="btn btn-outline btn-sm" onclick="openEscrowFunding('${d.id}','${s.id}',${d.amount_cents||0},'${d.milestone_name||d.name||''}')">💳 Fund</button>`:''}
-            ${!iAmOwner&&d.status==='pending'?`<button class="btn btn-outline btn-sm" onclick="openPhotoUpload('${d.id}','${d.milestone_name||d.name||''}')">📷 Submit</button>`:''}
-            ${canApprove?`
-              <button class="btn btn-primary btn-sm" onclick="drawAction('${d.id}','approved')">Approve</button>
-              <button class="btn btn-danger btn-sm" onclick="drawAction('${d.id}','disputed')">Dispute</button>`:''}
-            ${iAmOwner&&d.status==='submitted'&&!escrowHeld?`<span style="font-size:11px;color:var(--danger)">Fund escrow first</span>`:''}
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`;
-  }).join('');
-}
-async function drawAction(id,status){
-  if(status==='approved'){
-    // Must go through Flask so Stripe capture + transfer fires
-    const sess=await sb.auth.getSession();
-    const token=sess?.data?.session?.access_token;
-    if(!token){alert('Session expired. Please sign in again.');return;}
-    const btn=event?.target;if(btn){btn.disabled=true;btn.textContent='Releasing…';}
-    try{
-      const res=await fetch(`https://tradedeck-api.onrender.com/draws/${id}/approve`,{
-        method:'POST',
-        headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'}
-      });
-      const json=await res.json().catch(()=>({}));
-      if(!res.ok){
-        const msg=json.error||`Server error (${res.status})`;
-        alert(`Approval failed: ${msg}`);
-        if(btn){btn.disabled=false;btn.textContent='Approve';}
-        return;
-      }
-      // Flask handled Supabase update + Stripe transfer
-      td.drawApproved(id);
-    }catch(e){
-      alert('Could not reach payment server. Check connection and try again.');
-      if(btn){btn.disabled=false;btn.textContent='Approve';}
-      return;
-    }
-  }else{
-    // Submit and Dispute write Supabase directly (no money movement)
-    const update={status};
-    if(status==='disputed')update.resolved_at=new Date().toISOString();
-    if(status==='submitted')update.submitted_at=new Date().toISOString();
-    const{error}=await sb.from('draws').update(update).eq('id',id);
-    if(error){alert('Update failed: '+error.message);return;}
-  }
-  await loadData();renderDraws();
-}
-
-// ─── PHOTO UPLOAD ─────────────────────────────────────────────────────────────
-let _activePhotoDrawId = null;
-let _pendingPhotoFiles = [];
-
-function openPhotoUpload(drawId, milestoneName){
-  _activePhotoDrawId = drawId;
-  _pendingPhotoFiles = [];
-  document.getElementById('photo-overlay-desc').textContent = `${milestoneName} — attach photos showing completed work. Claude AI will review them before the GC approves.`;
-  document.getElementById('photo-preview-grid').innerHTML = '';
-  document.getElementById('photo-file-input').value = '';
-  document.getElementById('photo-upload-error').style.display = 'none';
-  document.getElementById('photo-submit-btn').disabled = false;
-  document.getElementById('photo-submit-btn').textContent = 'Submit for Approval';
-  openOverlay('photo-overlay');
-}
-
-function previewPhotos(input){
-  const files = Array.from(input.files).slice(0,5);
-  _pendingPhotoFiles = files;
-  const grid = document.getElementById('photo-preview-grid');
-  grid.innerHTML = files.map((_,i)=>`<div style="background:var(--border);border-radius:6px;aspect-ratio:1;overflow:hidden"><img id="prev-${i}" alt="Milestone photo ${i+1} preview" style="width:100%;height:100%;object-fit:cover"/></div>`).join('');
-  files.forEach((f,i)=>{
-    const r=new FileReader(); r.onload=e=>{document.getElementById('prev-'+i).src=e.target.result;}; r.readAsDataURL(f);
-  });
-}
-
-async function submitDrawPhotos(){
-  if(!_pendingPhotoFiles.length){alert('Select at least one photo.');return;}
-  const sess = await sb.auth.getSession();
-  const token = sess?.data?.session?.access_token;
-  if(!token){alert('Sign in required');return;}
-  const btn = document.getElementById('photo-submit-btn');
-  const errEl = document.getElementById('photo-upload-error');
-  btn.disabled=true; errEl.style.display='none';
-  let uploaded=0;
-  for(const file of _pendingPhotoFiles){
-    btn.textContent=`Uploading ${uploaded+1}/${_pendingPhotoFiles.length}…`;
-    try{
-      const b64 = await new Promise((res,rej)=>{
-        const r=new FileReader();
-        r.onload=e=>res(e.target.result.split(',')[1]);
-        r.onerror=rej;
-        r.readAsDataURL(file);
-      });
-      const ext = file.name.split('.').pop().toLowerCase()||'jpg';
-      const res = await fetch(`${API}/draws/${_activePhotoDrawId}/photos/upload`,{
-        method:'POST',
-        headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
-        body: JSON.stringify({image_base64:b64, storage_path:`draws/${_activePhotoDrawId}/${Date.now()}-${uploaded}.${ext}`})
-      });
-      const json = await res.json().catch(()=>({}));
-      if(!res.ok){
-        errEl.textContent = json.error||`Upload failed (${res.status})`;
-        errEl.style.display='block';
-        btn.disabled=false; btn.textContent='Submit for Approval';
-        return;
-      }
-      uploaded++;
-    }catch(e){
-      errEl.textContent='Upload failed. Check connection.';
-      errEl.style.display='block';
-      btn.disabled=false; btn.textContent='Submit for Approval';
-      return;
-    }
-  }
-  td.drawSubmitted(_activePhotoDrawId);
-  closeOverlay('photo-overlay');
-  await loadData(); renderDraws();
-}
-
-// ─── ESCROW FUNDING ───────────────────────────────────────────────────────────
-const STRIPE_PK = 'pk_live_51TLWkLDuhYmg5JceXDvwLtNf67teMpBuUATIGt0MtR83ryknJC1vqsrobTlVi2ASugXMIgmcculiDTqKFi3IhzxP00pgwqICRE';
-const API = 'https://tradedeck-api.onrender.com';
-let _stripe=null, _stripeElements=null, _activeEscrowDrawId=null, _activeEscrowAmountCents=0;
-let _stripeJsPromise=null;
-function loadStripeJs(){
-  if(window.Stripe) return Promise.resolve();
-  if(!_stripeJsPromise){
-    _stripeJsPromise = new Promise((resolve,reject)=>{
-      const el=document.createElement('script');
-      el.src='https://js.stripe.com/v3/';
-      el.onload=resolve;
-      el.onerror=()=>{_stripeJsPromise=null;reject(new Error('stripe.js failed to load'));};
-      document.head.appendChild(el);
-    });
-  }
-  return _stripeJsPromise;
-}
-
-async function openEscrowFunding(drawId, scheduleId, amountCents, milestoneName){
-  _activeEscrowDrawId = drawId;
-  _activeEscrowAmountCents = amountCents || 0;
-  const sess = await sb.auth.getSession();
-  const token = sess?.data?.session?.access_token;
-  if(!token){alert('Sign in required');return;}
-
-  const desc = document.getElementById('escrow-overlay-desc');
-  const payEl = document.getElementById('escrow-payment-element');
-  const errEl = document.getElementById('escrow-error');
-  const btn   = document.getElementById('escrow-pay-btn');
-  const dollarAmt = (amountCents/100).toLocaleString('en-US',{style:'currency',currency:'USD'});
-  desc.textContent = `${milestoneName} — ${dollarAmt}. Funds held in escrow until you approve the milestone.`;
-  payEl.innerHTML = '<p class="text-muted" style="text-align:center;padding:20px">Loading payment form…</p>';
-  errEl.style.display='none';
-  btn.disabled=true;
-  openOverlay('escrow-overlay');
-
-  // Call Flask to create escrow & get client_secret
-  let clientSecret;
-  try{
-    const res = await fetch(`${API}/stripe/escrow/create`,{
-      method:'POST',
-      headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
-      body: JSON.stringify({draw_id:drawId})
-    });
-    const json = await res.json().catch(()=>({}));
-    if(!res.ok){
-      payEl.innerHTML='';
-      errEl.textContent = json.error||`Error ${res.status}`;
-      errEl.style.display='block';
-      return;
-    }
-    clientSecret = json.client_secret;
-  }catch(e){
-    payEl.innerHTML='';
-    errEl.textContent='Could not reach server. Try again.';
-    errEl.style.display='block';
-    return;
-  }
-
-  // Mount Stripe Payment Element
-  try{
-    await loadStripeJs();
-  }catch(e){
-    payEl.innerHTML='';
-    errEl.textContent='Could not load the payment form. Check your connection and try again.';
-    errEl.style.display='block';
-    return;
-  }
-  if(!_stripe) _stripe = Stripe(STRIPE_PK);
-  _stripeElements = _stripe.elements({clientSecret, appearance:{theme:'night',variables:{colorPrimary:'#0bbcd4',colorBackground:'#1e2a3a',colorText:'#e2e8f0',borderRadius:'8px'}}});
-  const payment = _stripeElements.create('payment');
-  payEl.innerHTML='';
-  payment.mount(payEl);
-  btn.disabled=false;
-}
-
-async function confirmEscrowPayment(){
-  const btn=document.getElementById('escrow-pay-btn');
-  const errEl=document.getElementById('escrow-error');
-  if(!_stripeElements||!_stripe){return;}
-  btn.disabled=true; btn.textContent='Processing…';
-  errEl.style.display='none';
-
-  const {error} = await _stripe.confirmPayment({
-    elements: _stripeElements,
-    confirmParams:{return_url: window.location.href},
-    redirect:'if_required'
-  });
-
-  if(error){
-    errEl.textContent = error.message||'Payment failed';
-    errEl.style.display='block';
-    btn.disabled=false; btn.textContent='Fund Escrow';
-    return;
-  }
-
-  // Payment confirmed — escrow now pending webhook to mark held
-  td.escrowFunded(_activeEscrowDrawId, _activeEscrowAmountCents);
-  STATE.escrowMap[_activeEscrowDrawId]='pending';
-  closeOverlay('escrow-overlay');
-  btn.textContent='Fund Escrow';
-  await loadData(); renderDraws();
-}
 
 // ─── WORKER DIRECTORY ─────────────────────────────────────────────────────────
 async function renderWorkers(){
@@ -764,19 +445,6 @@ function renderProfile(){
       <button class="btn btn-primary btn-block" onclick="saveProfile()">Save</button>
     </div>
     <div class="card">
-      <h3>Payouts</h3>
-      <p class="text-muted" style="font-size:14px;margin-bottom:12px">Connect your bank account to receive draw payments when GCs approve milestones.</p>
-      ${p.stripe_account_id?`
-        <div style="padding:12px;background:#1a3a1a;border:1px solid #4ade80;border-radius:4px">
-          <p style="color:#4ade80;font-weight:bold">✓ Bank account connected</p>
-          <p class="text-muted" style="font-size:12px;margin-top:4px">Payments will transfer automatically on approval.</p>
-        </div>
-      `:`
-        <button class="btn btn-primary btn-block" onclick="connectStripe()">Connect Bank Account</button>
-        <p class="text-muted" style="font-size:12px;margin-top:8px">Required to receive draw payments. Powered by Stripe.</p>
-      `}
-    </div>
-    <div class="card">
       <h3>Background Verification</h3>
       <p class="text-muted">Verified contractors earn trust badges and appear higher in worker searches.</p>
       ${p.checkr_status==='cleared'?`
@@ -797,27 +465,6 @@ function renderProfile(){
     <button class="btn btn-outline btn-block mt8" onclick="signOut()">Sign Out</button>
   `;
 }
-async function connectStripe(){
-  td.stripeConnect();
-  const sess = await sb.auth.getSession();
-  const token = sess?.data?.session?.access_token;
-  if(!token){alert('Sign in required');return;}
-  const btn = event?.target; if(btn){btn.disabled=true;btn.textContent='Connecting…';}
-  try{
-    const res = await fetch(`${API}/stripe/connect/onboard`,{
-      method:'POST',
-      headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
-      body: JSON.stringify({user_id: STATE.user.id, email: STATE.profile.email, base_url: window.location.origin})
-    });
-    const json = await res.json().catch(()=>({}));
-    if(!res.ok){alert(json.error||'Could not start Stripe onboarding');if(btn){btn.disabled=false;btn.textContent='Connect Bank Account';}return;}
-    window.location.href = json.url;
-  }catch(e){
-    alert('Could not reach server. Try again.');
-    if(btn){btn.disabled=false;btn.textContent='Connect Bank Account';}
-  }
-}
-
 async function saveProfile(){
   const updates = {
     full_name: document.getElementById('edit-name').value,
