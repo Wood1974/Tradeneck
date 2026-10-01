@@ -85,6 +85,25 @@ every feature decision:
 - **No backend copy belongs here.** `tradedeck-api` is the real, current
   backend — don't re-add a Flask file to this repo "for reference."
 
+### Profile reads are locked down — use `profiles_public`, not `profiles`
+
+`profiles` RLS now only lets a user read their **own** full row (plus
+admins, via the existing "Admins have full access" policy). Any screen that
+needs to show *someone else's* profile — Worker Directory, the Manage
+Applicants overlay — must read the `profiles_public` **view** instead:
+`id, full_name, company, trade, role, tier, jobs_completed, rating,
+repeat_hire_rate, is_pro, tradedeck_verified, created_at,
+background_verified` (a derived boolean, not the raw `checkr_status`). No
+`email`, `phone`, `is_admin`, license/insurance/ID-upload flags, or raw
+background-check fields are in it, on purpose. If you need a PostgREST
+embed (`.select('...,profiles:applicant_id(...)')`), it will silently come
+back empty for rows that aren't the caller's own — the view has no FK
+PostgREST can embed through, so fetch it as a separate query and merge
+client-side (see `openApplicants` in `assets/app.js` for the pattern).
+Don't widen `profiles_public` or re-loosen `profiles_select` without
+checking why they were narrowed — see the privacy fix noted in the backend
+repo's migrations.
+
 ### Admin tab is cosmetic only
 
 The Admin nav button is shown only when `profiles.is_admin` is true, and

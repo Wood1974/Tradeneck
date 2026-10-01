@@ -375,16 +375,19 @@ async function renderWorkers(){
   const el=document.getElementById('workers-grid');
   if(!STATE.user){el.innerHTML='<p class="text-muted" style="padding:20px">Sign in to view workers.</p>';return;}
   const search=document.getElementById('worker-search')?.value||'';
-  let q=sb.from('profiles').select('id,email,full_name,trade,phone,tier,jobs_completed,created_at,checkr_status').gt('jobs_completed',0);
+  // profiles_public, not profiles -- RLS only lets a user read their own full
+  // row; this view is the narrow, safe-to-share set of columns (no email,
+  // phone, or raw checkr_status) every other account is allowed to see.
+  let q=sb.from('profiles_public').select('id,full_name,trade,tier,jobs_completed,created_at,background_verified').gt('jobs_completed',0);
   if(search){q=q.or(`full_name.ilike.%${search}%,trade.ilike.%${search}%`);}
   const {data:workers,error}=await q.order('jobs_completed',{ascending:false}).limit(50);
   if(error||!workers?.length){el.innerHTML='<p class="text-muted" style="padding:20px">No workers found.</p>';return;}
   el.innerHTML=workers.map(w=>`
     <div class="card" style="display:flex;justify-content:space-between;align-items:center">
       <div>
-        <h3>${w.full_name||w.email}</h3>
+        <h3>${w.full_name||'Worker'}</h3>
         <p class="text-muted">${w.trade||'–'} · ${w.jobs_completed||0} jobs · Tier ${w.tier||1}</p>
-        ${w.checkr_status==='cleared'?'<p style="color:#4ade80;font-size:12px;margin-top:4px">✓ Background verified</p>':''}
+        ${w.background_verified?'<p style="color:#4ade80;font-size:12px;margin-top:4px">✓ Background verified</p>':''}
       </div>
       <button class="btn btn-sm btn-outline" onclick="contactWorker('${w.id}')">Contact</button>
     </div>
@@ -608,14 +611,28 @@ async function openApplicants(jobId){
   document.getElementById('applicants-list').innerHTML = '<p class="text-muted">Loading…</p>';
   document.getElementById('applicants-overlay').classList.add('open');
   const {data, error} = await sb.from('applications')
-    .select('id,applicant_id,status,bid_amount,message,created_at,profiles:applicant_id(full_name,trade,tier,rating,jobs_completed)')
+    .select('id,applicant_id,status,bid_amount,message,created_at')
     .eq('job_id', jobId)
     .order('created_at',{ascending:true});
   if (error){
     document.getElementById('applicants-list').innerHTML = `<p class="text-muted">Could not load applicants. ${error.message}</p>`;
     return;
   }
-  renderApplicantsList(data||[]);
+  const apps = data||[];
+  // Can't embed profiles in the select above anymore -- RLS only lets a user
+  // read their own full profiles row, so the embed would come back null for
+  // every applicant that isn't you. profiles_public is the narrow, safe view
+  // every account may read; fetch it separately and merge client-side.
+  const applicantIds = [...new Set(apps.map(a=>a.applicant_id))];
+  let profilesById = {};
+  if (applicantIds.length){
+    const {data:profiles} = await sb.from('profiles_public')
+      .select('id,full_name,trade,tier,rating,jobs_completed')
+      .in('id', applicantIds);
+    (profiles||[]).forEach(p=>{profilesById[p.id]=p;});
+  }
+  apps.forEach(a=>{a.profiles = profilesById[a.applicant_id] || {};});
+  renderApplicantsList(apps);
 }
 function renderApplicantsList(apps){
   const el = document.getElementById('applicants-list');
