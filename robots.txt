@@ -1,0 +1,16 @@
+# tradedeckapp.com
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /*?*token=
+Disallow: /*?*session=
+
+# Ad/scraper bots that cost bandwidth and give nothing back
+User-agent: AhrefsBot
+Disallow: /
+User-agent: SemrushBot
+Disallow: /
+User-agent: MJ12bot
+Disallow: /
+
+Sitemap: https://tradedeckapp.com/sitemap.xml
