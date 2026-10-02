@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#2563eb">
+  <title>Shield - Evidence Capture</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <div class="app-header">
+      <h1>Shield Verify</h1>
+      <p>Capture & verify construction evidence</p>
+    </div>
+
+    <!-- Tab Bar -->
+    <div class="tab-bar" role="tablist" aria-label="Main navigation tabs">
+      <button class="tab-button active" data-tab-button="pack-selection" role="tab" aria-selected="true" aria-controls="pack-selection-panel">Pack Selection</button>
+      <button class="tab-button" data-tab-button="capture-session" role="tab" aria-selected="false" aria-controls="capture-session-panel">Capture</button>
+      <button class="tab-button" data-tab-button="manifest-review" role="tab" aria-selected="false" aria-controls="manifest-review-panel">Review</button>
+      <button class="tab-button" data-tab-button="export" role="tab" aria-selected="false" aria-controls="export-panel">Export</button>
+    </div>
+
+    <!-- Tab Content Container -->
+    <div class="tab-content-container">
+      <!-- Pack Selection Tab -->
+      <div id="pack-selection-panel" data-tab-content="pack-selection" class="active" role="tabpanel" aria-labelledby="pack-selection">
+        <h2>Select Evidence Package</h2>
+        <p>Choose a pre-defined package or create a custom one to begin capturing evidence.</p>
+        <div id="pack-list"></div>
+      </div>
+
+      <!-- Capture Session Tab -->
+      <div id="capture-session-panel" data-tab-content="capture-session" role="tabpanel" aria-labelledby="capture-session">
+        <h2>Capture Evidence</h2>
+
+        <!-- Progress -->
+        <div class="progress-container">
+          <div class="progress-bar-wrapper">
+            <div id="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Capture progress"></div>
+          </div>
+          <p id="progress-text">0/0 checkpoints completed</p>
+        </div>
+
+        <!-- Checkpoint Grid -->
+        <div id="checkpoint-grid"></div>
+
+        <!-- Loading Indicator -->
+        <div id="loading-container" style="display: none;" aria-live="polite" aria-label="Loading status"></div>
+
+        <!-- Checkpoint Form (in modal) -->
+        <div id="checkpoint-form" style="display: none;"></div>
+      </div>
+
+      <!-- Manifest Review Tab -->
+      <div id="manifest-review-panel" data-tab-content="manifest-review" role="tabpanel" aria-labelledby="manifest-review">
+        <h2>Review Manifest</h2>
+        <p>Review all captured evidence before verification and submission.</p>
+
+        <!-- Captured Items Review -->
+        <div id="manifest-content"></div>
+
+        <!-- Verification Section -->
+        <div style="margin-top: var(--spacing-2xl);">
+          <h3>Verify Captures</h3>
+          <p>Run offline verification to check all invariants and constraints.</p>
+          <button id="verify-offline-btn" class="btn btn-primary" aria-label="Verify all captures offline">Verify Offline</button>
+        </div>
+
+        <!-- Verification Results -->
+        <div id="verification-results" style="margin-top: var(--spacing-lg); display: none;" role="alert" aria-live="polite"></div>
+
+        <!-- Submit Section -->
+        <div style="margin-top: var(--spacing-2xl);">
+          <h3>Submit Manifest</h3>
+          <p>Submit your verified manifest to the backend for processing.</p>
+          <button id="submit-manifest-btn" class="btn btn-primary" disabled aria-label="Submit manifest to backend">Submit Manifest</button>
+        </div>
+      </div>
+
+      <!-- Export Tab -->
+      <div id="export-panel" data-tab-content="export" role="tabpanel" aria-labelledby="export">
+        <h2>Export Evidence</h2>
+        <div id="pdf-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="config.js"></script>
+  <script src="storage.js"></script>
+  <script src="camera.js"></script>
+  <script src="ui.js"></script>
+  <script src="app.js"></script>
+
+  <style>
+    :root {
+      --spacing-2xl: 48px;
+    }
+  </style>
+</body>
+</html>
