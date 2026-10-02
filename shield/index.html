@@ -629,8 +629,21 @@
           </select>
         </div>
         <div class="form-group">
-          <label for="upload-file">Photo</label>
-          <input type="file" id="upload-file" accept="image/*" required>
+          <label>Photo (Camera Only)</label>
+          <div id="camera-container" style="display:none;">
+            <video id="camera-preview" style="width:100%; border-radius:6px; margin-bottom:12px;"></video>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn btn-secondary" onclick="startCamera()">Start Camera</button>
+              <button type="button" class="btn btn-primary" onclick="captureSnapshot()">Capture</button>
+              <button type="button" class="btn btn-secondary" onclick="stopCamera()">Cancel</button>
+            </div>
+          </div>
+          <canvas id="snapshot-canvas" style="display:none;"></canvas>
+          <div id="snapshot-preview" style="display:none;">
+            <img id="snapshot-img" style="width:100%; border-radius:6px; margin-bottom:12px;">
+            <p id="snapshot-status" style="font-size:12px; color:var(--text-light);">Ready to upload</p>
+          </div>
+          <button type="button" class="btn btn-secondary" id="camera-button" onclick="showCameraUI()">📷 Open Camera</button>
         </div>
         <div class="form-group">
           <label for="upload-notes">Notes</label>
@@ -656,6 +669,73 @@
 
     let currentUser = null;
     let authMode = 'signin';
+    let currentStream = null;
+    let capturedBlob = null;
+
+    // ═══════════════════════════════════════════════════════════════
+    // CAMERA FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════
+
+    async function startCamera() {
+      try {
+        currentStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
+        const video = document.getElementById('camera-preview');
+        video.srcObject = currentStream;
+        video.play();
+      } catch (error) {
+        alert('Camera access denied: ' + error.message);
+      }
+    }
+
+    function captureSnapshot() {
+      const video = document.getElementById('camera-preview');
+      const canvas = document.getElementById('snapshot-canvas');
+      const ctx = canvas.getContext('2d');
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+
+      canvas.toBlob(blob => {
+        capturedBlob = blob;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          document.getElementById('snapshot-img').src = e.target.result;
+          document.getElementById('camera-container').style.display = 'none';
+          document.getElementById('snapshot-preview').style.display = 'block';
+        };
+        reader.readAsDataURL(blob);
+
+        stopCamera();
+      }, 'image/jpeg', 0.95);
+    }
+
+    function stopCamera() {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+        currentStream = null;
+      }
+      document.getElementById('camera-preview').srcObject = null;
+    }
+
+    function showCameraUI() {
+      capturedBlob = null;
+      document.getElementById('camera-container').style.display = 'block';
+      document.getElementById('snapshot-preview').style.display = 'none';
+      document.getElementById('camera-button').style.display = 'none';
+      startCamera();
+    }
+
+    function resetCameraUI() {
+      capturedBlob = null;
+      stopCamera();
+      document.getElementById('camera-container').style.display = 'none';
+      document.getElementById('snapshot-preview').style.display = 'none';
+      document.getElementById('camera-button').style.display = 'block';
+    }
 
     // ═══════════════════════════════════════════════════════════════
     // AUTH FUNCTIONS
@@ -804,15 +884,36 @@
           .order('created_at', { ascending: false })
           .limit(10);
 
-        const photosHtml = photos?.map(photo => `
-          <div class="list-item">
-            <div>
-              <div class="list-item-title">${photo.shield_jobs?.name || 'Unknown Job'}</div>
-              <div class="list-item-meta">Uploaded ${new Date(photo.created_at).toLocaleDateString()}</div>
+        const photosHtml = photos?.map(photo => {
+          let statusBadge = '⏳ Pending';
+          let statusColor = 'var(--neutral-500)';
+
+          if (photo.bind_hash) {
+            if (photo.location_verdict === 'spoofed') {
+              statusBadge = '⚠️ GPS Warning';
+              statusColor = 'var(--warning)';
+            } else if (photo.bind_ok === false) {
+              statusBadge = '⚠️ Device Changed';
+              statusColor = 'var(--warning)';
+            } else {
+              statusBadge = '✓ Verified';
+              statusColor = 'var(--success)';
+            }
+          }
+
+          return `
+            <div class="list-item">
+              <div>
+                <div class="list-item-title">${photo.shield_jobs?.name || 'Unknown Job'}</div>
+                <div class="list-item-meta">
+                  ${new Date(photo.created_at).toLocaleDateString()}
+                  <span style="color:${statusColor}; margin-left:8px;">${statusBadge}</span>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-secondary" onclick="viewPhoto('${photo.id}')">View</button>
             </div>
-            <button class="btn btn-sm btn-secondary" onclick="viewPhoto('${photo.id}')">View</button>
-          </div>
-        `).join('') || '<p style="padding: 20px; text-align: center; color: var(--text-light);">No photos yet</p>';
+          `;
+        }).join('') || '<p style="padding: 20px; text-align: center; color: var(--text-light);">No photos yet</p>';
 
         document.getElementById('photos-list').innerHTML = photosHtml;
       } catch (error) {
@@ -850,40 +951,96 @@
 
     async function uploadEvidence(event) {
       event.preventDefault();
+
+      if (!capturedBlob) {
+        alert('Please capture a photo first');
+        return;
+      }
+
       const jobId = document.getElementById('upload-job').value;
-      const file = document.getElementById('upload-file').files[0];
       const notes = document.getElementById('upload-notes').value;
 
-      if (!file) return;
+      if (!jobId) {
+        alert('Please select a job');
+        return;
+      }
 
       try {
-        // Upload file to storage
-        const filename = `${currentUser.id}/${Date.now()}_${file.name}`;
-        const { data: uploadData, error: uploadError } = await sb
-          .storage
-          .from('shield-photos')
-          .upload(filename, file);
+        // Step 1: Request nonce
+        const nonceResponse = await fetch(`${API_BASE}/api/shields/${jobId}/issue-nonce`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${currentUser.session.access_token}`
+          }
+        });
 
-        if (uploadError) throw uploadError;
+        if (!nonceResponse.ok) throw new Error('Failed to issue nonce');
+        const { nonce } = await nonceResponse.json();
 
-        // Insert photo record
+        // Step 2: Get GPS coordinates (optional)
+        let gpsLat = null, gpsLon = null;
+        if (navigator.geolocation) {
+          try {
+            const position = await new Promise((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+            });
+            gpsLat = position.coords.latitude;
+            gpsLon = position.coords.longitude;
+          } catch (e) {
+            console.log('GPS unavailable, continuing without location');
+          }
+        }
+
+        // Step 3: Seal photo with nonce
+        const formData = new FormData();
+        formData.append('photo', capturedBlob);
+        formData.append('note', notes);
+        formData.append('nonce', nonce);
+        if (gpsLat !== null) {
+          formData.append('gps_lat', gpsLat);
+          formData.append('gps_lon', gpsLon);
+        }
+
+        const sealResponse = await fetch(`${API_BASE}/api/shields/${jobId}/seal-photo`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${currentUser.session.access_token}`
+          },
+          body: formData
+        });
+
+        if (!sealResponse.ok) throw new Error('Failed to seal photo');
+        const { photo_id, bind_hash, location_verdict, bind_ok } = await sealResponse.json();
+
+        // Step 4: Insert record with hash (via Supabase for audit trail)
         const { error: insertError } = await sb
           .from('shield_photos')
           .insert({
             user_id: currentUser.id,
             job_id: jobId,
-            file_path: filename,
-            notes
+            file_path: `sealed/${photo_id}`,
+            notes,
+            bind_hash,
+            location_verdict,
+            bind_ok,
+            nonce_used: nonce
           });
 
         if (insertError) throw insertError;
 
+        // Step 5: Close modal & refresh
         closeModal('upload-modal');
+        resetCameraUI();
         document.querySelector('form[onsubmit*="uploadEvidence"]').reset();
+        document.getElementById('upload-notes').value = '';
+
         await loadPhotos();
         await loadDashboard();
+
+        alert('Photo sealed and verified ✓');
       } catch (error) {
-        alert('Failed to upload: ' + error.message);
+        alert('Upload failed: ' + error.message);
+        console.error(error);
       }
     }
 
@@ -920,6 +1077,7 @@
     }
 
     function showUploadModal() {
+      resetCameraUI();
       document.getElementById('upload-modal').classList.add('active');
     }
 
