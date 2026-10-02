@@ -615,6 +615,23 @@
     </div>
   </div>
 
+  <!-- Checkpoint Selection Modal -->
+  <div id="checkpoint-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Select Inspection Point</h2>
+        <button type="button" class="modal-close" onclick="closeModal('checkpoint-modal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:14px; color:var(--text-light);">Job: <strong id="checkpoint-job-name"></strong></p>
+        <div id="checkpoint-list" style="max-height:400px; overflow-y:auto;">
+          <!-- Populated by loadCheckpoints() -->
+        </div>
+        <button type="button" class="btn btn-secondary" style="margin-top:16px; width:100%;" onclick="selectCheckpoint(null)">General / Unclassified</button>
+      </div>
+    </div>
+  </div>
+
   <div id="upload-modal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
@@ -627,6 +644,14 @@
           <select id="upload-job" required style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); color: var(--text);">
             <option value="">Select a job...</option>
           </select>
+        </div>
+        <div class="form-group">
+          <label>Inspection Point (Code Reference)</label>
+          <div id="checkpoint-display" style="padding:12px; background:var(--bg-light); border-radius:6px; margin-bottom:12px; display:none;">
+            <p style="margin:0; font-weight:500;" id="checkpoint-name-display"></p>
+            <p style="margin:4px 0 0 0; font-size:12px; color:var(--text-light);" id="checkpoint-code-display"></p>
+          </div>
+          <button type="button" class="btn btn-secondary" style="width:100%;" onclick="showCheckpointModal()">Select Checkpoint</button>
         </div>
         <div class="form-group">
           <label>Photo (Camera Only)</label>
@@ -671,6 +696,10 @@
     let authMode = 'signin';
     let currentStream = null;
     let capturedBlob = null;
+    let selectedCheckpointId = null;
+    let selectedCheckpointName = null;
+    let selectedCheckpointCode = null;
+    let currentJobIdForCheckpoint = null;
 
     // ═══════════════════════════════════════════════════════════════
     // CAMERA FUNCTIONS
@@ -735,6 +764,80 @@
       document.getElementById('camera-container').style.display = 'none';
       document.getElementById('snapshot-preview').style.display = 'none';
       document.getElementById('camera-button').style.display = 'block';
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // CHECKPOINT FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════
+
+    async function showCheckpointModal() {
+      const jobId = document.getElementById('upload-job').value;
+      if (!jobId) {
+        alert('Please select a job first');
+        return;
+      }
+
+      currentJobIdForCheckpoint = jobId;
+
+      const { data: job } = await sb
+        .from('shield_jobs')
+        .select('name, trade')
+        .eq('id', jobId)
+        .single();
+
+      if (job) {
+        document.getElementById('checkpoint-job-name').textContent = job.name;
+      }
+
+      await loadCheckpoints(job?.trade);
+      document.getElementById('checkpoint-modal').classList.add('active');
+    }
+
+    async function loadCheckpoints(trade) {
+      try {
+        let query = sb.from('shield_checkpoints').select('*');
+
+        if (trade) {
+          query = query.or(`trade.eq.${trade},trade.eq.General`);
+        }
+
+        const { data: checkpoints } = await query.order('trade', { ascending: true }).order('name');
+
+        const checkpointHtml = checkpoints?.map(cp => `
+          <div style="padding:12px; border-bottom:1px solid var(--border-color); cursor:pointer;"
+               onclick="selectCheckpoint('${cp.id}', '${cp.name.replace(/'/g, "\\'")}', '${(cp.irc_section || cp.ibc_section || 'N/A').replace(/'/g, "\\'")}')"
+               onmouseover="this.style.background='var(--bg-light)'" onmouseout="this.style.background='transparent'">
+            <p style="margin:0; font-weight:500;">${cp.name}</p>
+            <p style="margin:4px 0 0 0; font-size:12px; color:var(--text-light);">
+              ${cp.irc_section ? 'IRC ' + cp.irc_section : ''} ${cp.ibc_section ? ' / IBC ' + cp.ibc_section : ''} — ${cp.description || ''}
+            </p>
+          </div>
+        `).join('') || '<p style="padding:12px;">No checkpoints available for this trade</p>';
+
+        document.getElementById('checkpoint-list').innerHTML = checkpointHtml;
+      } catch (error) {
+        console.error('Checkpoints load error:', error);
+      }
+    }
+
+    function selectCheckpoint(checkpointId, checkpointName = null, checkpointCode = null) {
+      selectedCheckpointId = checkpointId;
+      selectedCheckpointName = checkpointName || 'General / Unclassified';
+      selectedCheckpointCode = checkpointCode || 'No code reference';
+
+      const display = document.getElementById('checkpoint-display');
+      if (checkpointId) {
+        display.style.display = 'block';
+        document.getElementById('checkpoint-name-display').textContent = selectedCheckpointName;
+        document.getElementById('checkpoint-code-display').textContent = selectedCheckpointCode;
+      } else {
+        display.style.display = 'none';
+        selectedCheckpointId = null;
+        selectedCheckpointName = null;
+        selectedCheckpointCode = null;
+      }
+
+      closeModal('checkpoint-modal');
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -879,38 +982,65 @@
       try {
         const { data: photos } = await sb
           .from('shield_photos')
-          .select('*, shield_jobs(name)')
+          .select('*, shield_jobs(name), shield_checkpoints(irc_section, ibc_section, name)')
           .eq('user_id', currentUser.id)
-          .order('created_at', { ascending: false })
-          .limit(10);
+          .order('created_at', { ascending: false });
 
-        const photosHtml = photos?.map(photo => {
-          let statusBadge = '⏳ Pending';
-          let statusColor = 'var(--neutral-500)';
+        // Group photos by checkpoint
+        const grouped = {};
+        photos?.forEach(photo => {
+          const checkpointKey = photo.checkpoint_id || 'general';
+          const checkpointName = photo.checkpoint_name_snapshot || photo.shield_checkpoints?.name || 'General / Unclassified';
+          const checkpointCode = photo.shield_checkpoints?.irc_section || photo.shield_checkpoints?.ibc_section || '';
 
-          if (photo.bind_hash) {
-            if (photo.location_verdict === 'spoofed') {
-              statusBadge = '⚠️ GPS Warning';
-              statusColor = 'var(--warning)';
-            } else if (photo.bind_ok === false) {
-              statusBadge = '⚠️ Device Changed';
-              statusColor = 'var(--warning)';
-            } else {
-              statusBadge = '✓ Verified';
-              statusColor = 'var(--success)';
-            }
+          if (!grouped[checkpointKey]) {
+            grouped[checkpointKey] = {
+              name: checkpointName,
+              code: checkpointCode,
+              photos: []
+            };
           }
+          grouped[checkpointKey].photos.push(photo);
+        });
+
+        // Render grouped photos
+        const photosHtml = Object.entries(grouped).map(([key, group]) => {
+          const photoItems = group.photos.map(photo => {
+            let statusBadge = '⏳ Pending';
+            let statusColor = 'var(--neutral-500)';
+
+            if (photo.bind_hash) {
+              if (photo.location_verdict === 'spoofed') {
+                statusBadge = '⚠️ GPS Warning';
+                statusColor = 'var(--warning)';
+              } else if (photo.bind_ok === false) {
+                statusBadge = '⚠️ Device Changed';
+                statusColor = 'var(--warning)';
+              } else {
+                statusBadge = '✓ Verified';
+                statusColor = 'var(--success)';
+              }
+            }
+
+            return `
+              <div class="list-item" style="margin-left:16px;">
+                <div>
+                  <div class="list-item-title">${photo.shield_jobs?.name || 'Unknown Job'}</div>
+                  <div class="list-item-meta">
+                    ${new Date(photo.created_at).toLocaleDateString()}
+                    <span style="color:${statusColor}; margin-left:8px;">${statusBadge}</span>
+                  </div>
+                </div>
+                <button class="btn btn-sm btn-secondary" onclick="viewPhoto('${photo.id}')">View</button>
+              </div>
+            `;
+          }).join('');
 
           return `
-            <div class="list-item">
-              <div>
-                <div class="list-item-title">${photo.shield_jobs?.name || 'Unknown Job'}</div>
-                <div class="list-item-meta">
-                  ${new Date(photo.created_at).toLocaleDateString()}
-                  <span style="color:${statusColor}; margin-left:8px;">${statusBadge}</span>
-                </div>
-              </div>
-              <button class="btn btn-sm btn-secondary" onclick="viewPhoto('${photo.id}')">View</button>
+            <div style="margin-bottom:20px;">
+              <h3 style="margin:0 0 12px 0; font-size:14px; font-weight:600;">${group.name}</h3>
+              ${group.code ? `<p style="margin:0 0 12px 0; font-size:12px; color:var(--text-light);">Code: ${group.code}</p>` : ''}
+              ${photoItems}
             </div>
           `;
         }).join('') || '<p style="padding: 20px; text-align: center; color: var(--text-light);">No photos yet</p>';
@@ -1023,7 +1153,9 @@
             bind_hash,
             location_verdict,
             bind_ok,
-            nonce_used: nonce
+            nonce_used: nonce,
+            checkpoint_id: selectedCheckpointId || null,
+            checkpoint_name_snapshot: selectedCheckpointName || null
           });
 
         if (insertError) throw insertError;
@@ -1078,6 +1210,7 @@
 
     function showUploadModal() {
       resetCameraUI();
+      selectCheckpoint(null);
       document.getElementById('upload-modal').classList.add('active');
     }
 
