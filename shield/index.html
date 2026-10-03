@@ -3,24 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="TradeDeck Shield — Construction Evidence & Integrity Verification">
+  <meta name="description" content="TradeDeck Shield — Identity-Verified Photo Sealing">
   <meta name="og:title" content="TradeDeck Shield">
-  <meta name="og:description" content="Construction Evidence & Integrity Verification">
-  <title>Shield — Construction Evidence Verification</title>
+  <meta name="og:description" content="Identity-Verified Photo Sealing for Construction Evidence">
+  <title>Shield — Photo Sealing</title>
 
-  <!-- Supabase (standalone client) -->
+  <!-- Face API -->
+  <script async src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+  <!-- ZXing for barcode reading -->
+  <script async src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+
+  <!-- Supabase (anonymous auth + storage) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <!-- Stripe.js (lazy-loaded on demand) -->
-
-  <!-- GA4 (optional) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=GA_MEASUREMENT_ID"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    // gtag('config', 'GA_MEASUREMENT_ID'); // Uncomment when ID is set
-  </script>
 
   <style>
     * {
@@ -35,7 +30,7 @@
       --primary-light: #3b82f6;
       --success: #10b981;
       --warning: #f59e0b;
-      --error: #ef4444;
+      --danger: #ef4444;
       --neutral-50: #f9fafb;
       --neutral-100: #f3f4f6;
       --neutral-200: #e5e7eb;
@@ -49,8 +44,8 @@
       --text: #111827;
       --text-light: #6b7280;
       --bg: #ffffff;
-      --bg-secondary: #f9fafb;
-      --border: #e5e7eb;
+      --bg-light: #f9fafb;
+      --border-color: #e5e7eb;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -58,8 +53,8 @@
         --text: #f9fafb;
         --text-light: #d1d5db;
         --bg: #111827;
-        --bg-secondary: #1f2937;
-        --border: #374151;
+        --bg-light: #1f2937;
+        --border-color: #374151;
       }
     }
 
@@ -68,10 +63,11 @@
       color: var(--text);
       background: var(--bg);
       line-height: 1.5;
+      height: 100%;
     }
 
     .container {
-      max-width: 1200px;
+      max-width: 1000px;
       margin: 0 auto;
       padding: 16px;
     }
@@ -80,7 +76,7 @@
     header {
       background: var(--primary);
       color: white;
-      padding: 24px 0;
+      padding: 20px 0;
       border-bottom: 1px solid rgba(0,0,0,0.1);
       position: sticky;
       top: 0;
@@ -99,93 +95,156 @@
       letter-spacing: -0.5px;
     }
 
-    .header-nav {
+    /* Tab Navigation */
+    .tab-nav {
       display: flex;
-      gap: 24px;
-      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-light);
+      gap: 0;
+      overflow-x: auto;
     }
 
-    .header-nav button {
-      background: rgba(255,255,255,0.2);
-      border: 1px solid rgba(255,255,255,0.3);
-      color: white;
-      padding: 8px 16px;
-      border-radius: 6px;
+    .tab-btn {
+      flex: 1;
+      padding: 12px 16px;
+      border: none;
+      background: transparent;
+      color: var(--text-light);
       cursor: pointer;
       font-size: 14px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
       transition: all 0.2s;
     }
 
-    .header-nav button:hover {
-      background: rgba(255,255,255,0.3);
+    .tab-btn:hover {
+      color: var(--text);
+      background: var(--bg);
     }
 
-    /* Auth Section */
-    #auth-section {
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      background: var(--bg);
+    }
+
+    /* Tab Content */
+    .tab-content {
+      display: none;
+      padding: 24px 0;
+      animation: fadeIn 0.3s ease-in;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    /* Modal */
+    .modal {
       position: fixed;
-      inset: 0;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
       background: rgba(0,0,0,0.5);
-      display: flex;
+      display: none;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: 200;
     }
 
-    .auth-card {
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
       background: var(--bg);
-      border-radius: 12px;
-      padding: 40px;
-      max-width: 400px;
+      border-radius: 8px;
+      max-width: 500px;
       width: 90%;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 25px rgba(0,0,0,0.15);
     }
 
-    .auth-card h2 {
-      margin-bottom: 24px;
-      color: var(--text);
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
+    .modal-header h2 {
+      font-size: 18px;
+      margin: 0;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: var(--text-light);
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    /* Forms */
     .form-group {
       margin-bottom: 16px;
     }
 
-    .form-group label {
+    label {
       display: block;
-      margin-bottom: 8px;
       font-size: 14px;
       font-weight: 500;
+      margin-bottom: 6px;
       color: var(--text);
     }
 
-    .form-group input {
+    input[type="text"],
+    input[type="password"],
+    select,
+    textarea {
       width: 100%;
-      padding: 12px;
-      border: 1px solid var(--border);
+      padding: 10px 12px;
+      border: 1px solid var(--border-color);
       border-radius: 6px;
       font-size: 14px;
-      background: var(--bg-secondary);
+      font-family: inherit;
+      background: var(--bg);
       color: var(--text);
+      transition: border-color 0.2s;
     }
 
-    .form-group input:focus {
+    input[type="text"]:focus,
+    input[type="password"]:focus,
+    select:focus,
+    textarea:focus {
       outline: none;
       border-color: var(--primary);
       box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
     }
 
+    /* Buttons */
     .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 12px 24px;
+      padding: 10px 16px;
       border: none;
       border-radius: 6px;
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
       transition: all 0.2s;
-      text-decoration: none;
+      font-family: inherit;
     }
 
     .btn-primary {
@@ -198,198 +257,59 @@
     }
 
     .btn-secondary {
-      background: var(--neutral-200);
+      background: var(--neutral-100);
       color: var(--text);
+      border: 1px solid var(--border-color);
     }
 
     .btn-secondary:hover {
-      background: var(--neutral-300);
+      background: var(--neutral-200);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
     }
 
     .btn-sm {
-      padding: 8px 16px;
+      padding: 6px 12px;
       font-size: 13px;
     }
 
-    .btn-block {
+    /* Video elements */
+    video {
       width: 100%;
-      margin-top: 20px;
-    }
-
-    .auth-toggle {
-      margin-top: 16px;
-      text-align: center;
-      font-size: 14px;
-      color: var(--text-light);
-    }
-
-    .auth-toggle button {
-      background: none;
-      border: none;
-      color: var(--primary);
-      cursor: pointer;
-      text-decoration: underline;
-      padding: 0;
-    }
-
-    .error-message {
-      color: var(--error);
-      font-size: 13px;
-      margin-top: 8px;
-    }
-
-    /* Main App */
-    #app {
-      display: none;
-    }
-
-    .tabs {
-      display: flex;
-      gap: 0;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 32px;
-      overflow-x: auto;
-    }
-
-    .tab-btn {
-      padding: 12px 20px;
-      border: none;
-      background: none;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text-light);
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s;
-      white-space: nowrap;
-    }
-
-    .tab-btn.active {
-      color: var(--primary);
-      border-bottom-color: var(--primary);
-    }
-
-    .tab-btn:hover {
-      color: var(--text);
-    }
-
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
+      border-radius: 6px;
+      background: #000;
       display: block;
-    }
-
-    /* Dashboard Grid */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 20px;
-      margin-bottom: 32px;
-    }
-
-    .card {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 20px;
-      transition: all 0.2s;
-    }
-
-    .card:hover {
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      border-color: var(--primary-light);
-    }
-
-    .card-header {
-      font-weight: 600;
       margin-bottom: 12px;
-      color: var(--text);
     }
 
-    .card-stat {
-      font-size: 28px;
-      font-weight: bold;
-      color: var(--primary);
-      margin-bottom: 8px;
-    }
-
-    .card-footer {
-      font-size: 12px;
-      color: var(--text-light);
-      margin-top: 12px;
-    }
-
-    /* Modals */
-    .modal {
+    video::-webkit-media-controls {
       display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.5);
-      z-index: 999;
-      align-items: center;
-      justify-content: center;
     }
 
-    .modal.active {
-      display: flex;
-    }
-
-    .modal-content {
-      background: var(--bg);
-      border-radius: 12px;
-      padding: 32px;
-      max-width: 600px;
-      width: 90%;
-      max-height: 80vh;
-      overflow-y: auto;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    }
-
-    .modal-header {
-      font-size: 20px;
-      font-weight: bold;
-      margin-bottom: 20px;
+    /* List items */
+    .list-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
-    }
-
-    .modal-close {
-      background: none;
-      border: none;
-      font-size: 24px;
-      cursor: pointer;
-      color: var(--text-light);
-      padding: 0;
-      width: 32px;
-      height: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    /* Lists */
-    .list {
-      display: flex;
-      flex-direction: column;
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color);
       gap: 12px;
     }
 
-    .list-item {
-      padding: 16px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .list-item:last-child {
+      border-bottom: none;
     }
 
     .list-item-title {
       font-weight: 500;
-      color: var(--text);
+      font-size: 14px;
     }
 
     .list-item-meta {
@@ -398,557 +318,919 @@
       margin-top: 4px;
     }
 
-    /* Loading State */
-    .loading {
+    /* ID Verification Modal */
+    #id-verification-modal {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 32px;
     }
 
-    .spinner {
-      width: 20px;
-      height: 20px;
-      border: 2px solid var(--neutral-200);
-      border-top-color: var(--primary);
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
+    .id-step {
+      display: none;
     }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
+    .id-step.active {
+      display: block;
+    }
+
+    #id-verification-modal .modal-content {
+      max-width: 100%;
+      width: 100%;
+      height: 100%;
+      max-height: 100%;
+      border-radius: 0;
+    }
+
+    @media (min-width: 600px) {
+      #id-verification-modal .modal-content {
+        max-width: 500px;
+        width: 90%;
+        max-height: 90vh;
+        border-radius: 8px;
+      }
     }
 
     /* Responsive */
-    @media (max-width: 640px) {
-      .container {
-        padding: 12px;
+    @media (max-width: 600px) {
+      .tab-btn {
+        font-size: 12px;
+        padding: 10px 8px;
       }
 
-      header .container {
-        flex-direction: column;
-        gap: 16px;
-      }
-
-      .grid {
-        grid-template-columns: 1fr;
-      }
-
-      .modal-content {
-        padding: 20px;
-      }
-
-      .tabs {
-        margin-bottom: 20px;
+      .modal-header h2 {
+        font-size: 16px;
       }
     }
   </style>
 </head>
 <body>
-  <!-- Auth Section -->
-  <div id="auth-section" class="auth-section">
-    <div class="auth-card">
-      <h2 id="auth-title">Sign In</h2>
 
-      <form onsubmit="authSubmit(event)">
-        <div class="form-group">
-          <label for="auth-email">Email</label>
-          <input type="email" id="auth-email" placeholder="you@example.com" required>
+<!-- Header -->
+<header>
+  <div class="container">
+    <div class="logo">🛡️ Shield</div>
+    <div></div>
+  </div>
+</header>
+
+<!-- ID Verification Modal -->
+<div id="id-verification-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="id-step-title">Verify Your Identity</h2>
+      <button type="button" class="modal-close" onclick="closeIDVerification()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Step 1: Selfie -->
+      <div id="step-selfie" class="id-step active">
+        <p style="margin-bottom: 16px;">Take a clear selfie. Make sure your face is centered and well-lit.</p>
+        <video id="selfie-preview" style="display:none;"></video>
+        <canvas id="selfie-canvas" style="display:none;"></canvas>
+        <img id="selfie-img" style="display:none; width:100%; border-radius:6px; margin-bottom:12px;">
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="startSelfieCamera()">Start Camera</button>
+          <button type="button" class="btn btn-primary" onclick="captureSelfie()">Capture</button>
+          <button type="button" class="btn btn-secondary" onclick="stopSelfieCamera()">Cancel</button>
         </div>
-
-        <div class="form-group">
-          <label for="auth-password">Password</label>
-          <input type="password" id="auth-password" placeholder="••••••••" required>
-        </div>
-
-        <div id="auth-error" class="error-message"></div>
-
-        <button type="submit" class="btn btn-primary btn-block">Sign In</button>
-      </form>
-
-      <div class="auth-toggle">
-        Don't have an account? <button type="button" onclick="toggleAuthMode()">Sign up</button>
       </div>
+
+      <!-- Step 2: License Front -->
+      <div id="step-license-front" class="id-step">
+        <p style="margin-bottom: 16px;">Photograph the front of your driver's license. Make sure all details are clearly visible.</p>
+        <video id="license-front-preview" style="display:none;"></video>
+        <canvas id="license-front-canvas" style="display:none;"></canvas>
+        <img id="license-front-img" style="display:none; width:100%; border-radius:6px; margin-bottom:12px;">
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="startLicenseFrontCamera()">Start Camera</button>
+          <button type="button" class="btn btn-primary" onclick="captureLicenseFront()">Capture</button>
+          <button type="button" class="btn btn-secondary" onclick="stopLicenseFrontCamera()">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Step 3: License Back (Barcode) -->
+      <div id="step-license-back" class="id-step">
+        <p style="margin-bottom: 16px;">Photograph the back of your driver's license. Make sure the barcode is clearly visible.</p>
+        <video id="license-back-preview" style="display:none;"></video>
+        <canvas id="license-back-canvas" style="display:none;"></canvas>
+        <img id="license-back-img" style="display:none; width:100%; border-radius:6px; margin-bottom:12px;">
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-secondary" onclick="startLicenseBackCamera()">Start Camera</button>
+          <button type="button" class="btn btn-primary" onclick="captureLicenseBack()">Capture</button>
+          <button type="button" class="btn btn-secondary" onclick="stopLicenseBackCamera()">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Verification -->
+      <div id="step-verify" class="id-step">
+        <p id="verify-status" style="margin-bottom: 16px;">Verifying face match...</p>
+        <div id="verify-results" style="margin-bottom: 16px; padding: 12px; background: var(--bg-light); border-radius: 6px;"></div>
+        <button type="button" class="btn btn-primary" onclick="confirmAuthentication()" style="width:100%; margin-bottom:8px;">Continue to Shield</button>
+        <button type="button" class="btn btn-secondary" onclick="resetIDVerification()" style="width:100%;">Try Again</button>
+      </div>
+
+      <!-- Admin Bypass -->
+      <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+        <p style="font-size: 12px; color: var(--text-light); margin-bottom: 8px;">Admin Preview (Development Only)</p>
+        <input type="text" id="admin-code" placeholder="Enter admin code" style="margin-bottom: 8px;">
+        <button type="button" class="btn btn-secondary" onclick="adminBypass()" style="width: 100%;">Bypass ID Verification</button>
+      </div>
+
     </div>
   </div>
+</div>
 
-  <!-- Main App -->
-  <div id="app">
-    <header>
-      <div class="container">
-        <div class="logo">🛡️ Shield</div>
-        <div class="header-nav">
-          <span id="user-email" style="font-size: 14px;"></span>
-          <button onclick="signOut()">Sign Out</button>
-        </div>
-      </div>
-    </header>
+<!-- Main App (hidden until authenticated) -->
+<div id="app" style="display:none;">
 
+  <!-- Tab Navigation -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('capture')">Capture</button>
+    <button class="tab-btn" onclick="switchTab('jobs')">Jobs</button>
+    <button class="tab-btn" onclick="switchTab('vault')">Vault</button>
+    <button class="tab-btn" onclick="switchTab('verify')">Verify</button>
+    <button class="tab-btn" onclick="switchTab('settings')">Settings</button>
+  </div>
+
+  <!-- Capture Tab -->
+  <div id="capture" class="tab-content active">
     <div class="container">
-      <!-- Tabs -->
-      <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
-        <button class="tab-btn" onclick="switchTab('jobs')">My Jobs</button>
-        <button class="tab-btn" onclick="switchTab('photos')">Photo Evidence</button>
-        <button class="tab-btn" onclick="switchTab('settings')">Settings</button>
-      </div>
+      <h2 style="margin-bottom: 12px;">Capture Evidence</h2>
+      <p style="color: var(--text-light); margin-bottom: 24px;">Photograph site conditions with your rear camera. Photos are sealed with cryptographic proof.</p>
 
-      <!-- Dashboard Tab -->
-      <div id="dashboard" class="tab-content active">
-        <div class="grid">
-          <div class="card">
-            <div class="card-header">Active Jobs</div>
-            <div class="card-stat" id="stat-active-jobs">0</div>
-            <div class="card-footer">Shield verification in progress</div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">Completed Verifications</div>
-            <div class="card-stat" id="stat-completed">0</div>
-            <div class="card-footer">Evidence verified and locked</div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">Total Photos</div>
-            <div class="card-stat" id="stat-photos">0</div>
-            <div class="card-footer">Cryptographically sealed evidence</div>
-          </div>
-        </div>
-
-        <h3 style="margin-bottom: 16px; font-size: 18px;">Recent Activity</h3>
-        <div id="activity-list" class="list">
-          <div class="loading">
-            <div class="spinner"></div>
-            <span>Loading activity...</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Jobs Tab -->
-      <div id="jobs" class="tab-content">
-        <div style="margin-bottom: 20px;">
-          <button class="btn btn-primary" onclick="showNewJobModal()">+ New Shield Job</button>
-        </div>
-
-        <div id="jobs-list" class="list">
-          <div class="loading">
-            <div class="spinner"></div>
-            <span>Loading jobs...</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Photos Tab -->
-      <div id="photos" class="tab-content">
-        <div style="margin-bottom: 20px;">
-          <button class="btn btn-primary" onclick="showUploadModal()">+ Upload Evidence</button>
-        </div>
-
-        <div id="photos-list" class="list">
-          <div class="loading">
-            <div class="spinner"></div>
-            <span>Loading photos...</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Settings Tab -->
-      <div id="settings" class="tab-content">
-        <div class="card" style="max-width: 600px;">
-          <div class="card-header">Shield Pro Subscription</div>
-          <p style="color: var(--text-light); margin-bottom: 16px;">
-            Unlock enhanced features including priority verification, advanced analytics, and contractor scoring.
-          </p>
-          <div style="display: flex; gap: 12px; margin-bottom: 20px;">
-            <div>
-              <div style="font-weight: 600; font-size: 24px;">$49</div>
-              <div style="font-size: 12px; color: var(--text-light);">per month</div>
-            </div>
-            <div style="flex: 1;">
-              <button class="btn btn-primary" onclick="subscribeToPro()">Subscribe Now</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="card" style="max-width: 600px; margin-top: 20px;">
-          <div class="card-header">Account Settings</div>
-          <div class="form-group">
-            <label>Email</label>
-            <input type="email" id="settings-email" readonly style="background: var(--neutral-100);">
-          </div>
-          <button class="btn btn-secondary" onclick="changePassword()">Change Password</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modals -->
-  <div id="new-job-modal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span>New Shield Job</span>
-        <button class="modal-close" onclick="closeModal('new-job-modal')">×</button>
-      </div>
-      <form onsubmit="createShieldJob(event)">
+      <form onsubmit="capturePhoto(event)">
         <div class="form-group">
-          <label for="job-name">Job Name</label>
-          <input type="text" id="job-name" required>
-        </div>
-        <div class="form-group">
-          <label for="job-trade">Trade Category</label>
-          <select id="job-trade" required style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); color: var(--text);">
-            <option>Framing</option>
-            <option>Roofing</option>
-            <option>Electrical</option>
-            <option>Plumbing</option>
-            <option>HVAC</option>
-            <option>Concrete</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="job-description">Description</label>
-          <textarea id="job-description" rows="4" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); color: var(--text); font-family: inherit;"></textarea>
-        </div>
-        <button type="submit" class="btn btn-primary btn-block">Create Job</button>
-      </form>
-    </div>
-  </div>
-
-  <div id="upload-modal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span>Upload Evidence</span>
-        <button class="modal-close" onclick="closeModal('upload-modal')">×</button>
-      </div>
-      <form onsubmit="uploadEvidence(event)">
-        <div class="form-group">
-          <label for="upload-job">Job</label>
-          <select id="upload-job" required style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); color: var(--text);">
+          <label>Job</label>
+          <select id="capture-job" required>
             <option value="">Select a job...</option>
           </select>
         </div>
+
         <div class="form-group">
-          <label for="upload-file">Photo</label>
-          <input type="file" id="upload-file" accept="image/*" required>
+          <label>Photo (Camera)</label>
+          <video id="capture-preview" style="display:none;"></video>
+          <canvas id="capture-canvas" style="display:none;"></canvas>
+          <img id="capture-img" style="display:none; width:100%; border-radius:6px; margin-bottom:12px;">
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="btn btn-secondary" onclick="startCaptureCamera()">Start Camera</button>
+            <button type="button" class="btn btn-primary" onclick="captureSnapshot()">Capture</button>
+            <button type="button" class="btn btn-secondary" onclick="stopCaptureCamera()">Cancel</button>
+          </div>
         </div>
+
         <div class="form-group">
-          <label for="upload-notes">Notes</label>
-          <textarea id="upload-notes" rows="4" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); color: var(--text); font-family: inherit;"></textarea>
+          <label>Location (Optional)</label>
+          <input type="text" id="capture-location" placeholder="Address or coordinates">
         </div>
-        <button type="submit" class="btn btn-primary btn-block">Upload</button>
+
+        <button type="submit" class="btn btn-primary" style="width:100%;">Seal & Upload</button>
       </form>
     </div>
   </div>
 
-  <script>
-    // ═══════════════════════════════════════════════════════════════
-    // SHIELD STANDALONE APP — SUPABASE CLIENT & STATE
-    // ═══════════════════════════════════════════════════════════════
+  <!-- Jobs Tab -->
+  <div id="jobs" class="tab-content">
+    <div class="container">
+      <h2 style="margin-bottom: 12px;">Jobs</h2>
+      <button class="btn btn-primary" onclick="showNewJobForm()" style="margin-bottom: 16px;">+ New Job</button>
+      <div id="jobs-list"></div>
+    </div>
+  </div>
 
-    const SUPABASE_URL = 'https://jlaajejpqjldpbinktln.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW5rdGxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMDg3MTksImV4cCI6MjEwMTc4NDcxOX0.tP-seLGoJnivrYmNhhTDmDJw4Uk92D95-zrwWB1G_S4';
-    const STRIPE_PK = 'pk_test_51TLWkTDNZcAJj6Kyd84RVIQ0qPO1iHP109ccBL4P9OQvShE21T291c4BhhtC8Z6CEYQKqmtjj2b6UZQe1n1CusGC00KNY7CwAl';
-    const API_BASE = 'https://tradedeck-api.onrender.com';
+  <!-- Vault Tab -->
+  <div id="vault" class="tab-content">
+    <div class="container">
+      <h2 style="margin-bottom: 12px;">Vault</h2>
+      <p style="color: var(--text-light); margin-bottom: 16px;">Your sealed photos with integrity verification.</p>
+      <div id="vault-list"></div>
+    </div>
+  </div>
 
-    const { createClient } = supabase;
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  <!-- Verify Tab -->
+  <div id="verify" class="tab-content">
+    <div class="container">
+      <h2 style="margin-bottom: 12px;">Verify</h2>
+      <p style="color: var(--text-light); margin-bottom: 16px;">Select a sealed photo to view detailed verification info.</p>
+      <div id="verify-details"></div>
+    </div>
+  </div>
 
-    let currentUser = null;
-    let authMode = 'signin';
+  <!-- Settings Tab -->
+  <div id="settings" class="tab-content">
+    <div class="container">
+      <h2 style="margin-bottom: 12px;">Settings</h2>
 
-    // ═══════════════════════════════════════════════════════════════
-    // AUTH FUNCTIONS
-    // ═══════════════════════════════════════════════════════════════
+      <div style="padding: 16px; background: var(--bg-light); border-radius: 6px; margin-bottom: 16px;">
+        <p style="margin: 0 0 8px 0;"><strong>Name:</strong> <span id="profile-name">—</span></p>
+        <p style="margin: 0 0 8px 0;"><strong>License:</strong> <span id="profile-license">—</span></p>
+        <p style="margin: 0 0 8px 0;"><strong>DOB:</strong> <span id="profile-dob">—</span></p>
+        <p style="margin: 0;"><strong>Address:</strong> <span id="profile-address">—</span></p>
+      </div>
 
-    function toggleAuthMode() {
-      authMode = authMode === 'signin' ? 'signup' : 'signin';
-      document.getElementById('auth-title').textContent = authMode === 'signin' ? 'Sign In' : 'Create Account';
+      <div style="padding: 16px; background: var(--bg-light); border-radius: 6px; margin-bottom: 16px;">
+        <p style="margin: 0 0 8px 0;"><strong>Subscription:</strong> <span id="subscription-status">Free</span></p>
+        <button type="button" class="btn btn-secondary" onclick="upgradeToPro()" style="width:100%; margin-bottom: 8px;">Upgrade to Shield Pro</button>
+      </div>
+
+      <button type="button" class="btn btn-danger" onclick="logout()" style="width:100%;">Logout</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================================
+// GLOBALS & STATE
+// ============================================================================
+
+const API_BASE = 'https://tradedeck-api.onrender.com';
+const SUPABASE_URL = 'https://jlaajejpqjldpbinktln.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW50bG4iLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYyODk5NzAwMCwiZXhwIjoxOTQ1NzYzMDAwfQ.CxEk1EV2P-Fp3OPtJLCr8z7qBT-Ux7FVL9WwRa7C0Go';
+
+let authenticatedUser = null; // { authenticated: bool, license_data: {...} }
+let currentStream = null;
+let facesAPIReady = false;
+
+let selfieDescriptor = null;
+let licenseFrontDescriptor = null;
+
+let capturedBlob = null;
+let idVerificationStep = 1;
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+
+async function initializeShield() {
+  try {
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights'),
+      faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights'),
+      faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights')
+    ]);
+    facesAPIReady = true;
+  } catch (error) {
+    console.error('Failed to load face-api models:', error);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await initializeShield();
+  checkAuthentication();
+  updateJobSelects();
+});
+
+// ============================================================================
+// AUTHENTICATION FLOW
+// ============================================================================
+
+function checkAuthentication() {
+  const storedAuth = sessionStorage.getItem('shield_auth');
+  if (storedAuth) {
+    authenticatedUser = JSON.parse(storedAuth);
+    showApp();
+  } else {
+    document.getElementById('id-verification-modal').classList.add('active');
+  }
+}
+
+// Selfie camera
+async function startSelfieCamera() {
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+    const video = document.getElementById('selfie-preview');
+    video.srcObject = currentStream;
+    video.style.display = 'block';
+    video.play();
+  } catch (error) {
+    alert('Camera access denied: ' + error.message);
+  }
+}
+
+async function captureSelfie() {
+  const video = document.getElementById('selfie-preview');
+  const canvas = document.getElementById('selfie-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+
+  try {
+    const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks()
+      .withFaceDescriptors();
+
+    if (detections.length !== 1) {
+      alert('Please ensure exactly one face is visible in the selfie.');
+      return;
     }
 
-    async function authSubmit(event) {
-      event.preventDefault();
-      const email = document.getElementById('auth-email').value.trim();
-      const password = document.getElementById('auth-password').value;
-      const errorEl = document.getElementById('auth-error');
-      errorEl.textContent = '';
+    selfieDescriptor = detections[0].descriptor;
 
-      if (!email || !password) {
-        errorEl.textContent = 'Email and password required';
-        return;
+    canvas.toBlob(blob => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('selfie-img').src = e.target.result;
+        document.getElementById('selfie-preview').style.display = 'none';
+        document.getElementById('selfie-img').style.display = 'block';
+      };
+      reader.readAsDataURL(blob);
+    });
+
+    stopSelfieCamera();
+    idVerificationStep = 2;
+    showIDVerificationStep(2);
+  } catch (error) {
+    console.error('Face detection error:', error);
+    alert('Face detection failed. Please try again.');
+  }
+}
+
+function stopSelfieCamera() {
+  if (currentStream) {
+    currentStream.getTracks().forEach(track => track.stop());
+    currentStream = null;
+  }
+}
+
+// License Front camera
+async function startLicenseFrontCamera() {
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = document.getElementById('license-front-preview');
+    video.srcObject = currentStream;
+    video.style.display = 'block';
+    video.play();
+  } catch (error) {
+    alert('Camera access denied: ' + error.message);
+  }
+}
+
+async function captureLicenseFront() {
+  const video = document.getElementById('license-front-preview');
+  const canvas = document.getElementById('license-front-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+
+  try {
+    const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks()
+      .withFaceDescriptors();
+
+    if (detections.length === 0) {
+      alert('No face detected on license. Please ensure the license photo shows the face clearly.');
+      return;
+    }
+
+    licenseFrontDescriptor = detections[0].descriptor;
+
+    canvas.toBlob(blob => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('license-front-img').src = e.target.result;
+        document.getElementById('license-front-preview').style.display = 'none';
+        document.getElementById('license-front-img').style.display = 'block';
+      };
+      reader.readAsDataURL(blob);
+    });
+
+    stopLicenseFrontCamera();
+    idVerificationStep = 3;
+    showIDVerificationStep(3);
+  } catch (error) {
+    console.error('Face detection error:', error);
+    alert('Face detection failed. Please try again.');
+  }
+}
+
+function stopLicenseFrontCamera() {
+  if (currentStream) {
+    currentStream.getTracks().forEach(track => track.stop());
+    currentStream = null;
+  }
+}
+
+// License Back camera (with barcode reading)
+async function startLicenseBackCamera() {
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = document.getElementById('license-back-preview');
+    video.srcObject = currentStream;
+    video.style.display = 'block';
+    video.play();
+  } catch (error) {
+    alert('Camera access denied: ' + error.message);
+  }
+}
+
+async function captureLicenseBack() {
+  const video = document.getElementById('license-back-preview');
+  const canvas = document.getElementById('license-back-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+
+  try {
+    const barcodeText = await readPDF417Barcode(canvas);
+    if (!barcodeText) {
+      alert('Could not read barcode. Please ensure barcode is clearly visible.');
+      return;
+    }
+
+    const licenseData = parseAAMVABarcode(barcodeText);
+    if (!licenseData) {
+      alert('Invalid license data format.');
+      return;
+    }
+
+    canvas.toBlob(blob => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('license-back-img').src = e.target.result;
+        document.getElementById('license-back-preview').style.display = 'none';
+        document.getElementById('license-back-img').style.display = 'block';
+      };
+      reader.readAsDataURL(blob);
+    });
+
+    stopLicenseBackCamera();
+
+    authenticatedUser = { license_data: licenseData, origin_proven: false };
+    idVerificationStep = 4;
+    showIDVerificationStep(4);
+  } catch (error) {
+    console.error('Barcode reading error:', error);
+    alert('Barcode reading failed. Please try again.');
+  }
+}
+
+function stopLicenseBackCamera() {
+  if (currentStream) {
+    currentStream.getTracks().forEach(track => track.stop());
+    currentStream = null;
+  }
+}
+
+// Face recognition & barcode parsing
+async function readPDF417Barcode(canvas) {
+  try {
+    const imageData = canvas.toDataURL('image/png');
+    const codeReader = new ZXing.BrowserMultiFormatReader();
+    const result = await codeReader.decodeFromImageUrl(imageData);
+    return result.getText();
+  } catch (error) {
+    console.error('Barcode read error:', error);
+    return null;
+  }
+}
+
+function parseAAMVABarcode(barcodeText) {
+  const fields = {};
+  const lines = barcodeText.split('\n');
+
+  for (let line of lines) {
+    if (line.length >= 3) {
+      const fieldId = line.substring(0, 3);
+      const value = line.substring(3).trim();
+
+      switch(fieldId) {
+        case 'DBA': fields.name = value; break;
+        case 'DAQ': fields.license_number = value; break;
+        case 'DBB': fields.dob = value; break;
+        case 'DAC': fields.address = value; break;
+        case 'DCS': fields.state = value; break;
+        case 'DAG': fields.license_class = value; break;
+        case 'DAI': fields.restrictions = value; break;
+        case 'DAJ': fields.endorsements = value; break;
+        case 'DAK': fields.expiration = value; break;
+        case 'DBC': fields.sex = value; break;
+        case 'DCF': fields.eye_color = value; break;
       }
+    }
+  }
 
+  return Object.keys(fields).length > 0 ? fields : null;
+}
+
+async function verifyFaceMatch() {
+  if (!selfieDescriptor || !licenseFrontDescriptor) {
+    return false;
+  }
+
+  const distance = faceapi.euclideanDistance(selfieDescriptor, licenseFrontDescriptor);
+  const threshold = 0.6;
+
+  return distance < threshold;
+}
+
+function showIDVerificationStep(step) {
+  document.getElementById('step-selfie').classList.remove('active');
+  document.getElementById('step-license-front').classList.remove('active');
+  document.getElementById('step-license-back').classList.remove('active');
+  document.getElementById('step-verify').classList.remove('active');
+
+  switch(step) {
+    case 1:
+      document.getElementById('step-selfie').classList.add('active');
+      document.getElementById('id-step-title').textContent = 'Verify Your Identity - Step 1 of 4';
+      break;
+    case 2:
+      document.getElementById('step-license-front').classList.add('active');
+      document.getElementById('id-step-title').textContent = 'Verify Your Identity - Step 2 of 4';
+      break;
+    case 3:
+      document.getElementById('step-license-back').classList.add('active');
+      document.getElementById('id-step-title').textContent = 'Verify Your Identity - Step 3 of 4';
+      break;
+    case 4:
+      document.getElementById('step-verify').classList.add('active');
+      document.getElementById('id-step-title').textContent = 'Verify Your Identity - Step 4 of 4';
+      performFaceVerification();
+      break;
+  }
+}
+
+async function performFaceVerification() {
+  const isMatch = await verifyFaceMatch();
+  const resultsDiv = document.getElementById('verify-results');
+
+  if (isMatch) {
+    document.getElementById('verify-status').textContent = '✓ Face verified successfully';
+    const ld = authenticatedUser.license_data;
+    resultsDiv.innerHTML = `
+      <p style="margin: 0 0 8px 0;"><strong>Name:</strong> ${ld.name || '—'}</p>
+      <p style="margin: 0 0 8px 0;"><strong>License:</strong> ${ld.license_number || '—'}</p>
+      <p style="margin: 0 0 8px 0;"><strong>Address:</strong> ${ld.address || '—'}</p>
+    `;
+    authenticatedUser.authenticated = true;
+  } else {
+    document.getElementById('verify-status').textContent = '✗ Face does not match license';
+    resultsDiv.innerHTML = '<p style="color: var(--danger); margin: 0;">Please try again with clearer photos.</p>';
+    authenticatedUser.authenticated = false;
+  }
+}
+
+function confirmAuthentication() {
+  if (authenticatedUser?.authenticated) {
+    sessionStorage.setItem('shield_auth', JSON.stringify(authenticatedUser));
+    document.getElementById('id-verification-modal').classList.remove('active');
+    showApp();
+  } else {
+    alert('Face verification failed. Please try again.');
+  }
+}
+
+function resetIDVerification() {
+  idVerificationStep = 1;
+  selfieDescriptor = null;
+  licenseFrontDescriptor = null;
+  authenticatedUser = null;
+  capturedBlob = null;
+  document.getElementById('selfie-img').style.display = 'none';
+  document.getElementById('selfie-img').src = '';
+  document.getElementById('license-front-img').style.display = 'none';
+  document.getElementById('license-front-img').src = '';
+  document.getElementById('license-back-img').style.display = 'none';
+  document.getElementById('license-back-img').src = '';
+  showIDVerificationStep(1);
+}
+
+function adminBypass() {
+  const code = document.getElementById('admin-code').value;
+  if (code === 'ADMIN_PREVIEW') {
+    authenticatedUser = {
+      authenticated: false,
+      license_data: {
+        name: 'Admin Preview',
+        license_number: 'ADMIN',
+        address: 'N/A',
+        dob: 'N/A',
+        state: 'UT'
+      },
+      origin_proven: false
+    };
+    sessionStorage.setItem('shield_auth', JSON.stringify(authenticatedUser));
+    document.getElementById('id-verification-modal').classList.remove('active');
+    showApp();
+  } else {
+    alert('Invalid admin code');
+  }
+}
+
+function closeIDVerification() {
+  resetIDVerification();
+}
+
+function showApp() {
+  document.getElementById('id-verification-modal').classList.remove('active');
+  document.getElementById('app').style.display = 'block';
+  loadSettings();
+}
+
+// ============================================================================
+// PHOTO CAPTURE (NONCE-SEAL FLOW)
+// ============================================================================
+
+async function startCaptureCamera() {
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = document.getElementById('capture-preview');
+    video.srcObject = currentStream;
+    video.style.display = 'block';
+    video.play();
+  } catch (error) {
+    alert('Camera access denied: ' + error.message);
+  }
+}
+
+async function captureSnapshot() {
+  const video = document.getElementById('capture-preview');
+  const canvas = document.getElementById('capture-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+
+  canvas.toBlob(blob => {
+    capturedBlob = blob;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      document.getElementById('capture-img').src = e.target.result;
+      document.getElementById('capture-preview').style.display = 'none';
+      document.getElementById('capture-img').style.display = 'block';
+    };
+    reader.readAsDataURL(blob);
+  });
+
+  stopCaptureCamera();
+}
+
+function stopCaptureCamera() {
+  if (currentStream) {
+    currentStream.getTracks().forEach(track => track.stop());
+    currentStream = null;
+  }
+  document.getElementById('capture-preview').style.display = 'none';
+}
+
+async function capturePhoto(event) {
+  event.preventDefault();
+
+  if (!capturedBlob) {
+    alert('Please capture a photo first');
+    return;
+  }
+
+  const jobId = document.getElementById('capture-job').value;
+  const location = document.getElementById('capture-location').value;
+
+  if (!jobId) {
+    alert('Please select a job');
+    return;
+  }
+
+  try {
+    // Step 1: Request nonce
+    const nonceResponse = await fetch(`${API_BASE}/api/shields/${jobId}/issue-nonce`, {
+      method: 'POST'
+    });
+
+    if (!nonceResponse.ok) throw new Error('Failed to issue nonce');
+    const { nonce } = await nonceResponse.json();
+
+    // Step 2: Geocode location if provided
+    let gpsLat = null, gpsLon = null;
+    if (location) {
       try {
-        const result = authMode === 'signup'
-          ? await sb.auth.signUp({ email, password })
-          : await sb.auth.signInWithPassword({ email, password });
-
-        if (result.error) throw result.error;
-
-        if (authMode === 'signup') {
-          errorEl.style.color = 'var(--success)';
-          errorEl.textContent = 'Check your email to confirm.';
-          return;
+        const geocodeResult = await geocodeAddress(location);
+        if (geocodeResult) {
+          gpsLat = geocodeResult.lat;
+          gpsLon = geocodeResult.lon;
         }
-
-        currentUser = result.data.user;
-        loadApp();
-      } catch (error) {
-        errorEl.textContent = error.message || 'Authentication failed';
+      } catch (e) {
+        console.log('Geocoding unavailable, continuing without coordinates');
       }
     }
 
-    async function signOut() {
-      await sb.auth.signOut();
-      currentUser = null;
-      document.getElementById('auth-section').style.display = 'flex';
-      document.getElementById('app').style.display = 'none';
+    // Step 3: Seal photo with nonce
+    const formData = new FormData();
+    formData.append('photo', capturedBlob);
+    formData.append('nonce', nonce);
+    if (gpsLat !== null) {
+      formData.append('gps_lat', gpsLat);
+      formData.append('gps_lon', gpsLon);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // APP FUNCTIONS
-    // ═══════════════════════════════════════════════════════════════
-
-    async function loadApp() {
-      document.getElementById('auth-section').style.display = 'none';
-      document.getElementById('app').style.display = 'block';
-
-      document.getElementById('user-email').textContent = currentUser.email;
-      document.getElementById('settings-email').value = currentUser.email;
-
-      await loadDashboard();
-      await loadJobs();
-      await loadPhotos();
-    }
-
-    async function loadDashboard() {
-      try {
-        const { data: jobs, error: jobsError } = await sb
-          .from('shield_jobs')
-          .select('id', { count: 'exact' })
-          .eq('user_id', currentUser.id)
-          .eq('status', 'active');
-
-        const { data: completed, error: completedError } = await sb
-          .from('shield_jobs')
-          .select('id', { count: 'exact' })
-          .eq('user_id', currentUser.id)
-          .eq('status', 'verified');
-
-        const { data: photos, error: photosError } = await sb
-          .from('shield_photos')
-          .select('id', { count: 'exact' })
-          .eq('user_id', currentUser.id);
-
-        document.getElementById('stat-active-jobs').textContent = jobs?.length || 0;
-        document.getElementById('stat-completed').textContent = completed?.length || 0;
-        document.getElementById('stat-photos').textContent = photos?.length || 0;
-
-        // Load recent activity
-        const { data: activity } = await sb
-          .from('shield_jobs')
-          .select('id, name, status, created_at')
-          .eq('user_id', currentUser.id)
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        const activityHtml = activity?.map(item => `
-          <div class="list-item">
-            <div>
-              <div class="list-item-title">${item.name}</div>
-              <div class="list-item-meta">Status: ${item.status} • ${new Date(item.created_at).toLocaleDateString()}</div>
-            </div>
-          </div>
-        `).join('') || '<p style="padding: 20px; text-align: center; color: var(--text-light);">No activity yet</p>';
-
-        document.getElementById('activity-list').innerHTML = activityHtml;
-      } catch (error) {
-        console.error('Dashboard load error:', error);
-      }
-    }
-
-    async function loadJobs() {
-      try {
-        const { data: jobs } = await sb
-          .from('shield_jobs')
-          .select('*')
-          .eq('user_id', currentUser.id)
-          .order('created_at', { ascending: false });
-
-        const jobsHtml = jobs?.map(job => `
-          <div class="list-item">
-            <div>
-              <div class="list-item-title">${job.name}</div>
-              <div class="list-item-meta">${job.trade} • ${job.status}</div>
-            </div>
-            <button class="btn btn-sm btn-secondary" onclick="viewJob('${job.id}')">View</button>
-          </div>
-        `).join('') || '<p style="padding: 20px; text-align: center; color: var(--text-light);">No jobs yet</p>';
-
-        document.getElementById('jobs-list').innerHTML = jobsHtml;
-
-        // Populate upload job selector
-        const jobOptions = jobs?.map(job => `<option value="${job.id}">${job.name}</option>`).join('') || '';
-        document.getElementById('upload-job').innerHTML = '<option value="">Select a job...</option>' + jobOptions;
-      } catch (error) {
-        console.error('Jobs load error:', error);
-      }
-    }
-
-    async function loadPhotos() {
-      try {
-        const { data: photos } = await sb
-          .from('shield_photos')
-          .select('*, shield_jobs(name)')
-          .eq('user_id', currentUser.id)
-          .order('created_at', { ascending: false })
-          .limit(10);
-
-        const photosHtml = photos?.map(photo => `
-          <div class="list-item">
-            <div>
-              <div class="list-item-title">${photo.shield_jobs?.name || 'Unknown Job'}</div>
-              <div class="list-item-meta">Uploaded ${new Date(photo.created_at).toLocaleDateString()}</div>
-            </div>
-            <button class="btn btn-sm btn-secondary" onclick="viewPhoto('${photo.id}')">View</button>
-          </div>
-        `).join('') || '<p style="padding: 20px; text-align: center; color: var(--text-light);">No photos yet</p>';
-
-        document.getElementById('photos-list').innerHTML = photosHtml;
-      } catch (error) {
-        console.error('Photos load error:', error);
-      }
-    }
-
-    async function createShieldJob(event) {
-      event.preventDefault();
-      const name = document.getElementById('job-name').value;
-      const trade = document.getElementById('job-trade').value;
-      const description = document.getElementById('job-description').value;
-
-      try {
-        const { error } = await sb
-          .from('shield_jobs')
-          .insert({
-            user_id: currentUser.id,
-            name,
-            trade,
-            description,
-            status: 'active'
-          });
-
-        if (error) throw error;
-
-        closeModal('new-job-modal');
-        document.querySelector('form[onsubmit*="createShieldJob"]').reset();
-        await loadJobs();
-        await loadDashboard();
-      } catch (error) {
-        alert('Failed to create job: ' + error.message);
-      }
-    }
-
-    async function uploadEvidence(event) {
-      event.preventDefault();
-      const jobId = document.getElementById('upload-job').value;
-      const file = document.getElementById('upload-file').files[0];
-      const notes = document.getElementById('upload-notes').value;
-
-      if (!file) return;
-
-      try {
-        // Upload file to storage
-        const filename = `${currentUser.id}/${Date.now()}_${file.name}`;
-        const { data: uploadData, error: uploadError } = await sb
-          .storage
-          .from('shield-photos')
-          .upload(filename, file);
-
-        if (uploadError) throw uploadError;
-
-        // Insert photo record
-        const { error: insertError } = await sb
-          .from('shield_photos')
-          .insert({
-            user_id: currentUser.id,
-            job_id: jobId,
-            file_path: filename,
-            notes
-          });
-
-        if (insertError) throw insertError;
-
-        closeModal('upload-modal');
-        document.querySelector('form[onsubmit*="uploadEvidence"]').reset();
-        await loadPhotos();
-        await loadDashboard();
-      } catch (error) {
-        alert('Failed to upload: ' + error.message);
-      }
-    }
-
-    function viewJob(jobId) {
-      // Placeholder
-      alert('Job details for ' + jobId);
-    }
-
-    function viewPhoto(photoId) {
-      // Placeholder
-      alert('Photo details for ' + photoId);
-    }
-
-    function subscribeToPro() {
-      alert('Shield Pro subscription coming soon!');
-    }
-
-    function changePassword() {
-      alert('Password change flow coming soon!');
-    }
-
-    function switchTab(tabName) {
-      // Hide all tabs
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-
-      // Show selected tab
-      document.getElementById(tabName).classList.add('active');
-      event.target.classList.add('active');
-    }
-
-    function showNewJobModal() {
-      document.getElementById('new-job-modal').classList.add('active');
-    }
-
-    function showUploadModal() {
-      document.getElementById('upload-modal').classList.add('active');
-    }
-
-    function closeModal(modalId) {
-      document.getElementById(modalId).classList.remove('active');
-    }
-
-    // Close modal on outside click
-    document.addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal')) {
-        e.target.classList.remove('active');
-      }
+    const sealResponse = await fetch(`${API_BASE}/api/shields/${jobId}/seal-photo`, {
+      method: 'POST',
+      body: formData
     });
 
-    // ═══════════════════════════════════════════════════════════════
-    // INITIALIZATION
-    // ═══════════════════════════════════════════════════════════════
+    if (!sealResponse.ok) throw new Error('Failed to seal photo');
+    const { seal_id, bind_hash } = await sealResponse.json();
 
-    // Check if already logged in
-    sb.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        currentUser = session.user;
-        loadApp();
-      } else {
-        currentUser = null;
-        document.getElementById('auth-section').style.display = 'flex';
-        document.getElementById('app').style.display = 'none';
-      }
+    // Step 4: Store seal locally
+    const seals = JSON.parse(sessionStorage.getItem('shield_seals') || '[]');
+    seals.push({
+      seal_id,
+      job_id: jobId,
+      bind_hash,
+      nonce,
+      timestamp: new Date().toISOString(),
+      location: location || null,
+      latitude: gpsLat,
+      longitude: gpsLon
     });
-  </script>
+    sessionStorage.setItem('shield_seals', JSON.stringify(seals));
+
+    // Step 5: Reset form
+    capturedBlob = null;
+    document.getElementById('capture-img').style.display = 'none';
+    document.getElementById('capture-preview').style.display = 'none';
+    document.querySelector('form[onsubmit*="capturePhoto"]').reset();
+
+    await loadVault();
+    alert(`✓ Photo sealed with Seal ID: ${seal_id}`);
+  } catch (error) {
+    alert('Upload failed: ' + error.message);
+    console.error(error);
+  }
+}
+
+async function geocodeAddress(address) {
+  try {
+    const encodedAddress = encodeURIComponent(address);
+    const response = await fetch(
+      `https://geocoding.geo.census.gov/geocoder/locations/addressbatch?address=${encodedAddress}&benchmark=Public_AR_Current&format=json`
+    );
+    const data = await response.json();
+    if (data.result && data.result.addressMatches && data.result.addressMatches.length > 0) {
+      const coords = data.result.addressMatches[0].coordinates;
+      return { lat: coords.y, lon: coords.x };
+    }
+  } catch (error) {
+    console.error('Geocoding error:', error);
+  }
+  return null;
+}
+
+// ============================================================================
+// JOBS MANAGEMENT
+// ============================================================================
+
+async function loadJobs() {
+  const jobs = JSON.parse(sessionStorage.getItem('shield_jobs') || '[]');
+  const jobsList = document.getElementById('jobs-list');
+
+  if (jobs.length === 0) {
+    jobsList.innerHTML = '<p style="text-align:center; color:var(--text-light); padding: 20px;">No jobs yet</p>';
+    return;
+  }
+
+  const html = jobs.map(job => `
+    <div class="list-item">
+      <div>
+        <div class="list-item-title">${job.title}</div>
+        <div class="list-item-meta">${job.trade} • ${job.location || 'No location'}</div>
+      </div>
+      <button class="btn btn-sm btn-secondary" onclick="deleteJob('${job.id}')">Delete</button>
+    </div>
+  `).join('');
+
+  jobsList.innerHTML = html;
+}
+
+function showNewJobForm() {
+  const title = prompt('Job title:');
+  if (!title) return;
+
+  const trade = prompt('Trade (e.g., Framing, Roofing, Electrical):');
+  if (!trade) return;
+
+  const location = prompt('Location/Address:');
+
+  const jobs = JSON.parse(sessionStorage.getItem('shield_jobs') || '[]');
+  jobs.push({
+    id: Date.now().toString(),
+    title,
+    trade,
+    location: location || null,
+    created_at: new Date().toISOString()
+  });
+  sessionStorage.setItem('shield_jobs', JSON.stringify(jobs));
+
+  loadJobs();
+  updateJobSelects();
+}
+
+function deleteJob(jobId) {
+  if (confirm('Delete this job?')) {
+    const jobs = JSON.parse(sessionStorage.getItem('shield_jobs') || '[]');
+    const filtered = jobs.filter(j => j.id !== jobId);
+    sessionStorage.setItem('shield_jobs', JSON.stringify(filtered));
+    loadJobs();
+    updateJobSelects();
+  }
+}
+
+function updateJobSelects() {
+  const jobs = JSON.parse(sessionStorage.getItem('shield_jobs') || '[]');
+  const select = document.getElementById('capture-job');
+  select.innerHTML = '<option value="">Select a job...</option>' +
+    jobs.map(job => `<option value="${job.id}">${job.title} (${job.trade})</option>`).join('');
+}
+
+// ============================================================================
+// VAULT MANAGEMENT
+// ============================================================================
+
+async function loadVault() {
+  const seals = JSON.parse(sessionStorage.getItem('shield_seals') || '[]');
+  const vaultList = document.getElementById('vault-list');
+
+  if (seals.length === 0) {
+    vaultList.innerHTML = '<p style="text-align:center; color:var(--text-light); padding: 20px;">No sealed photos yet</p>';
+    return;
+  }
+
+  const html = seals.map(seal => `
+    <div class="list-item">
+      <div>
+        <div class="list-item-title">${seal.seal_id}</div>
+        <div class="list-item-meta">${new Date(seal.timestamp).toLocaleDateString()}</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-sm btn-secondary" onclick="copySealID('${seal.seal_id}')">Copy ID</button>
+        <button class="btn btn-sm btn-secondary" onclick="testTamper('${seal.seal_id}')">Test Tamper</button>
+      </div>
+    </div>
+  `).join('');
+
+  vaultList.innerHTML = html;
+}
+
+function copySealID(sealId) {
+  navigator.clipboard.writeText(sealId);
+  alert('Seal ID copied to clipboard');
+}
+
+function testTamper(sealId) {
+  const seals = JSON.parse(sessionStorage.getItem('shield_seals') || '[]');
+  const seal = seals.find(s => s.seal_id === sealId);
+  if (seal) {
+    alert(`Seal ID: ${seal.seal_id}\nHash: ${seal.bind_hash}\nNonce: ${seal.nonce}\nTimestamp: ${seal.timestamp}`);
+  }
+}
+
+// ============================================================================
+// TAB SWITCHING
+// ============================================================================
+
+function switchTab(tabName) {
+  document.querySelectorAll('.tab-content').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  document.getElementById(tabName).classList.add('active');
+  event.target.classList.add('active');
+
+  if (tabName === 'jobs') loadJobs();
+  else if (tabName === 'vault') loadVault();
+  else if (tabName === 'settings') loadSettings();
+}
+
+// ============================================================================
+// SETTINGS
+// ============================================================================
+
+function loadSettings() {
+  if (authenticatedUser?.license_data) {
+    const ld = authenticatedUser.license_data;
+    document.getElementById('profile-name').textContent = ld.name || '—';
+    document.getElementById('profile-license').textContent = ld.license_number || '—';
+    document.getElementById('profile-dob').textContent = ld.dob || '—';
+    document.getElementById('profile-address').textContent = ld.address || '—';
+  }
+}
+
+function upgradeToPro() {
+  alert('Shield Pro upgrade coming soon');
+}
+
+function logout() {
+  if (confirm('Logout and clear all data?')) {
+    sessionStorage.removeItem('shield_auth');
+    sessionStorage.removeItem('shield_seals');
+    sessionStorage.removeItem('shield_jobs');
+    location.reload();
+  }
+}
+
+</script>
+
 </body>
 </html>
