@@ -13,6 +13,8 @@ import {
 } from "../store/db";
 import type { Job, PackKind, VaultItem } from "../types";
 import { parseBundle, verifyBundle, verifyItemOriginal } from "../verify/verify";
+import { parseCloseoutPacket, verifyCloseoutPacket, type PacketVerdict } from "../construction/closeout";
+import type { CloseoutPacket } from "../types";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
 type Tab = "capture" | "jobs" | "vault" | "verify" | "construction";
@@ -33,8 +35,8 @@ let budget = 15000;
 let pinLat = "";
 let pinLng = "";
 let pinR = "200";
-let verifyText = "";
 let verifyOut = "";
+let packetOut: { verdict: PacketVerdict; reasons: string[]; packet: CloseoutPacket } | null = null;
 
 const ctx: ConstructionCtx = {
   jobs: () => jobs,
@@ -90,7 +92,7 @@ export function render(): void {
       <button class="${tab === "construction" ? "on" : ""}" data-tab="construction">Build</button>
     </nav>
     <input class="hidden-file" id="file-arrival" type="file" accept="image/*" />
-    <input class="hidden-file" id="file-bundle" type="file" accept="application/json,.json,.shield.json" />
+    <input class="hidden-file" id="file-bundle" type="file" accept="application/json,.json,.shield.json,.shield-record.json" />
   `;
   bind();
 }
@@ -224,10 +226,39 @@ attest ${rec.attest.kind}${rec.attest.tokenPresent ? " · token" : ""}</pre>
 
 function verifyView(): string {
   return `
-    <div class="banner"><strong>VERIFY</strong>Drop a bundle. Recomputes SHA-256 of the embedded original.</div>
-    <div class="drop" data-act="pick-bundle">Drop .json bundle or tap to choose</div>
+    <div class="banner"><strong>VERIFY</strong>Drop a photo bundle (.shield.json) or a close-out record (.shield-record.json). Everything is recomputed on this device.</div>
+    <div class="drop" data-act="pick-bundle">Drop a file or tap to choose</div>
     ${verifyOut ? `<div class="card"><pre>${esc(verifyOut)}</pre></div>` : ""}
-    ${verifyText ? "" : ""}
+    ${packetOut ? packetResultView(packetOut) : ""}
+  `;
+}
+
+function packetResultView(r: NonNullable<typeof packetOut>): string {
+  const p = r.packet;
+  const ok = r.verdict === "PACKET-SEALED";
+  const points = p.points
+    .map((pt) => {
+      const code = pt.code ? (pt.code.irc ? `IRC ${pt.code.irc}` : pt.code.ibc ? `IBC ${pt.code.ibc}` : pt.code.name) : "no code";
+      const rec = pt.record;
+      const chip = rec
+        ? rec.captureKind === "native-camera"
+          ? `<span class="chip ok">SEALED</span>`
+          : `<span class="chip warn">ARRIVAL-ONLY</span>`
+        : `<span class="chip bad">MISSING</span>`;
+      return `<div class="slot"><div><div>${esc(pt.label)}</div><div class="meta">${esc(code)}${rec ? ` · ${esc(rec.sha256.slice(0, 16))}…` : ""}</div></div>${chip}</div>`;
+    })
+    .join("");
+  return `
+    <div class="card">
+      <div class="row"><h2>${ok ? "Record intact" : r.verdict === "PACKET-TAMPERED" ? "Record altered" : "Not a Shield record"}</h2><span class="chip ${ok ? "ok" : "bad"}">${esc(r.verdict)}</span></div>
+      <pre>${esc(r.reasons.join("\n"))}
+hash   ${esc(p.integrity.hash)}
+closed ${esc(p.closedAt)} by ${esc(p.closedBy.role)}
+job    ${esc(p.job.title || p.job.id)} · ${esc(p.job.trade)}
+device ${esc(p.deviceSealId)}</pre>
+      <div class="slots">${points}</div>
+      <p class="foot-note">Hash and signature recomputed from the file. ${ok ? "No field in this record has changed since it was frozen." : "Do not rely on this record."}</p>
+    </div>
   `;
 }
 
@@ -334,8 +365,30 @@ function bind(): void {
     const file = bundle.files?.[0];
     bundle.value = "";
     if (!file) return;
+    const text = await file.text();
+    verifyOut = "";
+    packetOut = null;
+    let raw: unknown = null;
     try {
-      const parsed = parseBundle(await file.text());
+      raw = JSON.parse(text);
+    } catch {
+      verifyOut = "NO-ORIGIN\nfile-unreadable";
+      render();
+      return;
+    }
+    if ((raw as { schema?: unknown })?.schema === "tradedeck.shield.completion.v2") {
+      try {
+        const packet = parseCloseoutPacket(text);
+        const result = await verifyCloseoutPacket(packet);
+        packetOut = { ...result, packet };
+      } catch {
+        verifyOut = "PACKET-UNREADABLE\nbad-packet";
+      }
+      render();
+      return;
+    }
+    try {
+      const parsed = parseBundle(text);
       const result = await verifyBundle(parsed);
       verifyOut = `${result.verdict}\n${result.reasons.join("\n")}\n${result.computedSha ?? ""}`;
     } catch {

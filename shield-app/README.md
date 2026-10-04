@@ -25,7 +25,7 @@ npm run cap:sync   # copy dist/ into the native shells
 | **Capture** | Rear camera on native (`@capacitor/camera`), arrival hash on web. Every photo: SHA-256 of the bytes → hash chain (`prevChain` → `chainHead`) → ECDSA P-256 signature with this device's key (IndexedDB, non-extractable). |
 | **Jobs** | Lock a generic pack (remodel / draw / unit / loss / shop / custom) — industry-agnostic checkpoints with an optional GPS pin and a fee tier. |
 | **Vault** | Originals stay on device. REHASH recomputes the SHA-256; EXPORT writes a `.shield.json` bundle (record + original). |
-| **Verify** | Drop a bundle; recomputes the hash of the embedded original and reports `SEALED` / `TAMPERED` / `ARRIVAL-ONLY` / `NO-ORIGIN`. |
+| **Verify** | Drop a photo bundle (`.shield.json`) → recomputes the hash of the embedded original: `SEALED` / `TAMPERED` / `ARRIVAL-ONLY` / `NO-ORIGIN`. Drop a close-out record (`.shield-record.json`) → recomputes its hash and checks the device signature with the embedded public key: `PACKET-SEALED` / `PACKET-TAMPERED`, with per-point status. |
 | **Build** | Construction pack. Brief → locking questions → 5 trade-specific checkpoints → IRC/IBC code references → hashed, signed close-out record. See below. |
 
 ## Build (Construction) tab
