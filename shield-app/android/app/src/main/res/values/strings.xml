@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Shield</string>
+    <string name="title_activity_main">Shield</string>
+    <string name="package_name">app.tradedeck.shield</string>
+    <string name="custom_url_scheme">app.tradedeck.shield</string>
+</resources>

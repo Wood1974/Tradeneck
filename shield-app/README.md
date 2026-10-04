@@ -18,6 +18,27 @@ npm run cap:init   # once: adds ios/ and android/ (gitignored)
 npm run cap:sync   # copy dist/ into the native shells
 ```
 
+## Native builds
+
+`android/` and `ios/` are committed (Capacitor convention). After any web change:
+
+```bash
+npm run build && npx cap sync      # copies dist/ into both shells, updates plugins
+npx cap open android               # Android Studio → run on a device
+npx cap open ios                   # Xcode (macOS only; runs `pod install` on first sync)
+```
+
+Permissions are declared: camera + location on Android (`AndroidManifest.xml`),
+`NSCameraUsageDescription` / `NSLocationWhenInUseUsageDescription` on iOS
+(`Info.plist`). The camera plugin is invoked with `CameraSource.Camera` only —
+the gallery is never an origin path.
+
+**Not wired yet:** `src/native/ios-attest.swift` and `android-integrity.kt`
+describe the App Attest / Play Integrity binding (`ShieldAttest.assert(hash)`).
+Until a Capacitor plugin exposes that bridge on `window.ShieldAttest`, native
+seals report `attest: none` and the Verify verdict is `SEALED` with
+`native-camera-no-attest`.
+
 ## Tabs
 
 | Tab | What it does |
