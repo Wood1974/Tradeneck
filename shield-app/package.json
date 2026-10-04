@@ -1,0 +1,30 @@
+{
+  "name": "tradedeck-shield",
+  "private": true,
+  "version": "0.3.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host --port 4173",
+    "cap:init": "npx cap add ios && npx cap add android",
+    "cap:sync": "npx cap sync",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0",
+    "fake-indexeddb": "^6.0.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/app": "^6.0.2",
+    "@capacitor/camera": "^6.1.2",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/filesystem": "^6.0.2",
+    "@capacitor/geolocation": "^6.0.2",
+    "@capacitor/ios": "^6.2.2"
+  }
+}
