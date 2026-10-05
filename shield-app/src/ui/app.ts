@@ -1,4 +1,4 @@
-import { arrivalHashFile, captureNative } from "../capture/capture";
+import { arrivalHashFile, captureNative, sealWebCameraFrame } from "../capture/capture";
 import { deviceSealId } from "../crypto/seal";
 import { makeCheckpoints, PACK_ORDER } from "../packs";
 import { isNativeOriginAvailable } from "../platform";
@@ -36,6 +36,7 @@ let pinLat = "";
 let pinLng = "";
 let pinR = "200";
 let verifyOut = "";
+let camStream: MediaStream | null = null;
 let packetOut: { verdict: PacketVerdict; reasons: string[]; packet: CloseoutPacket } | null = null;
 
 const ctx: ConstructionCtx = {
@@ -109,7 +110,26 @@ function captureView(native: boolean, job: Job | undefined): string {
   const originChip = native ? `<span class="chip ok">NATIVE</span>` : `<span class="chip warn">WEB · NO ORIGIN</span>`;
   const camChip = native
     ? `<span class="chip">CAMERA READY · ${clock()}</span>`
-    : `<span class="chip">CAMERA OFF · ${clock()}</span>`;
+    : camStream
+      ? `<span class="chip ok">WEB CAMERA · LIVE</span>`
+      : `<span class="chip">CAMERA OFF · ${clock()}</span>`;
+  const slotLabel = pendingSlot ? job?.checkpoints.find((c) => c.id === pendingSlot)?.label ?? pendingSlot : null;
+  const finderBody = !native && camStream
+    ? `<video id="cam" class="cam" autoplay playsinline muted></video>
+      ${slotLabel ? `<p class="lede">Sealing “${esc(slotLabel)}”</p>` : ""}
+      <div class="actions">
+        <button class="btn" data-act="shutter">SHUTTER</button>
+        <button class="btn ghost small" data-act="cam-off">CANCEL</button>
+      </div>`
+    : `<div class="icon-aperture"><span></span></div>
+      <h1>${native ? "Native camera" : "Browser camera"}</h1>
+      <p class="lede">${native
+        ? "Rear camera only. Hash on arrival. Attest binds later."
+        : "Live sensor, hashed at the shutter. Camera vs. virtual device is not proven on web."}</p>
+      <div class="actions">
+        <button class="btn" data-act="${native ? "native" : "webcam"}">${native ? "SEAL FRAME" : "OPEN CAMERA"}</button>
+        <button class="btn ghost small" data-act="arrival">ARRIVAL HASH</button>
+      </div>`;
   return `
     <div class="banner">
       <strong>${job ? "LOCKED LIST" : "NO LOCKED LIST"}</strong>
@@ -118,15 +138,7 @@ function captureView(native: boolean, job: Job | undefined): string {
     </div>
     <section class="finder">
       <div class="finder-top">${originChip}${camChip}</div>
-      <div class="icon-aperture"><span></span></div>
-      <h1>${native ? "Native camera" : "No web seal"}</h1>
-      <p class="lede">${native
-        ? "Rear camera only. Hash on arrival. Attest binds later."
-        : "Origin seal is iOS/Android only. This page will not pretend."}</p>
-      <div class="actions">
-        <button class="btn" data-act="native">${native ? "SEAL FRAME" : "NATIVE CAMERA"}</button>
-        <button class="btn ghost small" data-act="arrival">ARRIVAL HASH</button>
-      </div>
+      ${finderBody}
       ${status ? `<p class="foot-note">${esc(status)}</p>` : ""}
     </section>
     ${job ? slots(job) : packChips()}
@@ -243,7 +255,9 @@ function packetResultView(r: NonNullable<typeof packetOut>): string {
       const chip = rec
         ? rec.captureKind === "native-camera"
           ? `<span class="chip ok">SEALED</span>`
-          : `<span class="chip warn">ARRIVAL-ONLY</span>`
+          : rec.captureKind === "web-camera"
+            ? `<span class="chip warn">WEB CAMERA</span>`
+            : `<span class="chip warn">ARRIVAL-ONLY</span>`
         : `<span class="chip bad">MISSING</span>`;
       return `<div class="slot"><div><div>${esc(pt.label)}</div><div class="meta">${esc(code)}${rec ? ` · ${esc(rec.sha256.slice(0, 16))}…` : ""}</div></div>${chip}</div>`;
     })
@@ -280,8 +294,12 @@ function specView(): string {
 }
 
 function bind(): void {
+  const cam = document.getElementById("cam") as HTMLVideoElement | null;
+  if (cam && camStream && cam.srcObject !== camStream) cam.srcObject = camStream;
+
   root().querySelectorAll("[data-tab]").forEach((el) => {
     el.addEventListener("click", () => {
+      stopWebCamera();
       tab = (el as HTMLElement).dataset.tab as Tab;
       specOpen = false;
       status = "";
@@ -423,9 +441,73 @@ async function onSlot(id: string): Promise<void> {
     render();
     return;
   }
-  pendingSlot = id;
-  status = "Web cannot origin-seal this slot. Arrival hash only.";
-  (document.getElementById("file-arrival") as HTMLInputElement).click();
+  await openWebCamera(id);
+}
+
+async function openWebCamera(slot: string | null): Promise<void> {
+  pendingSlot = slot;
+  tab = "capture";
+  specOpen = false;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    status = "No in-page camera in this browser. Using the system camera.";
+    fallbackCameraInput();
+    return;
+  }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+    status = "";
+    render();
+  } catch {
+    camStream = null;
+    status = "Camera permission denied or unavailable. Using the system camera.";
+    render();
+    fallbackCameraInput();
+  }
+}
+
+// `capture` forces the OS camera on phones; it is set only for this click so ARRIVAL HASH stays a plain picker.
+function fallbackCameraInput(): void {
+  const input = document.getElementById("file-arrival") as HTMLInputElement;
+  input.setAttribute("capture", "environment");
+  input.click();
+  setTimeout(() => input.removeAttribute("capture"), 0);
+}
+
+function stopWebCamera(): void {
+  if (!camStream) return;
+  for (const t of camStream.getTracks()) t.stop();
+  camStream = null;
+}
+
+async function shutter(): Promise<void> {
+  const v = document.getElementById("cam") as HTMLVideoElement | null;
+  if (!v || !camStream || !v.videoWidth) {
+    status = "Camera not ready yet.";
+    render();
+    return;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = v.videoWidth;
+  canvas.height = v.videoHeight;
+  canvas.getContext("2d")!.drawImage(v, 0, 0);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+  if (!blob) {
+    status = "Could not read the frame.";
+    render();
+    return;
+  }
+  const slot = pendingSlot;
+  pendingSlot = null;
+  stopWebCamera();
+  const item = await sealWebCameraFrame(blob, slot);
+  await reload();
+  openVaultId = item.record.id;
+  tab = "vault";
+  status = "WEB CAMERA · bytes sealed at the shutter · origin not proven";
+  render();
 }
 
 async function onAct(act: string): Promise<void> {
@@ -462,6 +544,21 @@ async function onAct(act: string): Promise<void> {
   if (act === "arrival") {
     pendingSlot = null;
     (document.getElementById("file-arrival") as HTMLInputElement).click();
+    return;
+  }
+  if (act === "webcam") {
+    await openWebCamera(null);
+    return;
+  }
+  if (act === "shutter") {
+    await shutter();
+    return;
+  }
+  if (act === "cam-off") {
+    stopWebCamera();
+    pendingSlot = null;
+    status = "";
+    render();
     return;
   }
   if (act === "lock") {

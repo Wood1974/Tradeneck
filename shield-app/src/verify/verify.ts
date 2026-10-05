@@ -21,6 +21,12 @@ export function verdictFor(record: SealRecord, computedSha: string | null): Veri
     if (record.attest.kind === "none") reasons.push("no-attest");
     return { verdict: "ARRIVAL-ONLY", reasons, computedSha, record };
   }
+  if (record.captureKind === "web-camera") {
+    // Live browser sensor, hashed at the shutter — but a browser cannot prove camera vs. virtual device.
+    reasons.push("web-camera-not-proven");
+    if (record.attest.kind === "none") reasons.push("no-attest");
+    return { verdict: "ARRIVAL-ONLY", reasons, computedSha, record };
+  }
   if (record.attest.kind === "none" || !record.attest.tokenPresent) {
     reasons.push("native-camera-no-attest");
     return { verdict: "SEALED", reasons, computedSha, record };
