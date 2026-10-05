@@ -5,7 +5,6 @@ import { isNativeOriginAvailable } from "../platform";
 import { feeForBudget, PRICING_EFFECTIVE } from "../pricing";
 import {
   activeJobId,
-  getJob,
   listJobs,
   listVault,
   putJob,

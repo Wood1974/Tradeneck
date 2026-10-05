@@ -44,7 +44,7 @@ export async function verifyBundle(bundle: ShieldBundle): Promise<VerifyResult> 
   }
 }
 
-export async function verifyItemOriginal(record: SealRecord, originalB64: string): Promise<VerifyResult> {
+export function verifyItemOriginal(record: SealRecord, originalB64: string): Promise<VerifyResult> {
   return verifyBundle({ version: 1, record, originalB64 });
 }
 
