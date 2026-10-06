@@ -1,10 +1,11 @@
 export type PackKind = "remodel" | "draw" | "unit" | "loss" | "shop" | "custom" | "construction";
 
-export type CaptureKind = "native-camera" | "web-camera" | "arrival-hash";
+/** Shield seals only photos taken live with the native OS camera. */
+export type CaptureKind = "native-camera";
 
 export type PlatformKind = "ios" | "android" | "web";
 
-export type Verdict = "SEALED" | "UNATTESTED-NATIVE" | "TAMPERED" | "ARRIVAL-ONLY" | "NO-ORIGIN";
+export type Verdict = "SEALED" | "UNATTESTED-NATIVE" | "TAMPERED" | "NO-ORIGIN";
 
 export type FeeTier = "standard" | "extended" | "major";
 
@@ -95,7 +96,7 @@ export interface SealRecord {
     lat: number;
     lng: number;
     acc: number;
-    source: "os" | "browser" | "none";
+    source: "os";
   } | null;
   pinScore: {
     meters: number | null;
@@ -133,7 +134,7 @@ export interface CloseoutPoint {
 }
 
 export interface CloseoutBody {
-  schema: "tradedeck.shield.completion.v2";
+  schema: "tradedeck.shield.completion.v3";
   closedAt: string;
   closedBy: { role: string };
   job: {
@@ -150,8 +151,7 @@ export interface CloseoutBody {
     answers: Record<string, string | string[]>;
   } | null;
   points: CloseoutPoint[];
-  /** `sealed` = any record on file; native/web/arrival split it by capture origin. */
-  counts: { points: number; sealed: number; missing: number; native: number; web: number; arrival: number };
+  counts: { points: number; sealed: number; missing: number };
   notes: string;
   deviceSealId: string;
   devicePublicKey: string;

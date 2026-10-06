@@ -12,23 +12,15 @@ export interface VerifyResult {
 export const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
 
 export function verdictFor(record: SealRecord, computedSha: string | null): VerifyResult {
-  const reasons: string[] = [];
   if (!computedSha) {
     return { verdict: "NO-ORIGIN", reasons: ["no-bytes"], computedSha: null, record };
   }
   if (computedSha !== record.sha256) {
     return { verdict: "TAMPERED", reasons: ["sha256-mismatch"], computedSha, record };
   }
-  if (record.captureKind === "arrival-hash") {
-    reasons.push("arrival-hash-only");
-    if (record.attest.kind === "none") reasons.push("no-attest");
-    return { verdict: "ARRIVAL-ONLY", reasons, computedSha, record };
-  }
-  if (record.captureKind === "web-camera") {
-    // Live browser sensor, hashed at the shutter — but a browser cannot prove camera vs. virtual device.
-    reasons.push("web-camera-not-proven");
-    if (record.attest.kind === "none") reasons.push("no-attest");
-    return { verdict: "ARRIVAL-ONLY", reasons, computedSha, record };
+  // Only native camera captures are valid. Anything else claims an origin Shield never produces.
+  if ((record.captureKind as string) !== "native-camera") {
+    return { verdict: "NO-ORIGIN", reasons: ["unsupported-capture-kind"], computedSha, record };
   }
   if (record.attest.kind === "none") {
     return { verdict: "UNATTESTED-NATIVE", reasons: ["native-camera-no-attest"], computedSha, record };
@@ -50,7 +42,7 @@ export async function verifyBundle(bundle: ShieldBundle): Promise<VerifyResult> 
   // A hash match alone says nothing about the metadata (time, place, capture kind), so the record
   // must also authenticate against the signing device's key.
   if (!bundle.devicePublicKey) {
-    return { ...base, verdict: "ARRIVAL-ONLY", reasons: [...base.reasons, "record-unauthenticated"] };
+    return { ...base, verdict: "NO-ORIGIN", reasons: [...base.reasons, "record-unauthenticated"] };
   }
   const failed = await checkRecordAuth(bundle.record, bundle.devicePublicKey);
   if (failed.length) return { ...base, verdict: "TAMPERED", reasons: failed };

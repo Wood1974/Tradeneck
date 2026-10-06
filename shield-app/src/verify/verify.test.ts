@@ -4,38 +4,37 @@ import { sealFromBytes } from "../capture/capture";
 import type { SealRecord } from "../types";
 import { parseBundle, verdictFor, verifyBundle } from "./verify";
 
-function rec(captureKind: SealRecord["captureKind"], attestKind: SealRecord["attest"]["kind"] = "none"): SealRecord {
+function rec(captureKind: string, attestKind: SealRecord["attest"]["kind"] = "none"): SealRecord {
   return {
-    id: "r", createdAt: "2026-10-05T00:00:00.000Z", captureKind, platform: "web", jobId: null, checkpointId: null,
+    id: "r", createdAt: "2026-10-05T00:00:00.000Z", captureKind: captureKind as SealRecord["captureKind"], platform: "android", jobId: null, checkpointId: null,
     sha256: "a".repeat(64), prevChain: "0".repeat(64), chainHead: "1".repeat(64), bytes: 1, mime: "image/jpeg", gps: null, pinScore: null,
     deviceSealId: "X", attest: { kind: attestKind, boundHash: null, tokenPresent: attestKind !== "none" }, signature: "s",
   };
 }
 
 describe("verdictFor", () => {
-  it("never upgrades a browser capture to SEALED", () => {
-    const v = verdictFor(rec("web-camera"), "a".repeat(64));
-    expect(v.verdict).toBe("ARRIVAL-ONLY");
-    expect(v.reasons).toContain("web-camera-not-proven");
-  });
-  it("keeps arrival hash as ARRIVAL-ONLY", () => {
-    expect(verdictFor(rec("arrival-hash"), "a".repeat(64)).verdict).toBe("ARRIVAL-ONLY");
-  });
   it("does not call a native capture without attestation SEALED", () => {
     expect(verdictFor(rec("native-camera"), "a".repeat(64)).verdict).toBe("UNATTESTED-NATIVE");
     const attested = verdictFor(rec("native-camera", "app-attest"), "a".repeat(64));
     expect(attested.verdict).toBe("SEALED");
     expect(attested.reasons).toContain("attest-token-not-validated");
   });
-  it("flags a hash mismatch regardless of kind", () => {
-    expect(verdictFor(rec("web-camera"), "b".repeat(64)).verdict).toBe("TAMPERED");
+  it("rejects any record that is not a native camera capture", () => {
+    for (const kind of ["web-camera", "arrival-hash", "gallery", ""]) {
+      const v = verdictFor(rec(kind, "app-attest"), "a".repeat(64));
+      expect(v.verdict).toBe("NO-ORIGIN");
+      expect(v.reasons).toContain("unsupported-capture-kind");
+    }
+  });
+  it("flags a hash mismatch", () => {
+    expect(verdictFor(rec("native-camera"), "b".repeat(64)).verdict).toBe("TAMPERED");
   });
 });
 
 describe("verifyBundle", () => {
   async function sealed() {
     const bytes = new TextEncoder().encode(`photo ${Math.random()}`).buffer;
-    const item = await sealFromBytes(bytes, "image/jpeg", "web-camera", null);
+    const item = await sealFromBytes(bytes, "image/jpeg", null);
     return { item, originalB64: b64FromBytes(bytes), key: await devicePublicKeyRaw() };
   }
 
@@ -43,7 +42,7 @@ describe("verifyBundle", () => {
     const { item, originalB64, key } = await sealed();
     const r = await verifyBundle({ version: 1, record: item.record, originalB64: originalB64, devicePublicKey: key });
     expect(r.reasons).toContain("record-signature-valid");
-    expect(r.verdict).toBe("ARRIVAL-ONLY");
+    expect(r.verdict).toBe("UNATTESTED-NATIVE");
   });
 
   it("rejects edited metadata even though the photo bytes still match", async () => {
@@ -66,8 +65,8 @@ describe("verifyBundle", () => {
 
   it("marks a keyless bundle unauthenticated and never SEALED", async () => {
     const { item, originalB64 } = await sealed();
-    const r = await verifyBundle({ version: 1, record: { ...item.record, captureKind: "native-camera", attest: { kind: "app-attest", boundHash: null, tokenPresent: true } }, originalB64: originalB64 });
-    expect(r.verdict).toBe("ARRIVAL-ONLY");
+    const r = await verifyBundle({ version: 1, record: { ...item.record, attest: { kind: "app-attest", boundHash: null, tokenPresent: true } }, originalB64 });
+    expect(r.verdict).toBe("NO-ORIGIN");
     expect(r.reasons).toContain("record-unauthenticated");
   });
 

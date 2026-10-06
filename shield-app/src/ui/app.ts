@@ -251,9 +251,7 @@ function packetResultView(r: NonNullable<typeof packetOut>): string {
           ? rec.attest.kind === "none"
             ? `<span class="chip warn">NATIVE · NO ATTEST</span>`
             : `<span class="chip ok">NATIVE</span>`
-          : rec.captureKind === "web-camera"
-            ? `<span class="chip warn">WEB CAMERA</span>`
-            : `<span class="chip bad">NOT LIVE · FILE</span>`
+          : `<span class="chip bad">UNSUPPORTED</span>`
         : `<span class="chip bad">MISSING</span>`;
       return `<div class="slot"><div><div>${esc(pt.label)}</div><div class="meta">${esc(code)}${rec ? ` · ${esc(rec.sha256.slice(0, 16))}…` : ""}</div></div>${chip}</div>`;
     })
@@ -266,7 +264,7 @@ hash   ${esc(p.integrity.hash)}
 closed ${esc(p.closedAt)} by ${esc(p.closedBy.role)}
 job    ${esc(p.job.title || p.job.id)} · ${esc(p.job.trade)}
 signer ${esc(r.signer ?? "unknown")}
-photos native ${esc(p.counts.native)} · web ${esc(p.counts.web)} · arrival ${esc(p.counts.arrival)} · missing ${esc(p.counts.missing)}</pre>
+photos sealed ${esc(p.counts.sealed)} · missing ${esc(p.counts.missing)}</pre>
       <div class="slots">${points}</div>
       <p class="foot-note">${ok
         ? `Every record signature, chain link and the packet hash check out against the key in the file. That shows nothing changed after signing; it does not show who holds the key. Compare the signer ID with one you trust. Photo files are not in this record, so photos are not re-hashed here.`
@@ -379,7 +377,7 @@ function bind(): void {
         verifyOut = "NO-ORIGIN\nfile-unreadable";
         return;
       }
-      if ((raw as { schema?: unknown })?.schema === "tradedeck.shield.completion.v2") {
+      if ((raw as { schema?: unknown })?.schema === "tradedeck.shield.completion.v3") {
         try {
           const packet = parseCloseoutPacket(text);
           const expected = (document.getElementById("expected-signer") as HTMLInputElement | null)?.value.trim();

@@ -64,13 +64,12 @@ test("brief to sealed point to frozen record to verified packet", async ({ page 
 
   const text = await freeze(page);
   const packet = JSON.parse(text);
-  expect(packet.counts).toMatchObject({ points: 5, sealed: 1, missing: 4, native: 1, web: 0, arrival: 0 });
+  expect(packet.counts).toMatchObject({ points: 5, sealed: 1, missing: 4 });
   expect(packet.integrity.hash).toMatch(/^[0-9a-f]{64}$/);
 
   await verifyFile(page, text);
   await expect(page.locator(".card h2", { hasText: "Record consistent" })).toBeVisible();
   await expect(page.locator(".card .chip", { hasText: "PACKET-SEALED" })).toBeVisible();
-  await expect(page.locator("pre", { hasText: "non-live-captures" })).toHaveCount(0);
   await expect(page.locator(".foot-note", { hasText: "does not show who holds the key" })).toBeVisible();
 });
 

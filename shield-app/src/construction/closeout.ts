@@ -23,16 +23,8 @@ function pointsFor(job: Job, recordFor: CloseoutInput["recordFor"]): CloseoutPoi
 }
 
 function countsFor(points: CloseoutPoint[]): CloseoutBody["counts"] {
-  const kinds = points.flatMap((p) => (p.record ? [p.record.captureKind] : []));
-  const sealed = kinds.length;
-  return {
-    points: points.length,
-    sealed,
-    missing: points.length - sealed,
-    native: kinds.filter((k) => k === "native-camera").length,
-    web: kinds.filter((k) => k === "web-camera").length,
-    arrival: kinds.filter((k) => k === "arrival-hash").length,
-  };
+  const sealed = points.filter((p) => p.record).length;
+  return { points: points.length, sealed, missing: points.length - sealed };
 }
 
 export function missingPoints(job: Job, recordFor: CloseoutInput["recordFor"]): CloseoutPoint[] {
@@ -44,7 +36,7 @@ export async function buildCloseoutPacket(input: CloseoutInput): Promise<Closeou
   const points = pointsFor(job, input.recordFor);
   const body: CloseoutBody = {
     canonicalVersion: 1,
-    schema: "tradedeck.shield.completion.v2",
+    schema: PACKET_SCHEMA,
     closedAt: new Date().toISOString(),
     closedBy: { role: input.role },
     job: {
@@ -77,6 +69,8 @@ export interface PacketVerification {
   /** Seal ID derived from the packet's own public key. Compare it with an ID you trust. */
   signer: string | null;
 }
+
+const PACKET_SCHEMA: CloseoutBody["schema"] = "tradedeck.shield.completion.v3";
 
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
@@ -111,6 +105,7 @@ export async function verifyCloseoutPacket(packet: CloseoutPacket, expectedSigne
     if (!r) continue;
     records.push(r);
     for (const f of await checkRecordAuth(r, body.devicePublicKey)) reasons.push(`${p.id}:${f}`);
+    if ((r.captureKind as string) !== "native-camera") reasons.push(`${p.id}:unsupported-capture-kind`);
     if (r.jobId !== body.job.id) reasons.push(`${p.id}:record-wrong-job`);
     if (r.checkpointId !== p.id) reasons.push(`${p.id}:record-wrong-checkpoint`);
   }
@@ -140,7 +135,6 @@ export async function verifyCloseoutPacket(packet: CloseoutPacket, expectedSigne
       "signature-valid",
       `${records.length} record signature(s) valid`,
       expectedSigner ? "signer-pinned" : "signer-not-independently-verified",
-      ...(body.counts.arrival > 0 ? [`non-live-captures:${body.counts.arrival}`] : []),
     ],
     signer,
   };
@@ -152,7 +146,7 @@ export function parseCloseoutPacket(text: string): CloseoutPacket {
   if (text.length > MAX_PACKET_BYTES) throw new Error("file-too-large");
   const raw = JSON.parse(text) as CloseoutPacket;
   if (
-    raw?.schema !== "tradedeck.shield.completion.v2" ||
+    raw?.schema !== PACKET_SCHEMA ||
     !raw.integrity ||
     !Array.isArray(raw.points) ||
     typeof raw.closedAt !== "string" ||

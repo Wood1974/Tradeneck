@@ -8,7 +8,7 @@ const ZERO = "0".repeat(64);
 
 async function signedRecord(id: string, sha: string, o: { prev?: string; checkpointId?: string; createdAt?: string; jobId?: string } = {}): Promise<SealRecord> {
   const unsigned = {
-    id, createdAt: o.createdAt ?? "2026-10-04T00:00:00.000Z", captureKind: "arrival-hash" as const, platform: "web" as const,
+    id, createdAt: o.createdAt ?? "2026-10-04T00:00:00.000Z", captureKind: "native-camera" as const, platform: "android" as const,
     jobId: o.jobId ?? "job-1", checkpointId: o.checkpointId ?? "construction-1", sha256: sha, prevChain: o.prev ?? ZERO, bytes: 10,
     mime: "image/jpeg", gps: null, pinScore: null, deviceSealId: await deviceSealId(),
     attest: { kind: "none" as const, boundHash: null, tokenPresent: false },
@@ -56,14 +56,13 @@ describe("buildCloseoutPacket", () => {
     const p = await build({ "shot-1": r1 });
     const { integrity, ...body } = p;
     expect(integrity.hash).toBe(await sha256Text(stableStringify(body)));
-    expect(p.counts).toEqual({ points: 5, sealed: 1, missing: 4, native: 0, web: 0, arrival: 1 });
+    expect(p.counts).toEqual({ points: 5, sealed: 1, missing: 4 });
     expect(p.points[0]!.record?.sha256).toBe("a".repeat(64));
     expect(p.points[1]!.code?.irc).toBe("R403.1.1");
     const v = await verifyCloseoutPacket(p);
     expect(v.verdict).toBe("PACKET-SEALED");
     expect(v.signer).toBe(await deviceSealId());
     expect(v.reasons).toContain("signer-not-independently-verified");
-    expect(v.reasons).toContain("non-live-captures:1");
   });
 
   it("is key-order independent", async () => {
@@ -89,7 +88,7 @@ describe("buildCloseoutPacket", () => {
   it("rejects non-packets, oversize files and wrong field types", () => {
     expect(() => parseCloseoutPacket('{"version":1}')).toThrow("bad-packet");
     expect(() => parseCloseoutPacket("x".repeat(11 * 1024 * 1024))).toThrow("file-too-large");
-    expect(() => parseCloseoutPacket('{"schema":"tradedeck.shield.completion.v2","integrity":{},"points":[],"closedAt":"x","closedBy":null}')).toThrow("bad-packet");
+    expect(() => parseCloseoutPacket('{"schema":"tradedeck.shield.completion.v3","integrity":{},"points":[],"closedAt":"x","closedBy":null}')).toThrow("bad-packet");
   });
 });
 
@@ -163,9 +162,21 @@ describe("verifyCloseoutPacket rejects forgeries", () => {
     expect(v.reasons).toContain("closed-before-capture");
   });
 
+  it("rejects records that are not native camera captures, even when validly signed", async () => {
+    for (const kind of ["web-camera", "arrival-hash"]) {
+      const r = { ...(await signedRecord("shot-1", "a".repeat(64))), captureKind: kind as "native-camera" };
+      const { chainHead: _h, signature: _s, ...unsigned } = r;
+      const rehead = await chainStep(unsigned.prevChain, await sha256Text(stableStringify(unsigned)));
+      const resigned = { ...unsigned, chainHead: rehead, signature: await signPayload({ ...unsigned, chainHead: rehead }) };
+      const v = await verifyCloseoutPacket(await build({ "shot-1": resigned }));
+      expect(v.verdict).toBe("PACKET-TAMPERED");
+      expect(v.reasons).toContain("construction-1:unsupported-capture-kind");
+    }
+  });
+
   it("rejects a wrong counts block", async () => {
     const p = clone(await build({ "shot-1": await signedRecord("shot-1", "a".repeat(64)) }));
-    p.counts.arrival = 5;
+    p.counts.sealed = 5;
     const v = await verifyCloseoutPacket(await resign(p));
     expect(v.reasons).toContain("counts-mismatch");
   });

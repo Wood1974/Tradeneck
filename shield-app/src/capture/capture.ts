@@ -8,7 +8,7 @@ import {
   stableStringify,
 } from "../crypto/seal";
 import { activeJobId, chainHead, commitSeal, getJob } from "../store/db";
-import type { CaptureKind, SealRecord, VaultItem } from "../types";
+import type { SealRecord, VaultItem } from "../types";
 
 export type CaptureError =
   | "not-native"
@@ -119,39 +119,23 @@ let sealQueue: Promise<unknown> = Promise.resolve();
 
 // Seals must run one at a time: each reads the chain head and writes the next one, and a GPS wait
 // sits in between. Without this, overlapping seals fork the chain and overwrite each other's job edits.
-export function sealFromBytes(
-  bytes: ArrayBuffer,
-  mime: string,
-  kind: CaptureKind,
-  checkpointId: string | null,
-): Promise<VaultItem> {
-  const run = sealQueue.then(() => sealLocked(bytes, mime, kind, checkpointId));
+export function sealFromBytes(bytes: ArrayBuffer, mime: string, checkpointId: string | null): Promise<VaultItem> {
+  const run = sealQueue.then(() => sealLocked(bytes, mime, checkpointId));
   sealQueue = run.catch(() => undefined);
   return run;
 }
 
-async function sealLocked(
-  bytes: ArrayBuffer,
-  mime: string,
-  kind: CaptureKind,
-  checkpointId: string | null,
-): Promise<VaultItem> {
+async function sealLocked(bytes: ArrayBuffer, mime: string, checkpointId: string | null): Promise<VaultItem> {
   const createdAt = new Date().toISOString();
   const sha = await sha256Bytes(bytes);
-  // Arrival-hash proves only when a file was hashed, not where it was taken, so no location is attached.
-  const [prev, jobId, gps, device] = await Promise.all([
-    chainHead(),
-    activeJobId(),
-    kind === "arrival-hash" ? Promise.resolve(null) : readGps(),
-    deviceSealId(),
-  ]);
+  const [prev, jobId, gps, device] = await Promise.all([chainHead(), activeJobId(), readGps(), deviceSealId()]);
   const job = jobId ? await getJob(jobId) : undefined;
   const attest = await attestPhotoHash(sha);
 
   const unsigned = {
     id: uid(),
     createdAt,
-    captureKind: kind,
+    captureKind: "native-camera" as const,
     platform: detectPlatform(),
     jobId: job?.id ?? null,
     checkpointId: checkpointId && job?.checkpoints.some((c) => c.id === checkpointId) ? checkpointId : null,
@@ -186,6 +170,6 @@ export async function captureNative(checkpointId: string | null, direction: "bac
   if (!isNativeOriginAvailable()) return { error: "not-native" };
   const still = await capacitorStill(direction);
   if ("error" in still) return still;
-  const item = await sealFromBytes(still.bytes, still.mime, "native-camera", checkpointId);
+  const item = await sealFromBytes(still.bytes, still.mime, checkpointId);
   return { item };
 }

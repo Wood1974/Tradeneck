@@ -160,9 +160,7 @@ function pointsView(ctx: ConstructionCtx, job: Job | undefined): string {
       const chip = rec
         ? rec.captureKind === "native-camera"
           ? (rec.attest.kind === "none" ? `<span class="chip warn">NATIVE · NO ATTEST</span>` : `<span class="chip ok">NATIVE</span>`)
-          : rec.captureKind === "web-camera"
-            ? `<span class="chip warn">WEB CAMERA</span>`
-            : `<span class="chip bad">NOT LIVE · FILE</span>`
+          : `<span class="chip bad">UNSUPPORTED</span>`
         : `<span class="chip">EMPTY</span>`;
       const code = c.code
         ? `${c.code.irc ? "IRC " + esc(c.code.irc) : c.code.ibc ? "IBC " + esc(c.code.ibc) : ""} · ${esc(c.code.name)}`
@@ -495,5 +493,5 @@ async function onAct(ctx: ConstructionCtx, act: string): Promise<void> {
 export async function restoreLastPacket(jobId: string | null): Promise<void> {
   if (!jobId) return;
   const packet = (await getCloseout(jobId)) as CloseoutPacket | undefined;
-  if (packet?.schema === "tradedeck.shield.completion.v2") lastPacket = packet;
+  if (packet?.schema === "tradedeck.shield.completion.v3") lastPacket = packet;
 }
