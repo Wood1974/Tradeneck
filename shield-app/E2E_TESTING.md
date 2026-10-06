@@ -6,7 +6,7 @@ test pretends to be the Android app. Everything after the camera (hash, chain, s
 code. The real Capacitor camera path is not exercised here. `npm run check:bundle` (run in CI) fails if the stand-in
 appears in the production `dist/`.
 
-## What is covered (9 tests)
+## What is covered (11 tests)
 
 | Test | Proves |
 |---|---|
@@ -16,6 +16,8 @@ appears in the production `dist/`.
 | a double tap on SEAL FRAME seals exactly one photo | the in-flight guard; fails if the guard is removed |
 | a sealed photo rehashes clean and survives a reload | record authenticates; vault persists across reload |
 | back is the default, front can be chosen | the toggle changes the direction passed to the camera |
+| the one-tap camera button is on every tab | present on all five tabs, seals without leaving the tab, VIEW opens the record |
+| a double tap on the one-tap button seals one photo | the in-flight guard applies to it too |
 | a denied camera seals nothing | an error shows and the vault stays empty |
 | a browser cannot capture | no capture button, video, gallery or file path; SEAL in a browser seals nothing and opens no picker |
 | the whole workflow makes no network requests | runs offline (`context.setOffline(true)`) and asserts zero requests |

@@ -94,6 +94,8 @@ export function render(): void {
       <button class="${tab === "verify" ? "on" : ""}" data-tab="verify">Verify</button>
       <button class="${tab === "construction" ? "on" : ""}" data-tab="construction">Build</button>
     </nav>
+    ${toast ? `<div class="toast" role="status"><span>${esc(toast.text)}</span><button data-act="toast-view">VIEW</button></div>` : ""}
+    ${native ? `<button class="fab" data-act="quick-capture" aria-label="Take a photo" title="Take a photo"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>` : ""}
     <input class="hidden-file" id="file-bundle" type="file" accept="application/json,.json,.shield.json,.shield-record.json" />
   `;
   bind();
@@ -296,6 +298,7 @@ function bind(): void {
       tab = (el as HTMLElement).dataset.tab as Tab;
       specOpen = false;
       status = "";
+      toast = null;
       render();
     });
   });
@@ -430,6 +433,7 @@ async function openVault(id: string | null): Promise<void> {
 }
 
 let sealing = false;
+let toast: { text: string; id: string } | null = null;
 
 function sealError(err: unknown): string {
   if (err instanceof DOMException && err.name === "QuotaExceededError") return "Storage full. Export your records and free space, then retry.";
@@ -510,6 +514,41 @@ async function onAct(act: string): Promise<void> {
       status = res.item.record.attest.kind === "none" ? "Sealed on this device · no platform attestation" : "Sealed · platform attestation claimed";
       render();
     });
+    return;
+  }
+  if (act === "quick-capture") {
+    await guarded(async () => {
+      const res = await captureNative(null, facing === "user" ? "front" : "back");
+      if ("error" in res) {
+        toast = { text: captureErrorText(res.error), id: "" };
+      } else {
+        await reload();
+        const rec = res.item.record;
+        toast = {
+          text: `Sealed ${rec.sha256.slice(0, 8)} · ${rec.attest.kind === "none" ? "no platform attestation" : "attestation claimed"}`,
+          id: rec.id,
+        };
+      }
+      render();
+      const shown = toast;
+      // Remove the node directly rather than re-rendering, so a dismissal never steals focus from a form.
+      setTimeout(() => {
+        if (toast === shown) {
+          toast = null;
+          document.querySelector(".toast")?.remove();
+        }
+      }, 8000);
+    });
+    return;
+  }
+  if (act === "toast-view") {
+    const id = toast?.id;
+    toast = null;
+    if (id) {
+      await openVault(id);
+      tab = "vault";
+    }
+    render();
     return;
   }
   if (act === "cam-flip") {

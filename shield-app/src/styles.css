@@ -31,7 +31,7 @@ button { cursor: pointer; }
 .spec-btn { background: none; border: 0; letter-spacing: 0.2em; font-size: 11px; padding: 0 8px; min-height: 44px; }
 .seal-id { font-size: 9px; color: var(--muted); letter-spacing: 0.08em; margin-top: 4px; }
 
-main { flex: 1; padding: 14px 16px 88px; }
+main { flex: 1; padding: 14px 16px 150px; }
 .banner {
   background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
   padding: 12px 14px; font-size: 13px; color: var(--muted);
@@ -144,3 +144,20 @@ pre {
 .code-row.on { border-color: var(--mint); }
 .code-row:disabled { cursor: default; opacity: 0.9; }
 
+
+.fab {
+  position: fixed; z-index: 20; width: 56px; height: 56px; border-radius: 50%; border: 0;
+  right: max(16px, calc(50% - 215px + 16px)); bottom: calc(76px + env(safe-area-inset-bottom));
+  background: var(--mint); color: #141814; display: grid; place-items: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+.fab:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.fab[disabled] { opacity: 0.6; }
+.toast {
+  position: fixed; z-index: 20; left: 16px; right: 16px; max-width: 398px; margin: 0 auto;
+  bottom: calc(144px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: #1b211b; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px;
+  font-size: 13px; color: var(--text);
+}
+.toast button { background: none; border: 0; color: var(--mint); font-size: 12px; letter-spacing: 0.12em; min-height: 44px; padding: 0 8px; }

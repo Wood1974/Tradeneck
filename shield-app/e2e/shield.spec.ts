@@ -134,6 +134,40 @@ test("back camera is the default and the front camera can be chosen", async ({ p
   expect(await page.evaluate(() => (window as unknown as TestWindow).__shieldCalls)).toEqual(["back", "front"]);
 });
 
+test("a one-tap camera button is on every tab and seals without leaving the tab", async ({ page }) => {
+  await asNativeApp(page);
+  await page.goto("/");
+  for (const tab of ["capture", "jobs", "vault", "verify", "construction"]) {
+    await page.click(`[data-tab="${tab}"]`);
+    await expect(page.locator('[data-act="quick-capture"]')).toBeVisible();
+  }
+  await page.click('[data-tab="jobs"]');
+  await page.click('[data-act="quick-capture"]');
+  await expect(page.locator(".toast")).toContainText("Sealed");
+  await expect(page.locator('[data-tab="jobs"]')).toHaveClass(/on/);
+  await expect(page.locator(".thumb")).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as TestWindow).__shieldCalls)).toEqual(["back"]);
+
+  await page.click('[data-act="toast-view"]');
+  await expect(page.locator(".thumb")).toBeVisible();
+});
+
+test("a double tap on the one-tap camera button seals exactly one photo", async ({ page }) => {
+  await asNativeApp(page);
+  await page.goto("/");
+  await page.click('[data-tab="verify"]');
+  await page.locator('[data-act="quick-capture"]').waitFor();
+  await page.evaluate(() => {
+    const b = document.querySelector<HTMLButtonElement>('[data-act="quick-capture"]')!;
+    b.click();
+    b.click();
+  });
+  await expect(page.locator(".toast")).toContainText("Sealed");
+  expect(await page.evaluate(() => (window as unknown as TestWindow).__shieldCalls.length)).toBe(1);
+  await page.click('[data-tab="vault"]');
+  await expect(page.locator("[data-open]")).toHaveCount(1);
+});
+
 test("a denied camera seals nothing", async ({ page }) => {
   await asNativeApp(page);
   await page.addInitScript(() => {
@@ -151,7 +185,7 @@ test("a denied camera seals nothing", async ({ page }) => {
 test("a browser cannot capture: no camera, gallery or file path exists", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("h1", { hasText: "Capture needs the app" })).toBeVisible();
-  for (const sel of ['[data-act="native"]', '[data-act="webcam"]', '[data-act="arrival"]', '[data-act="shutter"]', "#file-arrival", "video"]) {
+  for (const sel of ['[data-act="native"]', '[data-act="quick-capture"]', '[data-act="webcam"]', '[data-act="arrival"]', '[data-act="shutter"]', "#file-arrival", "video"]) {
     await expect(page.locator(sel)).toHaveCount(0);
   }
   // The only file input is the Verify tab's record importer, which cannot create a seal.
