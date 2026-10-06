@@ -2,12 +2,14 @@ import type { CodeRef, TradeId } from "../types";
 
 export type CodeTrade = "Framing" | "Roofing" | "Electrical" | "Plumbing" | "HVAC" | "Concrete" | "General";
 
-/** Every section number below was checked against the 2021 IRC text (adopted statewide in Utah). */
+/** The model-code edition the section numbers below refer to. Utah adopts it with state amendments, so Utah's own text can differ. */
 export const CODE_EDITION = "2021 IRC";
 
 /**
- * Bundled locally so the Codes view and code suggestions work with no network. Citation numbers, topics and
- * the numbers quoted in descriptions come from the published code text; keep them that way when editing.
+ * Bundled locally so the Codes view and code suggestions work with no network. Section numbers, topics and the
+ * figures in descriptions were taken from ICC's published 2021 IRC text, relayed through research notes rather than
+ * read first-hand, and no inspector has reviewed them. Descriptions are summaries, not code text. Utah's own
+ * amendments to these specific sections have not been checked. Keep figures tied to a source when editing.
  * (The tradedeck-api seed migration still carries the older, uncorrected rows.)
  */
 export interface CodeCheckpoint {

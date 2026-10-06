@@ -203,7 +203,7 @@ function codesView(job: Job | undefined): string {
   }).join("");
   return `
     <div class="banner"><strong>${picking ? `ASSIGN CODE TO “${esc(picking.label).toUpperCase()}”` : "IRC / IBC CHECKPOINTS"}</strong>
-      ${picking ? "Tap a section to attach it to the point." : `${CODE_EDITION} section numbers (adopted statewide in Utah) tied to what should be photographed before concealment. Reference only: confirm with your inspector, since local amendments can differ.`}
+      ${picking ? "Tap a section to attach it to the point." : `${CODE_EDITION} section numbers tied to what should be photographed before concealment. Utah adopts the 2021 IRC with state amendments, so Utah's text can differ. Summaries only, not code text: confirm with your inspector.`}
       <div>${trade ? `<button data-act="c-toggle-codes">${showAllCodes ? `Only ${esc(labelForTrade(trade))}` : "All trades"}</button>` : ""}
       ${picking ? `<button data-act="c-clear-code">No code for this point</button> <button data-act="c-cancel-pick">Cancel</button>` : ""}</div>
     </div>
