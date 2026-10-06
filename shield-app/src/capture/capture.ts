@@ -160,6 +160,11 @@ export async function captureNative(checkpointId: string | null): Promise<Captur
   return { item };
 }
 
+export async function sealWebCameraFrame(blob: Blob, checkpointId: string | null): Promise<VaultItem> {
+  const buf = await blob.arrayBuffer();
+  return sealFromBytes(buf, blob.type || "image/jpeg", "web-camera", checkpointId);
+}
+
 export async function arrivalHashFile(file: File, checkpointId: string | null): Promise<VaultItem> {
   const buf = await file.arrayBuffer();
   const mime = file.type || "application/octet-stream";

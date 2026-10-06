@@ -43,7 +43,7 @@ seals report `attest: none` and the Verify verdict is `SEALED` with
 
 | Tab | What it does |
 |---|---|
-| **Capture** | Rear camera on native (`@capacitor/camera`), arrival hash on web. Every photo: SHA-256 of the bytes → hash chain (`prevChain` → `chainHead`) → ECDSA P-256 signature with this device's key (IndexedDB, non-extractable). |
+| **Capture** | Rear camera on native (`@capacitor/camera`). On the web: **OPEN CAMERA** (live `getUserMedia` preview + shutter, sealed as `web-camera`; falls back to the phone's camera app via `capture="environment"` when the in-page camera is blocked) or **ARRIVAL HASH** (any existing file). Every photo: SHA-256 of the bytes → hash chain (`prevChain` → `chainHead`) → ECDSA P-256 signature with this device's key (IndexedDB, non-extractable). |
 | **Jobs** | Lock a generic pack (remodel / draw / unit / loss / shop / custom) — industry-agnostic checkpoints with an optional GPS pin and a fee tier. |
 | **Vault** | Originals stay on device. REHASH recomputes the SHA-256; EXPORT writes a `.shield.json` bundle (record + original). |
 | **Verify** | Drop a photo bundle (`.shield.json`) → recomputes the hash of the embedded original: `SEALED` / `TAMPERED` / `ARRIVAL-ONLY` / `NO-ORIGIN`. Drop a close-out record (`.shield-record.json`) → recomputes its hash and checks the device signature with the embedded public key: `PACKET-SEALED` / `PACKET-TAMPERED`, with per-point status. |
@@ -65,4 +65,4 @@ A photo sealed against a construction point is the same forensic `SealRecord` as
 ## What the packet proves / does not prove
 
 - Proves: these photo bytes existed on this device at the recorded time, in this order, and neither the photos nor the brief/points/notes changed since the packet was frozen.
-- Does not prove: camera vs. gallery on web (`ARRIVAL-ONLY`), GPS truthfulness, or that the scene was not staged. Native App Attest / Play Integrity (`src/native/`) is the path to origin proof and is wired but not yet backed by a plugin.
+- Does not prove: that a web capture came from a physical camera (`web-camera` and `arrival-hash` both verify as `ARRIVAL-ONLY`), GPS truthfulness, or that the scene was not staged. Native App Attest / Play Integrity (`src/native/`) is the path to origin proof and is wired but not yet backed by a plugin.
