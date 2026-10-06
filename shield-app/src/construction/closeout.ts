@@ -1,3 +1,4 @@
+import { esc } from "../esc";
 import { checkRecordAuth } from "../crypto/record";
 import { devicePublicKeyRaw, deviceSealId, sealIdForPublicKey, sha256Text, signPayload, stableStringify, verifySignature } from "../crypto/seal";
 import type { CloseoutBody, CloseoutPacket, CloseoutPoint, Job, SealRecord } from "../types";
@@ -165,10 +166,6 @@ export function parseCloseoutPacket(text: string): CloseoutPacket {
   return raw;
 }
 
-function esc(s: unknown): string {
-  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-}
-
 export function packetToHtml(packet: CloseoutPacket): string {
   const pts = packet.points
     .map((p) => {
@@ -221,27 +218,4 @@ export function downloadPacketFiles(packet: CloseoutPacket, html: boolean): stri
   download(`${base}.shield-record.json`, new Blob([JSON.stringify(packet, null, 2)], { type: "application/json" }));
   if (html) download(`${base}.html`, new Blob([packetToHtml(packet)], { type: "text/html" }));
   return base;
-}
-
-interface SupabaseLike {
-  auth: { getSession(): Promise<{ data: { session: { access_token: string } | null } }> };
-}
-
-/** Optional. Only runs when a signed-in Supabase client is present; the packet never depends on it. */
-export async function submitCloseout(packet: CloseoutPacket, apiBase: string): Promise<{ ok: boolean; error: string | null }> {
-  const sb = (globalThis as unknown as { sb?: SupabaseLike }).sb;
-  if (!sb?.auth) return { ok: false, error: "not-signed-in" };
-  try {
-    const { data } = await sb.auth.getSession();
-    if (!data.session) return { ok: false, error: "not-signed-in" };
-    const res = await fetch(`${apiBase.replace(/\/$/, "")}/shield/complete-job`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${data.session.access_token}` },
-      body: JSON.stringify({ packet, notify_admin: true }),
-    });
-    if (!res.ok) return { ok: false, error: `${res.status}` };
-    return { ok: true, error: null };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "network" };
-  }
 }

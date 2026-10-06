@@ -1,5 +1,6 @@
 import { codesForTrade, CODE_CHECKPOINTS, CODE_TRADE_ORDER, toCodeRef, type CodeCheckpoint } from "../construction/codes";
-import { buildCloseoutPacket, downloadPacketFiles, missingPoints, submitCloseout } from "../construction/closeout";
+import { esc } from "../esc";
+import { buildCloseoutPacket, downloadPacketFiles, missingPoints } from "../construction/closeout";
 import { generatePoints, lockedNarrative } from "../construction/points";
 import { neededQuestions, type Question } from "../construction/questions";
 import { BRIEF_READY_SCORE, scoreBrief } from "../construction/score";
@@ -20,7 +21,6 @@ export interface ConstructionCtx {
 type CView = "brief" | "points" | "codes" | "close";
 type Phase = "intake" | "questions";
 
-const API_BASE = "https://tradedeck-api.onrender.com";
 const DRAFT_KEY = "construction:draft";
 
 const BUDGET_USD: Record<BudgetBand, number> = { "": 0, under15: 5000, "15to50": 20000, over50: 50000 };
@@ -58,10 +58,6 @@ function saveDraft(): void {
 function activeConstructionJob(ctx: ConstructionCtx): Job | undefined {
   const job = ctx.jobs().find((j) => j.id === ctx.activeId());
   return job?.pack === "construction" ? job : undefined;
-}
-
-function esc(s: unknown): string {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
 function opt(value: string, label: string, current: string): string {
@@ -163,7 +159,7 @@ function pointsView(ctx: ConstructionCtx, job: Job | undefined): string {
       const rec = c.shotId ? vault.find((v) => v.record.id === c.shotId)?.record : undefined;
       const chip = rec
         ? rec.captureKind === "native-camera"
-          ? `<span class="chip ok">SEALED</span>`
+          ? (rec.attest.kind === "none" ? `<span class="chip warn">NATIVE · NO ATTEST</span>` : `<span class="chip ok">NATIVE</span>`)
           : rec.captureKind === "web-camera"
             ? `<span class="chip warn">WEB CAMERA</span>`
             : `<span class="chip warn">ARRIVAL-ONLY</span>`
@@ -238,7 +234,6 @@ function closeView(ctx: ConstructionCtx, job: Job | undefined): string {
   }
   const vault = ctx.vault();
   const missing = missingPoints(job, (id) => vault.find((v) => v.record.id === id)?.record);
-  const hasSb = Boolean((globalThis as { sb?: unknown }).sb);
   const packet = lastPacket && lastPacket.job.id === job.id ? lastPacket : null;
   return `
     <div class="banner"><strong>FREEZE A LOCKTIGHT RECORD</strong>Brief, 5 points, every sealed photo's hash and signature, counts and notes — hashed and signed by this device. The record stays on this device unless you send it.
@@ -262,7 +257,6 @@ ${packet.counts.sealed}/${packet.counts.points} sealed · ${packet.counts.missin
 device ${esc(packet.deviceSealId)}</pre>
       <div class="actions">
         <button class="btn small ghost" data-act="c-download">DOWNLOAD AGAIN</button>
-        ${hasSb ? `<button class="btn small ghost" data-act="c-send">SEND TO ADMIN</button>` : ""}
       </div>
     </div>` : ""}
   `;
@@ -495,13 +489,6 @@ async function onAct(ctx: ConstructionCtx, act: string): Promise<void> {
   if (act === "c-download" && lastPacket) {
     downloadPacketFiles(lastPacket, downloadHtml);
     return;
-  }
-  if (act === "c-send" && lastPacket) {
-    closeStatus = "Sending to admin…";
-    ctx.render();
-    const res = await submitCloseout(lastPacket, API_BASE);
-    closeStatus = res.ok ? "Admin copy sent." : `Not sent (${res.error}). The record on this device is unchanged.`;
-    ctx.render();
   }
 }
 

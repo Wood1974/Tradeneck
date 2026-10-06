@@ -3,16 +3,17 @@
 Capacitor 6 + Vite + TypeScript. No framework. Runs as a web page for development
 and wraps to iOS/Android with `npx cap add ios|android`.
 
-**Everything below works with no network.** The only outbound call in the app is
-the optional "Send to admin" button on the Close view, and it is a no-op unless a
-signed-in Supabase client exists on `window.sb`.
+**Everything below works with no network.** The app makes no outbound calls; an
+end-to-end test runs the brief, seal, close and verify flow with the browser offline
+and asserts no requests are made.
 
 ## Run
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # vitest: engine, close-out packet, capture chain
+npm test           # vitest: engine, packet/bundle verification, capture chain, DB migration
+npm run test:e2e   # Playwright against the production build (see E2E_TESTING.md)
 npm run build      # tsc --noEmit + vite build → dist/
 npm run cap:init   # only if ios/ and android/ are missing (they are committed)
 npm run cap:sync   # copy dist/ into the native shells

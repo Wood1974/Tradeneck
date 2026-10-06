@@ -1,3 +1,4 @@
+import { esc } from "../esc";
 import { arrivalHashFile, captureNative, sealWebCameraFrame } from "../capture/capture";
 import { b64FromBytes, devicePublicKeyRaw, deviceSealId } from "../crypto/seal";
 import { makeCheckpoints, PACK_ORDER } from "../packs";
@@ -703,6 +704,3 @@ async function onAct(act: string): Promise<void> {
   }
 }
 
-function esc(s: unknown): string {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-}
