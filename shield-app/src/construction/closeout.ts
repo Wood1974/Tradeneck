@@ -1,4 +1,5 @@
 import { esc } from "../esc";
+import { isNativeOriginAvailable } from "../platform";
 import { checkRecordAuth } from "../crypto/record";
 import { devicePublicKeyRaw, deviceSealId, sealIdForPublicKey, sha256Text, signPayload, stableStringify, verifySignature } from "../crypto/seal";
 import type { CloseoutBody, CloseoutPacket, CloseoutPoint, Job, SealRecord } from "../types";
@@ -204,7 +205,31 @@ ${packet.notes ? `<h2>Close notes</h2><pre>${esc(packet.notes)}</pre>` : ""}
 </body></html>`;
 }
 
-export function download(filename: string, blob: Blob): void {
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+
+// WebViews in the iOS/Android shells do not save `<a download>` files, so native hands the file to the share sheet.
+async function shareNative(filename: string, blob: Blob): Promise<void> {
+  const [{ Filesystem, Directory }, { Share }] = await Promise.all([import("@capacitor/filesystem"), import("@capacitor/share")]);
+  const { uri } = await Filesystem.writeFile({ path: filename, data: await blobToBase64(blob), directory: Directory.Cache });
+  await Share.share({ title: filename, url: uri });
+}
+
+export async function download(filename: string, blob: Blob): Promise<void> {
+  if (isNativeOriginAvailable()) {
+    try {
+      await shareNative(filename, blob);
+      return;
+    } catch {
+      // Plugin missing from this build or share cancelled: fall through to the browser path.
+    }
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -213,9 +238,9 @@ export function download(filename: string, blob: Blob): void {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-export function downloadPacketFiles(packet: CloseoutPacket, html: boolean): string {
+export async function downloadPacketFiles(packet: CloseoutPacket, html: boolean): Promise<string> {
   const base = `shield-record_${packet.job.id.slice(0, 8)}_${packet.closedAt.replace(/[:.]/g, "-")}`;
-  download(`${base}.shield-record.json`, new Blob([JSON.stringify(packet, null, 2)], { type: "application/json" }));
-  if (html) download(`${base}.html`, new Blob([packetToHtml(packet)], { type: "text/html" }));
+  await download(`${base}.shield-record.json`, new Blob([JSON.stringify(packet, null, 2)], { type: "application/json" }));
+  if (html) await download(`${base}.html`, new Blob([packetToHtml(packet)], { type: "text/html" }));
   return base;
 }

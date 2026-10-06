@@ -127,7 +127,7 @@ function captureView(native: boolean, job: Job | undefined): string {
     : `<div class="icon-aperture"><span></span></div>
       <h1>${native ? "Native camera" : "Browser camera"}</h1>
       <p class="lede">${native
-        ? "Rear camera only. Hash on arrival. Attest binds later."
+        ? "Rear camera only. Hash on arrival. Platform attestation is not implemented in this build."
         : "Live sensor, hashed at the shutter. Camera vs. virtual device is not proven on web."}</p>
       <div class="actions">
         <button class="btn" data-act="${native ? "native" : "webcam"}">${native ? "SEAL FRAME" : "OPEN CAMERA"}</button>
@@ -299,7 +299,7 @@ function specView(): string {
         standard $79 · extended $129 · major $199 · ${PRICING_EFFECTIVE}
       </div>
     </div>
-    <p class="foot-note">Copy is a placeholder. Decide wording after you run the paths.</p>
+    <p class="foot-note">Records are tamper-evident, not identity-proof: a packet shows nothing changed after signing, not who signed it.</p>
     <button class="btn ghost" data-act="spec" style="margin-top:12px">CLOSE</button>
   `;
 }
@@ -696,7 +696,7 @@ async function onAct(act: string): Promise<void> {
     }
     const bundle = { version: 1 as const, record: item.record, originalB64: b64FromBytes(bytes), devicePublicKey: await devicePublicKeyRaw() };
     const stamp = item.record.createdAt.replace(/[:.]/g, "-");
-    download(`shield-photo_${item.record.id.slice(0, 8)}_${stamp}.shield.json`, new Blob([JSON.stringify(bundle)], { type: "application/json" }));
+    await download(`shield-photo_${item.record.id.slice(0, 8)}_${stamp}.shield.json`, new Blob([JSON.stringify(bundle)], { type: "application/json" }));
     return;
   }
   if (act === "pick-bundle") {

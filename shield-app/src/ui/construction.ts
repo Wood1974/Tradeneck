@@ -478,7 +478,7 @@ async function onAct(ctx: ConstructionCtx, act: string): Promise<void> {
       await putJob(job);
       await ctx.reload();
       lastPacket = packet;
-      downloadPacketFiles(packet, downloadHtml);
+      await downloadPacketFiles(packet, downloadHtml);
       closeStatus = `Record frozen. Hash ${packet.integrity.hash.slice(0, 12)}… saved on this device and downloaded.`;
     } catch (err) {
       closeStatus = err instanceof Error ? err.message : "Could not build packet.";
@@ -487,7 +487,7 @@ async function onAct(ctx: ConstructionCtx, act: string): Promise<void> {
     return;
   }
   if (act === "c-download" && lastPacket) {
-    downloadPacketFiles(lastPacket, downloadHtml);
+    await downloadPacketFiles(lastPacket, downloadHtml);
     return;
   }
 }
