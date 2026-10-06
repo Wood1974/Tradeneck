@@ -140,6 +140,7 @@ export async function verifyCloseoutPacket(packet: CloseoutPacket, expectedSigne
       "signature-valid",
       `${records.length} record signature(s) valid`,
       expectedSigner ? "signer-pinned" : "signer-not-independently-verified",
+      ...(body.counts.arrival > 0 ? [`non-live-captures:${body.counts.arrival}`] : []),
     ],
     signer,
   };

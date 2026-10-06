@@ -3,7 +3,7 @@
 Playwright drives the production build (`vite build` + `vite preview`) in Chromium with a fake camera
 (`--use-fake-device-for-media-stream`). Everything is in `e2e/shield.spec.ts`; there is no mocking of the app.
 
-## What is covered (6 tests)
+## What is covered (9 tests)
 
 | Test | Proves |
 |---|---|
@@ -11,7 +11,10 @@ Playwright drives the production build (`vite build` + `vite preview`) in Chromi
 | an edited packet is reported as altered | changing a field after signing gives `PACKET-TAMPERED` / `hash-mismatch` |
 | pinning the wrong signer fails | a valid packet is rejected when the expected seal ID does not match |
 | a double tap on the shutter seals exactly one photo | the in-flight guard; fails if the guard is removed |
-| arrival-hash seal rehashes clean and survives a reload | record authenticates; vault persists across reload |
+| camera seal rehashes clean and survives a reload | record authenticates; vault persists across reload |
+| no gallery or file import path exists | no ARRIVAL HASH button or capture file input; only the Verify importer remains |
+| front camera can be chosen and still seals | the toggle restarts the stream and the lens is recorded |
+| without camera access nothing can be sealed | no fallback picker opens and the vault stays empty |
 | the whole workflow makes no network requests once loaded | runs offline (`context.setOffline(true)`) and asserts zero requests |
 
 Signature, chain, forgery and migration edge cases are unit-tested in `src/**/*.test.ts` (`npm test`), which is

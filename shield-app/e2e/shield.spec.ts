@@ -6,8 +6,6 @@ const DESCRIPTION =
   "and step flashing, install 30-year architectural shingles with a new ridge cap, and haul away all debris. " +
   "Gutters and fascia are not included. The job is finished when the new roof passes the city inspection.";
 
-// Shield hashes bytes and never decodes them, so any payload works as a "photo".
-const PHOTO = { name: "site.jpg", mimeType: "image/jpeg", buffer: Buffer.from("e2e-photo-bytes") };
 
 async function lockBrief(page: Page): Promise<void> {
   await page.goto("/");
@@ -96,17 +94,62 @@ test("a double tap on the shutter seals exactly one photo", async ({ page }) => 
   await expect(page.locator("[data-open]")).toHaveCount(1);
 });
 
-test("arrival-hash seal rehashes clean and survives a reload", async ({ page }) => {
+async function openCameraAndShoot(page: Page): Promise<void> {
+  await page.click('[data-act="webcam"]');
+  await page.waitForFunction(() => (document.getElementById("cam") as HTMLVideoElement)?.videoWidth > 0);
+  await page.click('[data-act="shutter"]');
+  await expect(page.locator(".thumb")).toBeVisible();
+}
+
+test("camera seal rehashes clean and survives a reload", async ({ page }) => {
   await page.goto("/");
-  await page.click('[data-act="arrival"]');
-  await page.setInputFiles("#file-arrival", PHOTO);
-  await expect(page.locator(".foot-note", { hasText: "ARRIVAL-ONLY" })).toBeVisible();
+  await openCameraAndShoot(page);
   await page.click('[data-act="rehash"]');
   await expect(page.locator(".foot-note", { hasText: "record-signature-valid" })).toBeVisible();
 
   await page.reload();
   await page.click('[data-tab="vault"]');
   await expect(page.locator("[data-open]")).toHaveCount(1);
+});
+
+test("no gallery or file import path exists on the capture screen", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator('[data-act="arrival"]')).toHaveCount(0);
+  await expect(page.locator("#file-arrival")).toHaveCount(0);
+  // The only file input left is the Verify tab's record importer, not a capture path.
+  await expect(page.locator('input[type="file"]')).toHaveCount(1);
+  await expect(page.locator("#file-bundle")).toHaveCount(1);
+  await expect(page.locator(".lede")).toContainText("Live camera only");
+});
+
+test("front camera can be chosen and still seals, recording the lens", async ({ page }) => {
+  await page.goto("/");
+  await page.click('[data-act="cam-flip"]');
+  await expect(page.locator('[data-act="cam-flip"]')).toHaveText("USE BACK CAMERA");
+  await page.click('[data-act="webcam"]');
+  await expect(page.locator("#cam")).toHaveClass(/front/);
+  await page.waitForFunction(() => (document.getElementById("cam") as HTMLVideoElement)?.videoWidth > 0);
+  await page.click('[data-act="cam-flip"]');
+  await expect(page.locator("#cam")).not.toHaveClass(/front/);
+  await page.waitForFunction(() => (document.getElementById("cam") as HTMLVideoElement)?.videoWidth > 0);
+  await page.click('[data-act="shutter"]');
+  await expect(page.locator(".thumb")).toBeVisible();
+  await expect(page.locator("pre", { hasText: "camera " })).toBeVisible();
+});
+
+test("without camera access nothing can be sealed and no file picker opens", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "mediaDevices", { value: undefined, configurable: true });
+  });
+  let chooser = false;
+  page.on("filechooser", () => (chooser = true));
+  await page.goto("/");
+  await page.click('[data-act="webcam"]');
+  await expect(page.locator(".foot-note", { hasText: "Shield only accepts live camera photos" })).toBeVisible();
+  await expect(page.locator('[data-act="shutter"]')).toHaveCount(0);
+  expect(chooser).toBe(false);
+  await page.click('[data-tab="vault"]');
+  await expect(page.locator("[data-open]")).toHaveCount(0);
 });
 
 test("the whole workflow makes no network requests once loaded", async ({ page, context }) => {
@@ -122,9 +165,7 @@ test("the whole workflow makes no network requests once loaded", async ({ page, 
   await page.click('[data-act="c-next"]');
   await expect(page.locator("[data-slot]")).toHaveCount(5);
   await page.click('[data-tab="capture"]');
-  await page.click('[data-act="arrival"]');
-  await page.setInputFiles("#file-arrival", PHOTO);
-  await expect(page.locator(".thumb")).toBeVisible();
+  await openCameraAndShoot(page);
 
   expect(requests.filter((u) => !u.startsWith("blob:") && !u.startsWith("data:"))).toEqual([]);
 });

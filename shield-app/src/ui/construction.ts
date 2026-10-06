@@ -162,7 +162,7 @@ function pointsView(ctx: ConstructionCtx, job: Job | undefined): string {
           ? (rec.attest.kind === "none" ? `<span class="chip warn">NATIVE · NO ATTEST</span>` : `<span class="chip ok">NATIVE</span>`)
           : rec.captureKind === "web-camera"
             ? `<span class="chip warn">WEB CAMERA</span>`
-            : `<span class="chip warn">ARRIVAL-ONLY</span>`
+            : `<span class="chip bad">NOT LIVE · FILE</span>`
         : `<span class="chip">EMPTY</span>`;
       const code = c.code
         ? `${c.code.irc ? "IRC " + esc(c.code.irc) : c.code.ibc ? "IBC " + esc(c.code.ibc) : ""} · ${esc(c.code.name)}`
@@ -182,7 +182,7 @@ function pointsView(ctx: ConstructionCtx, job: Job | undefined): string {
   const sealed = job.checkpoints.filter((c) => c.shotId).length;
   return `
     <div class="banner"><strong>5 PHOTO CHECKPOINTS</strong>${esc(job.brief.title || "Untitled")} · ${esc(labelForTrade(job.brief.trade))} · ${sealed}/${job.checkpoints.length} sealed
-      <div class="meta">Edit a label if a point is wrong. SEAL opens the camera (native or browser); ARRIVAL HASH on the Capture tab takes an existing file. Each photo is hashed, chained, and signed by this device.</div>
+      <div class="meta">Edit a label if a point is wrong. SEAL opens the live camera (front or back; no gallery or file imports). Each photo is hashed, chained, and signed by this device.</div>
     </div>
     <div class="list">${rows}</div>
     <div class="actions"><button class="btn ghost small" data-act="c-goto-close">CLOSE THIS JOB</button></div>

@@ -16,6 +16,10 @@ declare module "@capacitor/camera" {
     Camera = "CAMERA",
     Photos = "PHOTOS",
   }
+  export enum CameraDirection {
+    Rear = "REAR",
+    Front = "FRONT",
+  }
   export const Camera: {
     getPhoto(options: {
       source: CameraSource;
@@ -23,6 +27,7 @@ declare module "@capacitor/camera" {
       quality?: number;
       allowEditing?: boolean;
       correctOrientation?: boolean;
+      direction?: CameraDirection;
     }): Promise<{ base64String?: string; format?: string }>;
   };
 }

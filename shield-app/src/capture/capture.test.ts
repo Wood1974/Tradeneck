@@ -28,6 +28,16 @@ describe("sealFromBytes", () => {
     expect(await chainHead()).toBe(items[2]!.record.chainHead);
   });
 
+  it("records which lens a live capture used, defaulting to unknown", async () => {
+    const bytes = new TextEncoder().encode("lens").buffer;
+    const back = await sealFromBytes(bytes, "image/jpeg", "web-camera", null, "back");
+    const front = await sealFromBytes(bytes, "image/jpeg", "web-camera", null, "front");
+    const other = await sealFromBytes(bytes, "image/jpeg", "web-camera", null);
+    expect([back.record.facing, front.record.facing, other.record.facing]).toEqual(["back", "front", "unknown"]);
+    const { chainHead, signature, ...unsigned } = back.record;
+    expect(await verifySignature(await devicePublicKeyRaw(), { ...unsigned, chainHead }, signature)).toBe(true);
+  });
+
   it("attaches no location to arrival-hash records", async () => {
     const item = await sealFromBytes(new TextEncoder().encode("loc").buffer, "image/jpeg", "arrival-hash", null);
     expect(item.record.gps).toBeNull();

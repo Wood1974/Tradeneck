@@ -63,6 +63,7 @@ describe("buildCloseoutPacket", () => {
     expect(v.verdict).toBe("PACKET-SEALED");
     expect(v.signer).toBe(await deviceSealId());
     expect(v.reasons).toContain("signer-not-independently-verified");
+    expect(v.reasons).toContain("non-live-captures:1");
   });
 
   it("is key-order independent", async () => {

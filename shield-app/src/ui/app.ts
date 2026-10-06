@@ -1,5 +1,5 @@
 import { esc } from "../esc";
-import { arrivalHashFile, captureNative, sealWebCameraFrame } from "../capture/capture";
+import { captureNative, sealWebCameraFrame } from "../capture/capture";
 import { b64FromBytes, devicePublicKeyRaw, deviceSealId } from "../crypto/seal";
 import { makeCheckpoints, PACK_ORDER } from "../packs";
 import { isNativeOriginAvailable } from "../platform";
@@ -12,7 +12,7 @@ import {
   putJob,
   setActiveJobId,
 } from "../store/db";
-import type { Job, PackKind, VaultItem } from "../types";
+import type { CameraFacing, Job, PackKind, VaultItem } from "../types";
 import { MAX_IMPORT_BYTES, parseBundle, verifyBundle, verifyItemOriginal } from "../verify/verify";
 import { download, parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
 import type { CloseoutPacket } from "../types";
@@ -95,7 +95,6 @@ export function render(): void {
       <button class="${tab === "verify" ? "on" : ""}" data-tab="verify">Verify</button>
       <button class="${tab === "construction" ? "on" : ""}" data-tab="construction">Build</button>
     </nav>
-    <input class="hidden-file" id="file-arrival" type="file" accept="image/*" />
     <input class="hidden-file" id="file-bundle" type="file" accept="application/json,.json,.shield.json,.shield-record.json" />
   `;
   bind();
@@ -117,22 +116,23 @@ function captureView(native: boolean, job: Job | undefined): string {
       ? `<span class="chip ok">WEB CAMERA · LIVE</span>`
       : `<span class="chip">CAMERA OFF · ${clock()}</span>`;
   const slotLabel = pendingSlot ? job?.checkpoints.find((c) => c.id === pendingSlot)?.label ?? pendingSlot : null;
+  const flipLabel = facing === "environment" ? "USE FRONT CAMERA" : "USE BACK CAMERA";
   const finderBody = !native && camStream
-    ? `<video id="cam" class="cam" autoplay playsinline muted></video>
+    ? `<video id="cam" class="cam${facing === "user" ? " front" : ""}" autoplay playsinline muted></video>
       ${slotLabel ? `<p class="lede">Sealing “${esc(slotLabel)}”</p>` : ""}
       <div class="actions">
         <button class="btn" data-act="shutter">SHUTTER</button>
+        <button class="btn ghost small" data-act="cam-flip">${flipLabel}</button>
         <button class="btn ghost small" data-act="cam-off">CANCEL</button>
       </div>`
     : `<div class="icon-aperture"><span></span></div>
       <h1>${native ? "Native camera" : "Browser camera"}</h1>
       <p class="lede">${native
-        ? "Rear camera only. Hash on arrival. Platform attestation is not implemented in this build."
-        : "Live sensor, hashed at the shutter. Camera vs. virtual device is not proven on web."}</p>
+        ? "Live camera only, front or back. Gallery and file imports are disabled. Platform attestation is not implemented in this build."
+        : "Live camera only, front or back. Gallery and file imports are disabled. Camera vs. virtual device is not proven on web."}</p>
       <div class="actions">
         <button class="btn" data-act="${native ? "native" : "webcam"}">${native ? "SEAL FRAME" : "OPEN CAMERA"}</button>
-        ${cameraFallback && !native ? `<button class="btn ghost small" data-act="system-camera">USE SYSTEM CAMERA</button>` : ""}
-        <button class="btn ghost small" data-act="arrival">ARRIVAL HASH</button>
+        <button class="btn ghost small" data-act="cam-flip">${flipLabel}</button>
       </div>`;
   return `
     <div class="banner">
@@ -217,6 +217,7 @@ function vaultView(): string {
         <pre>${esc(rec.sha256)}
 ${esc(rec.createdAt)}
 job ${esc(rec.jobId ?? "—")} · ${esc(rec.checkpointId ?? "unbound")}
+camera ${esc(rec.facing ?? "n/a")}
 ${rec.gps ? `location ${esc(rec.gps.source)} · ±${esc(Math.round(rec.gps.acc))} m` : "no location recorded"}
 attest ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " · token not validated"}</pre>
         <div class="actions">
@@ -265,7 +266,7 @@ function packetResultView(r: NonNullable<typeof packetOut>): string {
             : `<span class="chip ok">NATIVE</span>`
           : rec.captureKind === "web-camera"
             ? `<span class="chip warn">WEB CAMERA</span>`
-            : `<span class="chip warn">ARRIVAL-ONLY</span>`
+            : `<span class="chip bad">NOT LIVE · FILE</span>`
         : `<span class="chip bad">MISSING</span>`;
       return `<div class="slot"><div><div>${esc(pt.label)}</div><div class="meta">${esc(code)}${rec ? ` · ${esc(rec.sha256.slice(0, 16))}…` : ""}</div></div>${chip}</div>`;
     })
@@ -375,23 +376,6 @@ function bind(): void {
     pinR = rad.value;
   };
 
-  const arrival = document.getElementById("file-arrival") as HTMLInputElement;
-  arrival.onchange = () => {
-    const file = arrival.files?.[0];
-    arrival.value = "";
-    if (!file) return;
-    const slot = pendingSlot;
-    pendingSlot = null;
-    void guarded(async () => {
-      const item = await arrivalHashFile(file, slot);
-      await reload();
-      await openVault(item.record.id);
-      tab = "vault";
-      status = "ARRIVAL-ONLY · not an origin seal";
-      render();
-    });
-  };
-
   const bundle = document.getElementById("file-bundle") as HTMLInputElement;
   bundle.onchange = async () => {
     const file = bundle.files?.[0];
@@ -438,7 +422,7 @@ function bind(): void {
 }
 
 const CAPTURE_ERRORS: Record<string, string> = {
-  "not-native": "Native camera is only available in the iOS/Android app. Use the in-page camera or arrival hash.",
+  "not-native": "Native camera is only available in the iOS/Android app. Use OPEN CAMERA in the browser.",
   "camera-denied": "Camera access is off. Allow the camera for Shield in Settings, then try again.",
   "camera-failed": "The camera did not return a photo. Try again.",
   "empty-bytes": "The camera returned an empty photo. Try again.",
@@ -447,7 +431,8 @@ const CAPTURE_ERRORS: Record<string, string> = {
 
 const captureErrorText = (code: string): string => CAPTURE_ERRORS[code] ?? `Capture failed (${code}).`;
 
-let cameraFallback = false;
+let facing: "environment" | "user" = "environment";
+let camFacing: CameraFacing = "unknown";
 
 let openImgUrl: string | null = null;
 
@@ -497,7 +482,7 @@ async function onSlot(id: string): Promise<void> {
     return;
   }
   if (isNativeOriginAvailable()) {
-    const res = await captureNative(id);
+    const res = await captureNative(id, facing === "user" ? "front" : "back");
     if ("error" in res) {
       status = captureErrorText(res.error);
       render();
@@ -518,32 +503,24 @@ async function openWebCamera(slot: string | null): Promise<void> {
   tab = "capture";
   specOpen = false;
   if (!navigator.mediaDevices?.getUserMedia) {
-    status = "No in-page camera in this browser. Using the system camera.";
-    fallbackCameraInput();
+    status = "This browser cannot open a live camera (it needs HTTPS or localhost). Shield only accepts live camera photos.";
+    render();
     return;
   }
   try {
     camStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false,
     });
+    const reported = camStream.getVideoTracks()[0]?.getSettings().facingMode;
+    camFacing = reported === "environment" ? "back" : reported === "user" ? "front" : "unknown";
     status = "";
-    cameraFallback = false;
     render();
   } catch {
     camStream = null;
-    cameraFallback = true;
-    status = "Camera permission denied or unavailable. Tap USE SYSTEM CAMERA to take the photo with your phone's camera app.";
+    status = "Camera access is required. Allow the camera for this site, then tap OPEN CAMERA again. Photos cannot be imported.";
     render();
   }
-}
-
-// `capture` forces the OS camera on phones; it is set only for this click so ARRIVAL HASH stays a plain picker.
-function fallbackCameraInput(): void {
-  const input = document.getElementById("file-arrival") as HTMLInputElement;
-  input.setAttribute("capture", "environment");
-  input.click();
-  setTimeout(() => input.removeAttribute("capture"), 0);
 }
 
 function stopWebCamera(): void {
@@ -572,7 +549,7 @@ async function shutter(): Promise<void> {
   const slot = pendingSlot;
   pendingSlot = null;
   stopWebCamera();
-  const item = await sealWebCameraFrame(blob, slot);
+  const item = await sealWebCameraFrame(blob, slot, camFacing);
   await reload();
   await openVault(item.record.id);
   tab = "vault";
@@ -599,7 +576,7 @@ async function onAct(act: string): Promise<void> {
     return;
   }
   if (act === "native") {
-    const res = await captureNative(null);
+    const res = await captureNative(null, facing === "user" ? "front" : "back");
     if ("error" in res) {
       status = captureErrorText(res.error);
       render();
@@ -611,18 +588,18 @@ async function onAct(act: string): Promise<void> {
     render();
     return;
   }
-  if (act === "arrival") {
-    pendingSlot = null;
-    (document.getElementById("file-arrival") as HTMLInputElement).click();
-    return;
-  }
   if (act === "webcam") {
     await openWebCamera(null);
     return;
   }
-  if (act === "system-camera") {
-    cameraFallback = false;
-    fallbackCameraInput();
+  if (act === "cam-flip") {
+    facing = facing === "environment" ? "user" : "environment";
+    if (camStream) {
+      stopWebCamera();
+      await openWebCamera(pendingSlot);
+      return;
+    }
+    render();
     return;
   }
   if (act === "shutter") {
