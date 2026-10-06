@@ -34,6 +34,8 @@ export interface CodeRef {
   irc: string | null;
   ibc: string | null;
   name: string;
+  /** What the cited section covers. Absent on points locked before this field existed. */
+  topic?: string;
 }
 
 export interface Checkpoint {

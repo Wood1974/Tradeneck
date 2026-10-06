@@ -2,15 +2,21 @@ import type { CodeRef, TradeId } from "../types";
 
 export type CodeTrade = "Framing" | "Roofing" | "Electrical" | "Plumbing" | "HVAC" | "Concrete" | "General";
 
+/** Every section number below was checked against the 2021 IRC text (adopted statewide in Utah). */
+export const CODE_EDITION = "2021 IRC";
+
 /**
- * Mirrors tradedeck-api/supabase/migrations/20261002000000_shield_checkpoints_scaffolding.sql.
- * Bundled locally so the Codes view and code suggestions work with no network.
+ * Bundled locally so the Codes view and code suggestions work with no network. Citation numbers, topics and
+ * the numbers quoted in descriptions come from the published code text; keep them that way when editing.
+ * (The tradedeck-api seed migration still carries the older, uncorrected rows.)
  */
 export interface CodeCheckpoint {
   trade: CodeTrade;
   name: string;
   irc: string | null;
   ibc: string | null;
+  /** What the cited section covers, so the number can be checked against the book. */
+  topic: string | null;
   description: string;
   photoGuidance: string;
   requiredBeforeConcealment: boolean;
@@ -18,22 +24,22 @@ export interface CodeCheckpoint {
 }
 
 export const CODE_CHECKPOINTS: CodeCheckpoint[] = [
-  { trade: "Framing", name: "Foundation Sill Plate & Anchor Bolts", irc: "R403.1.6", ibc: null, description: "Sill plate installed with ≥½\" anchor bolts at 6\" on center maximum", photoGuidance: "Wide shot of sill plate with anchor bolts visible", requiredBeforeConcealment: true, keywords: ["sill", "anchor", "bolt", "plate"] },
-  { trade: "Framing", name: "Header Beam Installation", irc: "R603.7.1", ibc: null, description: "Proper header sizing and bearing on supports", photoGuidance: "Close-up of header bearing point and fasteners", requiredBeforeConcealment: true, keywords: ["header", "beam", "bearing", "load path", "post"] },
-  { trade: "Framing", name: "Joist Notching", irc: "R502.8", ibc: null, description: "Notches limited to 1/6 of joist depth, no cutting in middle 1/3 of span", photoGuidance: "Detail showing maximum notch depth measurement", requiredBeforeConcealment: true, keywords: ["joist", "notch", "bore"] },
-  { trade: "Framing", name: "Interior Wall Framing", irc: "R602.3", ibc: null, description: "Studs properly spaced and aligned", photoGuidance: "Wide shot of wall framing showing spacing", requiredBeforeConcealment: true, keywords: ["stud", "wall", "open framing", "rafter", "layout", "shear", "hardware", "blocking"] },
-  { trade: "Roofing", name: "Roof Decking", irc: "R902.1", ibc: null, description: "Decking fastened per manufacturer specifications and code requirements", photoGuidance: "Wide angle showing decking fastening pattern", requiredBeforeConcealment: true, keywords: ["deck", "sheathing", "tear-off", "exposed"] },
-  { trade: "Roofing", name: "Underlayment Installation", irc: "R905.2.8", ibc: null, description: "Underlayment properly lapped and fastened, minimum 4\" overlap", photoGuidance: "Detail of lap and fastening", requiredBeforeConcealment: true, keywords: ["underlayment", "ice-and-water", "field installed", "courses", "drip edge"] },
-  { trade: "Roofing", name: "Flashing Installation", irc: "R903.2", ibc: null, description: "Flashing at valleys, ridges, and penetrations properly sealed", photoGuidance: "Detail of flashing and sealing", requiredBeforeConcealment: true, keywords: ["flashing", "valley", "chimney", "penetration", "skylight"] },
-  { trade: "Electrical", name: "Rough-in Inspection", irc: "E3401.1", ibc: null, description: "Wiring secured at regular intervals, no damage to insulation", photoGuidance: "Wide shot of rough-in run", requiredBeforeConcealment: true, keywords: ["rough", "wire", "cable", "homerun", "staple"] },
-  { trade: "Electrical", name: "Box Installation", irc: "E3404.2", ibc: null, description: "Electrical boxes properly secured and positioned", photoGuidance: "Detail of box mounting and accessibility", requiredBeforeConcealment: true, keywords: ["box", "device", "fixture", "panel", "breaker", "connection", "dead front"] },
-  { trade: "Plumbing", name: "Rough-in Inspection", irc: "P2603.2", ibc: null, description: "Pipe support and slope requirements met", photoGuidance: "Detail of pipe support and slope", requiredBeforeConcealment: true, keywords: ["rough", "pipe", "piping", "support", "slope", "pex", "copper", "in-wall", "in-slab"] },
-  { trade: "Plumbing", name: "Vent Stack Installation", irc: "P3101.1", ibc: null, description: "Vent stacks properly installed with correct pitch and clearance", photoGuidance: "Wide shot of vent stack installation", requiredBeforeConcealment: true, keywords: ["vent", "stack", "drain", "pressure", "test"] },
-  { trade: "HVAC", name: "Duct Sealing", irc: "M1601.4", ibc: null, description: "Duct seams sealed with mastic, connections tight", photoGuidance: "Close-up of duct sealing", requiredBeforeConcealment: true, keywords: ["duct", "seal", "mastic", "line set", "line-set"] },
-  { trade: "HVAC", name: "Equipment Installation", irc: "M1401.2", ibc: null, description: "HVAC equipment properly secured and accessible for maintenance", photoGuidance: "Wide shot of equipment installation", requiredBeforeConcealment: true, keywords: ["equipment", "unit", "nameplate", "furnace", "condenser", "startup", "placement"] },
-  { trade: "Concrete", name: "Foundation Pour", irc: "R403.1", ibc: null, description: "Concrete strength and finishes per specifications", photoGuidance: "Wide shot of foundation with reference scale", requiredBeforeConcealment: true, keywords: ["pour", "placement", "screed", "finish", "slab", "footing", "form", "excavation"] },
-  { trade: "Concrete", name: "Reinforcement Installation", irc: "R403.1.1", ibc: null, description: "Rebar spacing and placement per specifications", photoGuidance: "Detail of rebar grid and spacing", requiredBeforeConcealment: true, keywords: ["rebar", "steel", "reinforc", "mesh", "dowel", "chairs"] },
-  { trade: "General", name: "Site Condition Documentation", irc: "General", ibc: null, description: "General site condition and progress documentation", photoGuidance: "Wide angle showing overall condition", requiredBeforeConcealment: false, keywords: ["existing", "site", "condition", "before", "completion", "done", "finished", "complete"] },
+  { trade: "Framing", name: "Foundation Sill Plate & Anchor Bolts", irc: "R403.1.6", ibc: null, topic: "Foundation anchorage", description: "Sill plate anchored with at least ½\" bolts at 6 ft on center maximum, 7\" embedded, one within 12\" of each plate end, 2 bolts minimum per plate section, each with nut and washer", photoGuidance: "Wide shot of the sill plate and bolts, plus a close-up of one bolt with nut and washer", requiredBeforeConcealment: true, keywords: ["sill", "anchor", "bolt", "plate"] },
+  { trade: "Framing", name: "Header Beam Installation", irc: "R602.7", ibc: null, topic: "Headers (supports: R602.7.5)", description: "Header sized from the R602.7 span tables and supported at each end by jack studs or approved framing anchors", photoGuidance: "Close-up of the header bearing point, jack studs and fasteners", requiredBeforeConcealment: true, keywords: ["header", "beam", "bearing", "load path", "post"] },
+  { trade: "Framing", name: "Joist Notching", irc: "R502.8", ibc: null, topic: "Cutting, drilling and notching of floor framing", description: "Notches no deeper than 1/6 of the joist depth, no longer than 1/3 of the depth, and not in the middle third of the span; end notches up to 1/4; holes up to 1/3 of the depth; engineered joists only as the manufacturer allows", photoGuidance: "Detail showing the notch with a depth measurement", requiredBeforeConcealment: true, keywords: ["joist", "notch", "bore"] },
+  { trade: "Framing", name: "Wall Framing (Studs)", irc: "R602.3.1", ibc: null, topic: "Stud size, height and spacing (Table R602.3(5)); interior walls R602.4 and R602.5", description: "Studs sized and spaced per Table R602.3(5); interior bearing walls per R602.4, nonbearing per R602.5", photoGuidance: "Wide shot of the wall framing showing stud spacing", requiredBeforeConcealment: true, keywords: ["stud", "wall", "open framing", "rafter", "layout", "shear", "hardware", "blocking"] },
+  { trade: "Roofing", name: "Roof Decking", irc: "R803.2", ibc: null, topic: "Wood structural panel roof sheathing", description: "Wood structural panel decking fastened per Table R602.3(1); asphalt shingles require solid decking (R905.2.1)", photoGuidance: "Wide angle showing the decking fastening pattern", requiredBeforeConcealment: true, keywords: ["deck", "sheathing", "tear-off", "exposed"] },
+  { trade: "Roofing", name: "Underlayment Installation", irc: "R905.1.1", ibc: null, topic: "Roof underlayment", description: "Underlayment lapped 2\" on slopes 4:12 and up; two layers with 19\" laps on slopes from 2:12 to under 4:12; end laps 4\", offset 6 ft", photoGuidance: "Detail of the laps and fasteners", requiredBeforeConcealment: true, keywords: ["underlayment", "ice-and-water", "field installed", "courses", "drip edge"] },
+  { trade: "Roofing", name: "Flashing Installation", irc: "R903.2", ibc: null, topic: "Roof flashing (locations: R903.2.1)", description: "Corrosion-resistant metal flashing, at least 0.019\" thick, at wall and roof intersections, changes in slope and roof openings", photoGuidance: "Detail of the flashing at each location", requiredBeforeConcealment: true, keywords: ["flashing", "valley", "chimney", "penetration", "skylight"] },
+  { trade: "Electrical", name: "Cable Support & Protection", irc: "E3802.6", ibc: null, topic: "Securing and supporting cable (Table E3802.1)", description: "NM cable stapled or strapped within 12\" of each box and at most 4.5 ft apart (Table E3802.1), with no damage to the cable or its insulation", photoGuidance: "Wide shot of the cable run showing staples or straps", requiredBeforeConcealment: true, keywords: ["rough", "wire", "cable", "homerun", "staple"] },
+  { trade: "Electrical", name: "Box Installation", irc: "E3906.8", ibc: null, topic: "Support of boxes and enclosures (cable to box: E3905.3.1)", description: "Boxes rigidly supported (E3906.8) and cables secured to the box (E3905.3.1)", photoGuidance: "Detail of the box mounting and cable entry", requiredBeforeConcealment: true, keywords: ["box", "device", "fixture", "panel", "breaker", "connection", "dead front"] },
+  { trade: "Plumbing", name: "Pipe Support & Drain Slope", irc: "P2605.1", ibc: null, topic: "Pipe supports (Table P2605.1); drain slope P3005.3", description: "Pipe supported at the required intervals; drain slope at least ¼\" per ft for pipe 2½\" and smaller, ⅛\" per ft for 3\" and larger (P3005.3)", photoGuidance: "Detail of the pipe supports and the slope", requiredBeforeConcealment: true, keywords: ["rough", "pipe", "piping", "support", "slope", "pex", "copper", "in-wall", "in-slab"] },
+  { trade: "Plumbing", name: "Vent Grade & Terminals", irc: "P3104.2", ibc: null, topic: "Vent grade and support (terminals: P3103.5)", description: "Vents graded to drain back by gravity; terminals clear of openings per P3103.5", photoGuidance: "Wide shot of the vent run and where it terminates", requiredBeforeConcealment: true, keywords: ["vent", "stack", "drain", "pressure", "test"] },
+  { trade: "HVAC", name: "Duct Sealing", irc: "M1601.4.1", ibc: null, topic: "Duct joints, seams and connections", description: "Joints, seams and connections fastened and sealed with welds, gaskets, mastic, mastic with fabric, liquid sealant or tape; tapes and mastics UL 181A or 181B marked", photoGuidance: "Close-up of the sealed duct joints", requiredBeforeConcealment: true, keywords: ["duct", "seal", "mastic", "line set", "line-set"] },
+  { trade: "HVAC", name: "Equipment Installation", irc: "M1401.1", ibc: null, topic: "Installation per manufacturer's instructions (access: M1401.2)", description: "Equipment installed per the manufacturer's instructions (M1401.1) with access for servicing and replacement (M1401.2)", photoGuidance: "Wide shot of the equipment and its service access", requiredBeforeConcealment: true, keywords: ["equipment", "unit", "nameplate", "furnace", "condenser", "startup", "placement"] },
+  { trade: "Concrete", name: "Foundation Pour", irc: "R402.2", ibc: null, topic: "Minimum concrete strength (Table R402.2); inspection before placing: R109.1.1", description: "Mix meets the Table R402.2 minimum strength for its exposure; forms erected and any required reinforcing in place before placing concrete (R109.1.1)", photoGuidance: "Wide shot of the foundation with a reference scale", requiredBeforeConcealment: true, keywords: ["pour", "placement", "screed", "finish", "slab", "footing", "form", "excavation"] },
+  { trade: "Concrete", name: "Reinforcement Installation", irc: "R403.1.3", ibc: null, topic: "Footing and stem wall reinforcement (seismic design categories D0, D1, D2)", description: "Reinforcing steel in place, supported and tied before the pour (R109.1.1); footing and stem wall reinforcement is required in seismic design categories D0, D1 and D2", photoGuidance: "Detail of the rebar grid, supports and spacing", requiredBeforeConcealment: true, keywords: ["rebar", "steel", "reinforc", "mesh", "dowel", "chairs"] },
+  { trade: "General", name: "Site Condition Documentation", irc: null, ibc: null, topic: null, description: "General site condition and progress documentation (no code section)", photoGuidance: "Wide angle showing the overall condition", requiredBeforeConcealment: false, keywords: ["existing", "site", "condition", "before", "completion", "done", "finished", "complete"] },
 ];
 
 export const CODE_TRADE_ORDER: CodeTrade[] = ["Framing", "Roofing", "Electrical", "Plumbing", "HVAC", "Concrete", "General"];
@@ -66,7 +72,7 @@ export function codesForTrade(trade: TradeId | ""): CodeCheckpoint[] {
 }
 
 export function toCodeRef(c: CodeCheckpoint): CodeRef {
-  return { irc: c.irc, ibc: c.ibc, name: c.name };
+  return { irc: c.irc, ibc: c.ibc, name: c.name, ...(c.topic ? { topic: c.topic } : {}) };
 }
 
 /** Best keyword match for a generated point within the trade's code rows. Null when nothing fits. */

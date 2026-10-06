@@ -58,7 +58,7 @@ describe("buildCloseoutPacket", () => {
     expect(integrity.hash).toBe(await sha256Text(stableStringify(body)));
     expect(p.counts).toEqual({ points: 5, sealed: 1, missing: 4 });
     expect(p.points[0]!.record?.sha256).toBe("a".repeat(64));
-    expect(p.points[1]!.code?.irc).toBe("R403.1.1");
+    expect(p.points[1]!.code?.irc).toBe("R403.1.3");
     const v = await verifyCloseoutPacket(p);
     expect(v.verdict).toBe("PACKET-SEALED");
     expect(v.signer).toBe(await deviceSealId());
@@ -76,7 +76,7 @@ describe("buildCloseoutPacket", () => {
     const back = parseCloseoutPacket(JSON.stringify(p));
     expect((await verifyCloseoutPacket(back)).verdict).toBe("PACKET-SEALED");
     const html = packetToHtml(back);
-    expect(html).toContain("IRC R403.1.1");
+    expect(html).toContain("IRC R403.1.3");
     expect(html).toContain("&lt;b&gt;x&lt;/b&gt;");
     expect(html).not.toContain("<b>x</b>");
   });

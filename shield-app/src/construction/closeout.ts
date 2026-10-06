@@ -196,7 +196,7 @@ Device seal ${esc(packet.deviceSealId)}</p>
 <h2>Checkpoints</h2>${pts}
 <h2>Counts</h2><pre>${esc(JSON.stringify(packet.counts, null, 2))}</pre>
 ${packet.notes ? `<h2>Close notes</h2><pre>${esc(packet.notes)}</pre>` : ""}
-<p class="meta">Human-readable snapshot only. It cannot be verified: it omits per-photo signatures, location and attestation fields. Verify the matching .shield-record.json in Shield. A valid signature shows the record is unchanged since signing; it does not show who holds the key (compare device seal ${esc(packet.deviceSealId)} with one you trust).</p>
+<p class="meta">Code references are 2021 IRC section numbers, for reference only; confirm with your inspector. Human-readable snapshot only. It cannot be verified: it omits per-photo signatures, location and attestation fields. Verify the matching .shield-record.json in Shield. A valid signature shows the record is unchanged since signing; it does not show who holds the key (compare device seal ${esc(packet.deviceSealId)} with one you trust).</p>
 </body></html>`;
 }
 

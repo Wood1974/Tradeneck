@@ -1,4 +1,4 @@
-import { codesForTrade, CODE_CHECKPOINTS, CODE_TRADE_ORDER, toCodeRef, type CodeCheckpoint } from "../construction/codes";
+import { CODE_EDITION, codesForTrade, CODE_CHECKPOINTS, CODE_TRADE_ORDER, toCodeRef, type CodeCheckpoint } from "../construction/codes";
 import { esc } from "../esc";
 import { buildCloseoutPacket, downloadPacketFiles, missingPoints } from "../construction/closeout";
 import { generatePoints, lockedNarrative } from "../construction/points";
@@ -203,7 +203,7 @@ function codesView(job: Job | undefined): string {
   }).join("");
   return `
     <div class="banner"><strong>${picking ? `ASSIGN CODE TO “${esc(picking.label).toUpperCase()}”` : "IRC / IBC CHECKPOINTS"}</strong>
-      ${picking ? "Tap a section to attach it to the point." : "Code sections tied to what must be photographed before concealment. Offline table; same rows as the Shield database."}
+      ${picking ? "Tap a section to attach it to the point." : `${CODE_EDITION} section numbers (adopted statewide in Utah) tied to what should be photographed before concealment. Reference only: confirm with your inspector, since local amendments can differ.`}
       <div>${trade ? `<button data-act="c-toggle-codes">${showAllCodes ? `Only ${esc(labelForTrade(trade))}` : "All trades"}</button>` : ""}
       ${picking ? `<button data-act="c-clear-code">No code for this point</button> <button data-act="c-cancel-pick">Cancel</button>` : ""}</div>
     </div>
@@ -212,12 +212,13 @@ function codesView(job: Job | undefined): string {
 }
 
 function codeRow(r: CodeCheckpoint, picking: Job["checkpoints"][number] | undefined): string {
-  const tag = r.irc && r.irc !== "General" ? `IRC ${esc(r.irc)}` : r.ibc ? `IBC ${esc(r.ibc)}` : "GENERAL";
+  const tag = r.irc ? `IRC ${esc(r.irc)}` : r.ibc ? `IBC ${esc(r.ibc)}` : "GENERAL";
   const attr = picking ? `data-assign-code="${esc(r.irc ?? "")}|${esc(r.name)}"` : "";
   const on = picking?.code?.name === r.name ? " on" : "";
   return `<button class="slot code-row${on}" ${attr} ${picking ? "" : "disabled"}>
     <div>
       <div><span class="chip ${r.requiredBeforeConcealment ? "warn" : ""}">${tag}</span> ${esc(r.name)}</div>
+      ${r.topic ? `<div class="meta">Covers: ${esc(r.topic)}</div>` : ""}
       <div class="meta">${esc(r.description)}</div>
       <div class="meta">Photo: ${esc(r.photoGuidance)}${r.requiredBeforeConcealment ? " · before concealment" : ""}</div>
     </div>
