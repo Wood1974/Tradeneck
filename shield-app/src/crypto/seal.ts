@@ -51,26 +51,30 @@ export function shortSeal(hexHash: string): string {
   return `${hexHash.slice(0, 8)}·${hexHash.slice(8, 16)}`.toUpperCase();
 }
 
-async function getOrCreateKey(): Promise<CryptoKeyPair> {
-  const existing = await idbGet<CryptoKeyPair>("device-ecdsa");
-  if (existing?.privateKey && existing.publicKey) return existing;
-  const pair = await crypto.subtle.generateKey(
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign", "verify"],
-  );
-  await idbSet("device-ecdsa", pair);
-  return pair;
+let keyPromise: Promise<CryptoKeyPair> | null = null;
+
+// Single in-flight promise: concurrent first calls must not each generate a key.
+function getOrCreateKey(): Promise<CryptoKeyPair> {
+  keyPromise ??= (async () => {
+    const existing = await idbGet<CryptoKeyPair>("device-ecdsa");
+    if (existing?.privateKey && existing.publicKey) return existing;
+    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign", "verify"]);
+    await idbSet("device-ecdsa", pair);
+    return pair;
+  })().catch((err) => {
+    keyPromise = null;
+    throw err;
+  });
+  return keyPromise;
+}
+
+/** Seal ID is always derived from the public key, so it can never drift from the signing key. */
+export async function sealIdForPublicKey(publicKeyRawB64: string): Promise<string> {
+  return shortSeal(await sha256Bytes(bytesFromB64(publicKeyRawB64)));
 }
 
 export async function deviceSealId(): Promise<string> {
-  const cached = await idbGet<string>("device-seal-id");
-  if (cached) return cached;
-  const pair = await getOrCreateKey();
-  const raw = await crypto.subtle.exportKey("raw", pair.publicKey);
-  const id = shortSeal(await sha256Bytes(raw));
-  await idbSet("device-seal-id", id);
-  return id;
+  return sealIdForPublicKey(await devicePublicKeyRaw());
 }
 
 export async function signPayload(payload: unknown): Promise<string> {
@@ -80,20 +84,34 @@ export async function signPayload(payload: unknown): Promise<string> {
   return b64(sig);
 }
 
+/**
+ * Canonical JSON (sorted keys). Throws on values that do not survive a JSON round trip, because a
+ * hash over them would silently change when the packet is exported and re-imported.
+ */
 export function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
+  if (value === null) return "null";
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return JSON.stringify(value);
+    case "number":
+      if (!Number.isFinite(value)) throw new Error("canonical-non-finite-number");
+      return JSON.stringify(Object.is(value, -0) ? 0 : value);
+    case "object": {
+      if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+      const proto = Object.getPrototypeOf(value);
+      if (proto !== Object.prototype && proto !== null) throw new Error("canonical-unsupported-object");
+      const obj = value as Record<string, unknown>;
+      const keys = Object.keys(obj).sort();
+      return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
+    }
+    default:
+      throw new Error(`canonical-unsupported-${typeof value}`);
+  }
 }
 
 export function chainStep(prev: string, recordHash: string): Promise<string> {
   return sha256Text(`${prev}|${recordHash}`);
-}
-
-export function genesis(): string {
-  return "0".repeat(64);
 }
 
 export function b64FromBytes(data: ArrayBuffer): string {

@@ -4,7 +4,7 @@ export type CaptureKind = "native-camera" | "web-camera" | "arrival-hash";
 
 export type PlatformKind = "ios" | "android" | "web";
 
-export type Verdict = "SEALED" | "TAMPERED" | "ARRIVAL-ONLY" | "NO-ORIGIN";
+export type Verdict = "SEALED" | "UNATTESTED-NATIVE" | "TAMPERED" | "ARRIVAL-ONLY" | "NO-ORIGIN";
 
 export type FeeTier = "standard" | "extended" | "major";
 
@@ -95,7 +95,7 @@ export interface SealRecord {
     lat: number;
     lng: number;
     acc: number;
-    source: "os" | "none";
+    source: "os" | "browser" | "none";
   } | null;
   pinScore: {
     meters: number | null;
@@ -121,6 +121,8 @@ export interface ShieldBundle {
   version: 1;
   record: SealRecord;
   originalB64: string;
+  /** Raw P-256 public key (base64) of the signing device. Without it the record cannot be authenticated. */
+  devicePublicKey?: string;
 }
 
 export interface CloseoutPoint {
@@ -149,10 +151,12 @@ export interface CloseoutBody {
     answers: Record<string, string | string[]>;
   } | null;
   points: CloseoutPoint[];
-  counts: { points: number; sealed: number; missing: number };
+  /** `sealed` = any record on file; native/web/arrival split it by capture origin. */
+  counts: { points: number; sealed: number; missing: number; native: number; web: number; arrival: number };
   notes: string;
   deviceSealId: string;
   devicePublicKey: string;
+  canonicalVersion: 1;
 }
 
 export interface CloseoutPacket extends CloseoutBody {

@@ -169,7 +169,7 @@ function pointsView(ctx: ConstructionCtx, job: Job | undefined): string {
         : "NO CODE REFERENCE · TAP TO ASSIGN";
       return `<div class="card point">
         <div class="row"><h2>Point ${i + 1}</h2>${chip}</div>
-        <input data-pt-label="${esc(c.id)}" value="${esc(c.label)}" />
+        <input data-pt-label="${esc(c.id)}" value="${esc(c.label)}"${c.shotId ? " disabled" : ""} />
         <textarea data-pt-desc="${esc(c.id)}" rows="3">${esc(c.description ?? "")}</textarea>
         <div class="row">
           <button class="code-chip" data-pick-code="${esc(c.id)}">${code}</button>
@@ -377,6 +377,8 @@ function setAnswer(id: string, value: string): void {
 
 async function editPoint(ctx: ConstructionCtx, job: Job | undefined, id: string, patch: Partial<Job["checkpoints"][number]>): Promise<void> {
   if (!job) return;
+  // A sealed photo is bound to the label it was taken under, so the label is frozen once sealed.
+  if (patch.label !== undefined && job.checkpoints.find((c) => c.id === id)?.shotId) return;
   job.checkpoints = job.checkpoints.map((c) => (c.id === id ? { ...c, ...patch } : c));
   await putJob(job);
   await ctx.reload();
@@ -389,6 +391,11 @@ async function lockBrief(ctx: ConstructionCtx): Promise<void> {
   const points = generatePoints(full);
   const fee = feeForBudget(BUDGET_USD[draft.budgetBand]);
   const existing = activeConstructionJob(ctx);
+  if (existing?.checkpoints.some((c) => c.shotId)) {
+    briefStatus = "Photos are already sealed to this job's points. Start a new brief for different points.";
+    ctx.render();
+    return;
+  }
   const job: Job = existing
     ? {
         ...existing,

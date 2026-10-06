@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chainStep, sha256Text, stableStringify, verifySignature, devicePublicKeyRaw } from "../crypto/seal";
+import { chainHead } from "../store/db";
 import { sealFromBytes } from "./capture";
 
 describe("sealFromBytes", () => {
@@ -16,5 +17,19 @@ describe("sealFromBytes", () => {
     const a = await sealFromBytes(new TextEncoder().encode("one").buffer, "image/jpeg", "arrival-hash", null);
     const b = await sealFromBytes(new TextEncoder().encode("two").buffer, "image/jpeg", "arrival-hash", null);
     expect(b.record.prevChain).toBe(a.record.chainHead);
+  });
+
+  it("serializes concurrent seals into one linear chain and persists the last head", async () => {
+    const items = await Promise.all(
+      ["c1", "c2", "c3"].map((s) => sealFromBytes(new TextEncoder().encode(s).buffer, "image/jpeg", "arrival-hash", null)),
+    );
+    expect(items[1]!.record.prevChain).toBe(items[0]!.record.chainHead);
+    expect(items[2]!.record.prevChain).toBe(items[1]!.record.chainHead);
+    expect(await chainHead()).toBe(items[2]!.record.chainHead);
+  });
+
+  it("attaches no location to arrival-hash records", async () => {
+    const item = await sealFromBytes(new TextEncoder().encode("loc").buffer, "image/jpeg", "arrival-hash", null);
+    expect(item.record.gps).toBeNull();
   });
 });

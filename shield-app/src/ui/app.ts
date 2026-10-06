@@ -1,5 +1,5 @@
 import { arrivalHashFile, captureNative, sealWebCameraFrame } from "../capture/capture";
-import { deviceSealId } from "../crypto/seal";
+import { devicePublicKeyRaw, deviceSealId } from "../crypto/seal";
 import { makeCheckpoints, PACK_ORDER } from "../packs";
 import { isNativeOriginAvailable } from "../platform";
 import { feeForBudget, PRICING_EFFECTIVE } from "../pricing";
@@ -11,8 +11,8 @@ import {
   setActiveJobId,
 } from "../store/db";
 import type { Job, PackKind, VaultItem } from "../types";
-import { parseBundle, verifyBundle, verifyItemOriginal } from "../verify/verify";
-import { parseCloseoutPacket, verifyCloseoutPacket, type PacketVerdict } from "../construction/closeout";
+import { MAX_IMPORT_BYTES, parseBundle, verifyBundle, verifyItemOriginal } from "../verify/verify";
+import { parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
 import type { CloseoutPacket } from "../types";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
@@ -36,7 +36,7 @@ let pinLng = "";
 let pinR = "200";
 let verifyOut = "";
 let camStream: MediaStream | null = null;
-let packetOut: { verdict: PacketVerdict; reasons: string[]; packet: CloseoutPacket } | null = null;
+let packetOut: (PacketVerification & { packet: CloseoutPacket }) | null = null;
 
 const ctx: ConstructionCtx = {
   jobs: () => jobs,
@@ -181,23 +181,22 @@ function jobsView(job: Job | undefined): string {
       <input id="budget" type="number" min="0" step="1" value="${budget}" />
       <div class="meta">${fee.feeTier} · $${fee.feeUsd} · effective ${PRICING_EFFECTIVE}</div>
       <label>LOCKED PIN (optional)</label>
-      <input id="pin-lat" placeholder="lat" value="${pinLat}" />
-      <input id="pin-lng" placeholder="lng" value="${pinLng}" />
-      <input id="pin-r" placeholder="radius m" value="${pinR}" />
+      <input id="pin-lat" placeholder="lat" inputmode="decimal" value="${esc(pinLat)}" />
+      <input id="pin-lng" placeholder="lng" inputmode="decimal" value="${esc(pinLng)}" />
+      <input id="pin-r" placeholder="radius m" inputmode="decimal" value="${esc(pinR)}" />
       <button class="btn" data-act="lock">LOCK PACK</button>
     </div>
     <div class="list">${jobs
       .map(
         (j) => `<div class="card">
           <div class="row">
-            <h2>${j.brief ? esc(j.brief.title || "construction") : j.pack} · $${j.feeUsd}</h2>
-            <button class="btn small ghost" data-activate="${j.id}">${j.id === activeId ? "ACTIVE" : "USE"}</button>
+            <h2>${j.brief ? esc(j.brief.title || "construction") : esc(j.pack)} · $${esc(j.feeUsd)}</h2>
+            <button class="btn small ghost" data-activate="${esc(j.id)}">${j.id === activeId ? "ACTIVE" : "USE"}</button>
           </div>
           <div class="meta">${j.checkpoints.filter((c) => c.shotId).length}/${j.checkpoints.length} sealed · ${j.pin ? "pin on" : "no pin"}</div>
         </div>`,
       )
       .join("")}${jobs.length ? "" : `<p class="meta">No locked lists.</p>`}</div>
-    ${job ? "" : ""}
   `;
 }
 
@@ -205,15 +204,17 @@ function vaultView(): string {
   const open = vault.find((v) => v.record.id === openVaultId);
   if (open) {
     const rec = open.record;
+    const imgMime = /^image\/(jpeg|png)$/.test(rec.mime) ? rec.mime : "application/octet-stream";
     return `
       <button class="btn ghost small" data-act="vault-back">BACK</button>
-      <img class="thumb" alt="" src="data:${rec.mime};base64,${open.originalB64}" />
+      <img class="thumb" alt="Sealed evidence photo" src="data:${imgMime};base64,${esc(open.originalB64)}" />
       <div class="card">
-        <div class="row"><h2>${rec.captureKind}</h2><span class="chip">${rec.platform}</span></div>
-        <pre>${rec.sha256}
-${rec.createdAt}
-job ${rec.jobId ?? "—"} · ${rec.checkpointId ?? "unbound"}
-attest ${rec.attest.kind}${rec.attest.tokenPresent ? " · token" : ""}</pre>
+        <div class="row"><h2>${esc(rec.captureKind)}</h2><span class="chip">${esc(rec.platform)}</span></div>
+        <pre>${esc(rec.sha256)}
+${esc(rec.createdAt)}
+job ${esc(rec.jobId ?? "—")} · ${esc(rec.checkpointId ?? "unbound")}
+${rec.gps ? `location ${esc(rec.gps.source)} · ±${esc(Math.round(rec.gps.acc))} m` : "no location recorded"}
+attest ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " · token not validated"}</pre>
         <div class="actions">
           <button class="btn small" data-act="rehash">REHASH</button>
           <button class="btn ghost small" data-act="export">EXPORT</button>
@@ -226,9 +227,9 @@ attest ${rec.attest.kind}${rec.attest.tokenPresent ? " · token" : ""}</pre>
     <div class="banner"><strong>VAULT</strong>Originals stay on this device. Rehash checks bytes only.</div>
     <div class="list">${vault
       .map(
-        (v) => `<button class="card" data-open="${v.record.id}" style="width:100%;text-align:left">
-          <div class="row"><h2>${v.record.captureKind}</h2><span class="chip">${v.record.platform}</span></div>
-          <div class="meta">${v.record.sha256.slice(0, 16)}… · ${v.record.createdAt}</div>
+        (v) => `<button class="card" data-open="${esc(v.record.id)}" style="width:100%;text-align:left">
+          <div class="row"><h2>${esc(v.record.captureKind)}</h2><span class="chip">${esc(v.record.platform)}</span></div>
+          <div class="meta">${esc(v.record.sha256.slice(0, 16))}… · ${esc(v.record.createdAt)}</div>
         </button>`,
       )
       .join("")}${vault.length ? "" : `<p class="meta">Empty.</p>`}</div>
@@ -238,7 +239,9 @@ attest ${rec.attest.kind}${rec.attest.tokenPresent ? " · token" : ""}</pre>
 function verifyView(): string {
   return `
     <div class="banner"><strong>VERIFY</strong>Drop a photo bundle (.shield.json) or a close-out record (.shield-record.json). Everything is recomputed on this device.</div>
-    <div class="drop" data-act="pick-bundle">Drop a file or tap to choose</div>
+    <label class="meta" for="expected-signer">Expected device seal ID (optional, from a source you trust)</label>
+    <input id="expected-signer" autocomplete="off" placeholder="e.g. 1A2B3C4D·5E6F7A8B" />
+    <div class="drop" data-act="pick-bundle">Tap to choose a file</div>
     ${verifyOut ? `<div class="card"><pre>${esc(verifyOut)}</pre></div>` : ""}
     ${packetOut ? packetResultView(packetOut) : ""}
   `;
@@ -253,7 +256,9 @@ function packetResultView(r: NonNullable<typeof packetOut>): string {
       const rec = pt.record;
       const chip = rec
         ? rec.captureKind === "native-camera"
-          ? `<span class="chip ok">SEALED</span>`
+          ? rec.attest.kind === "none"
+            ? `<span class="chip warn">NATIVE · NO ATTEST</span>`
+            : `<span class="chip ok">NATIVE</span>`
           : rec.captureKind === "web-camera"
             ? `<span class="chip warn">WEB CAMERA</span>`
             : `<span class="chip warn">ARRIVAL-ONLY</span>`
@@ -263,14 +268,17 @@ function packetResultView(r: NonNullable<typeof packetOut>): string {
     .join("");
   return `
     <div class="card">
-      <div class="row"><h2>${ok ? "Record intact" : r.verdict === "PACKET-TAMPERED" ? "Record altered" : "Not a Shield record"}</h2><span class="chip ${ok ? "ok" : "bad"}">${esc(r.verdict)}</span></div>
+      <div class="row"><h2>${ok ? "Record consistent" : r.verdict === "PACKET-TAMPERED" ? "Record altered" : "Not a Shield record"}</h2><span class="chip ${ok ? "ok" : "bad"}">${esc(r.verdict)}</span></div>
       <pre>${esc(r.reasons.join("\n"))}
 hash   ${esc(p.integrity.hash)}
 closed ${esc(p.closedAt)} by ${esc(p.closedBy.role)}
 job    ${esc(p.job.title || p.job.id)} · ${esc(p.job.trade)}
-device ${esc(p.deviceSealId)}</pre>
+signer ${esc(r.signer ?? "unknown")}
+photos native ${esc(p.counts.native)} · web ${esc(p.counts.web)} · arrival ${esc(p.counts.arrival)} · missing ${esc(p.counts.missing)}</pre>
       <div class="slots">${points}</div>
-      <p class="foot-note">Hash and signature recomputed from the file. ${ok ? "No field in this record has changed since it was frozen." : "Do not rely on this record."}</p>
+      <p class="foot-note">${ok
+        ? `Every record signature, chain link and the packet hash check out against the key in the file. That shows nothing changed after signing; it does not show who holds the key. Compare the signer ID with one you trust. Photo files are not in this record, so photos are not re-hashed here.`
+        : "Do not rely on this record."}</p>
     </div>
   `;
 }
@@ -280,9 +288,9 @@ function specView(): string {
     <div class="card">
       <h2>Spec</h2>
       <div class="meta">
-        Proven: SHA-256 on arrival · unmodified original · hash chain<br>
-        Corroborated: locked pin score · motion later<br>
-        Not proven: web origin · EXIF · unstaged scene · GPS anti-spoof<br>
+        Proven (when verified): SHA-256 of the bytes received · signed, chained records are tamper-evident<br>
+        Corroborated: pin score (only when GPS accuracy fits the radius)<br>
+        Not proven: who holds the signing key · web origin · EXIF · unstaged scene · GPS anti-spoof · device clock<br>
         Fee does not move with verdict<br>
         standard $79 · extended $129 · major $199 · ${PRICING_EFFECTIVE}
       </div>
@@ -332,7 +340,7 @@ function bind(): void {
     });
   });
   root().querySelectorAll("[data-slot]").forEach((el) => {
-    el.addEventListener("click", () => void onSlot((el as HTMLElement).dataset.slot!));
+    el.addEventListener("click", () => void guarded(() => onSlot((el as HTMLElement).dataset.slot!)));
   });
   if (tab === "construction") bindConstruction(ctx);
 
@@ -363,18 +371,20 @@ function bind(): void {
   };
 
   const arrival = document.getElementById("file-arrival") as HTMLInputElement;
-  arrival.onchange = async () => {
+  arrival.onchange = () => {
     const file = arrival.files?.[0];
     arrival.value = "";
     if (!file) return;
     const slot = pendingSlot;
     pendingSlot = null;
-    const item = await arrivalHashFile(file, slot);
-    await reload();
-    openVaultId = item.record.id;
-    tab = "vault";
-    status = "ARRIVAL-ONLY · not an origin seal";
-    render();
+    void guarded(async () => {
+      const item = await arrivalHashFile(file, slot);
+      await reload();
+      openVaultId = item.record.id;
+      tab = "vault";
+      status = "ARRIVAL-ONLY · not an origin seal";
+      render();
+    });
   };
 
   const bundle = document.getElementById("file-bundle") as HTMLInputElement;
@@ -382,37 +392,65 @@ function bind(): void {
     const file = bundle.files?.[0];
     bundle.value = "";
     if (!file) return;
-    const text = await file.text();
     verifyOut = "";
     packetOut = null;
-    let raw: unknown = null;
     try {
-      raw = JSON.parse(text);
+      if (file.size > MAX_IMPORT_BYTES) {
+        verifyOut = "NO-ORIGIN\nfile-too-large";
+        return;
+      }
+      const text = await file.text();
+      let raw: unknown = null;
+      try {
+        raw = JSON.parse(text);
+      } catch {
+        verifyOut = "NO-ORIGIN\nfile-unreadable";
+        return;
+      }
+      if ((raw as { schema?: unknown })?.schema === "tradedeck.shield.completion.v2") {
+        try {
+          const packet = parseCloseoutPacket(text);
+          const expected = (document.getElementById("expected-signer") as HTMLInputElement | null)?.value.trim();
+          const result = await verifyCloseoutPacket(packet, expected || undefined);
+          packetOut = { ...result, packet };
+        } catch {
+          verifyOut = "PACKET-UNREADABLE\nbad-packet";
+        }
+        return;
+      }
+      try {
+        const result = await verifyBundle(parseBundle(text));
+        verifyOut = `${result.verdict}\n${result.reasons.join("\n")}\n${result.computedSha ?? ""}`;
+      } catch {
+        verifyOut = "NO-ORIGIN\nbundle-unreadable";
+      }
     } catch {
       verifyOut = "NO-ORIGIN\nfile-unreadable";
+    } finally {
       render();
-      return;
     }
-    if ((raw as { schema?: unknown })?.schema === "tradedeck.shield.completion.v2") {
-      try {
-        const packet = parseCloseoutPacket(text);
-        const result = await verifyCloseoutPacket(packet);
-        packetOut = { ...result, packet };
-      } catch {
-        verifyOut = "PACKET-UNREADABLE\nbad-packet";
-      }
-      render();
-      return;
-    }
-    try {
-      const parsed = parseBundle(text);
-      const result = await verifyBundle(parsed);
-      verifyOut = `${result.verdict}\n${result.reasons.join("\n")}\n${result.computedSha ?? ""}`;
-    } catch {
-      verifyOut = "NO-ORIGIN\nbundle-unreadable";
-    }
-    render();
   };
+}
+
+let sealing = false;
+
+function sealError(err: unknown): string {
+  if (err instanceof DOMException && err.name === "QuotaExceededError") return "Storage full. Export your records and free space, then retry.";
+  return `Could not seal: ${err instanceof Error ? err.message : "unknown error"}`;
+}
+
+// One seal at a time: a second tap while sealing would queue a duplicate record.
+async function guarded(fn: () => Promise<void>): Promise<void> {
+  if (sealing) return;
+  sealing = true;
+  try {
+    await fn();
+  } catch (err) {
+    status = sealError(err);
+    render();
+  } finally {
+    sealing = false;
+  }
 }
 
 let pendingSlot: string | null = null;
@@ -436,7 +474,7 @@ async function onSlot(id: string): Promise<void> {
     await reload();
     openVaultId = res.item.record.id;
     tab = "vault";
-    status = res.item.record.attest.kind === "none" ? "SEALED bytes · attest pending" : "SEALED";
+    status = res.item.record.attest.kind === "none" ? "Sealed on this device · no platform attestation" : "Sealed · platform attestation claimed";
     render();
     return;
   }
@@ -550,7 +588,7 @@ async function onAct(act: string): Promise<void> {
     return;
   }
   if (act === "shutter") {
-    await shutter();
+    await guarded(shutter);
     return;
   }
   if (act === "cam-off") {
@@ -565,10 +603,13 @@ async function onAct(act: string): Promise<void> {
     const lat = Number(pinLat);
     const lng = Number(pinLng);
     const radiusM = Number(pinR);
-    const pin =
-      Number.isFinite(lat) && Number.isFinite(lng) && pinLat !== "" && pinLng !== ""
-        ? { lat, lng, radiusM: Number.isFinite(radiusM) && radiusM > 0 ? radiusM : 200 }
-        : null;
+    const hasPin = pinLat.trim() !== "" || pinLng.trim() !== "";
+    if (hasPin && !(Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && pinLat.trim() !== "" && pinLng.trim() !== "")) {
+      status = "Pin needs a latitude between -90 and 90 and a longitude between -180 and 180.";
+      render();
+      return;
+    }
+    const pin = hasPin ? { lat, lng, radiusM: Number.isFinite(radiusM) && radiusM >= 10 && radiusM <= 5000 ? radiusM : 200 } : null;
     const job: Job = {
       id: crypto.randomUUID(),
       pack: selectedPack,
@@ -605,13 +646,13 @@ async function onAct(act: string): Promise<void> {
   if (act === "export" && openVaultId) {
     const item = vault.find((v) => v.record.id === openVaultId);
     if (!item) return;
-    const bundle = { version: 1 as const, record: item.record, originalB64: item.originalB64 };
+    const bundle = { version: 1 as const, record: item.record, originalB64: item.originalB64, devicePublicKey: await devicePublicKeyRaw() };
     const blob = new Blob([JSON.stringify(bundle)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `${item.record.id}.shield.json`;
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     return;
   }
   if (act === "pick-bundle") {
@@ -619,6 +660,6 @@ async function onAct(act: string): Promise<void> {
   }
 }
 
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+function esc(s: unknown): string {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }

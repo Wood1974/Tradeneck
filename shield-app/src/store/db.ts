@@ -66,6 +66,20 @@ export async function setMeta(key: string, value: unknown): Promise<void> {
   await reqToPromise(db.transaction("meta", "readwrite").objectStore("meta").put(value, key));
 }
 
+/** Vault item, chain head and checkpoint binding commit together or not at all. */
+export async function commitSeal(item: VaultItem, head: string, job: Job | null): Promise<void> {
+  const db = await open();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(["vault", "meta", "jobs"], "readwrite");
+    tx.objectStore("vault").put(item);
+    tx.objectStore("meta").put(head, "chainHead");
+    if (job) tx.objectStore("jobs").put(job);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 export async function chainHead(): Promise<string> {
   return (await getMeta<string>("chainHead")) ?? "0".repeat(64);
 }

@@ -8,7 +8,7 @@ import {
   signPayload,
   stableStringify,
 } from "../crypto/seal";
-import { activeJobId, chainHead, getJob, putJob, putVault, setChainHead } from "../store/db";
+import { activeJobId, chainHead, commitSeal, getJob } from "../store/db";
 import type { CaptureKind, SealRecord, VaultItem } from "../types";
 
 export type CaptureError =
@@ -45,7 +45,8 @@ async function readGps(): Promise<SealRecord["gps"]> {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
       acc: pos.coords.accuracy,
-      source: "os",
+      // A browser fix can be overridden in DevTools; only a native fix is labelled "os".
+      source: isNativeOriginAvailable() ? "os" : "browser",
     };
   } catch {
     return null;
@@ -58,9 +59,10 @@ function pinScore(gps: SealRecord["gps"], jobPin: { lat: number; lng: number; ra
     return { meters: null, inside: null, mockFlag: isNativeOriginAvailable() ? "native-pending" : "unknown" };
   }
   const meters = haversineM(gps.lat, gps.lng, jobPin.lat, jobPin.lng);
+  // A fix less precise than the pin radius cannot place the device inside it.
   return {
     meters,
-    inside: meters <= jobPin.radiusM,
+    inside: gps.acc > jobPin.radiusM ? null : meters <= jobPin.radiusM,
     mockFlag: isNativeOriginAvailable() ? "native-pending" : "unknown",
   };
 }
@@ -102,20 +104,38 @@ async function capacitorStill(): Promise<{ bytes: ArrayBuffer; mime: string } | 
   }
 }
 
-export async function sealFromBytes(
+let sealQueue: Promise<unknown> = Promise.resolve();
+
+// Seals must run one at a time: each reads the chain head and writes the next one, and a GPS wait
+// sits in between. Without this, overlapping seals fork the chain and overwrite each other's job edits.
+export function sealFromBytes(
   bytes: ArrayBuffer,
   mime: string,
   kind: CaptureKind,
   checkpointId: string | null,
 ): Promise<VaultItem> {
-  const sha = await sha256Bytes(bytes);
-  const prev = await chainHead();
-  const jobId = await activeJobId();
-  const job = jobId ? await getJob(jobId) : undefined;
-  const gps = await readGps();
-  const attest = await attestPhotoHash(sha);
-  const device = await deviceSealId();
+  const run = sealQueue.then(() => sealLocked(bytes, mime, kind, checkpointId));
+  sealQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function sealLocked(
+  bytes: ArrayBuffer,
+  mime: string,
+  kind: CaptureKind,
+  checkpointId: string | null,
+): Promise<VaultItem> {
   const createdAt = new Date().toISOString();
+  const sha = await sha256Bytes(bytes);
+  // Arrival-hash proves only when a file was hashed, not where it was taken, so no location is attached.
+  const [prev, jobId, gps, device] = await Promise.all([
+    chainHead(),
+    activeJobId(),
+    kind === "arrival-hash" ? Promise.resolve(null) : readGps(),
+    deviceSealId(),
+  ]);
+  const job = jobId ? await getJob(jobId) : undefined;
+  const attest = await attestPhotoHash(sha);
 
   const unsigned = {
     id: uid(),
@@ -140,15 +160,14 @@ export async function sealFromBytes(
 
   const record: SealRecord = { ...unsigned, chainHead: head, signature };
   const item: VaultItem = { record, originalB64: b64FromBytes(bytes) };
-  await putVault(item);
-  await setChainHead(head);
-
+  let updatedJob: typeof job | null = null;
   if (job && record.checkpointId) {
-    job.checkpoints = job.checkpoints.map((c) =>
-      c.id === record.checkpointId ? { ...c, shotId: record.id } : c,
-    );
-    await putJob(job);
+    updatedJob = {
+      ...job,
+      checkpoints: job.checkpoints.map((c) => (c.id === record.checkpointId ? { ...c, shotId: record.id } : c)),
+    };
   }
+  await commitSeal(item, head, updatedJob ?? null);
   return item;
 }
 

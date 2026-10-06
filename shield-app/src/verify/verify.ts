@@ -1,4 +1,5 @@
-import { bytesFromB64, sha256Bytes } from "../crypto/seal";
+import { checkRecordAuth } from "../crypto/record";
+import { bytesFromB64, devicePublicKeyRaw, sha256Bytes } from "../crypto/seal";
 import type { SealRecord, ShieldBundle, Verdict } from "../types";
 
 export interface VerifyResult {
@@ -7,6 +8,8 @@ export interface VerifyResult {
   computedSha: string | null;
   record: SealRecord | null;
 }
+
+export const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
 
 export function verdictFor(record: SealRecord, computedSha: string | null): VerifyResult {
   const reasons: string[] = [];
@@ -27,29 +30,54 @@ export function verdictFor(record: SealRecord, computedSha: string | null): Veri
     if (record.attest.kind === "none") reasons.push("no-attest");
     return { verdict: "ARRIVAL-ONLY", reasons, computedSha, record };
   }
-  if (record.attest.kind === "none" || !record.attest.tokenPresent) {
-    reasons.push("native-camera-no-attest");
-    return { verdict: "SEALED", reasons, computedSha, record };
+  if (record.attest.kind === "none") {
+    return { verdict: "UNATTESTED-NATIVE", reasons: ["native-camera-no-attest"], computedSha, record };
   }
-  return { verdict: "SEALED", reasons: ["hash-match", record.attest.kind], computedSha, record };
+  // The attestation token is not stored in the record, so it cannot be independently validated here.
+  return { verdict: "SEALED", reasons: ["hash-match", record.attest.kind, "attest-token-not-validated"], computedSha, record };
 }
 
 export async function verifyBundle(bundle: ShieldBundle): Promise<VerifyResult> {
+  let computedSha: string;
   try {
-    const bytes = bytesFromB64(bundle.originalB64);
-    const computedSha = await sha256Bytes(bytes);
-    return verdictFor(bundle.record, computedSha);
+    computedSha = await sha256Bytes(bytesFromB64(bundle.originalB64));
   } catch {
     return { verdict: "NO-ORIGIN", reasons: ["bundle-unreadable"], computedSha: null, record: bundle.record };
   }
+  const base = verdictFor(bundle.record, computedSha);
+  if (base.verdict === "TAMPERED") return base;
+
+  // A hash match alone says nothing about the metadata (time, place, capture kind), so the record
+  // must also authenticate against the signing device's key.
+  if (!bundle.devicePublicKey) {
+    return { ...base, verdict: "ARRIVAL-ONLY", reasons: [...base.reasons, "record-unauthenticated"] };
+  }
+  const failed = await checkRecordAuth(bundle.record, bundle.devicePublicKey);
+  if (failed.length) return { ...base, verdict: "TAMPERED", reasons: failed };
+  return { ...base, reasons: [...base.reasons, "record-signature-valid"] };
 }
 
-export function verifyItemOriginal(record: SealRecord, originalB64: string): Promise<VerifyResult> {
-  return verifyBundle({ version: 1, record, originalB64 });
+/** Re-hash a vault item stored on this device, authenticated against this device's own key. */
+export async function verifyItemOriginal(record: SealRecord, originalB64: string): Promise<VerifyResult> {
+  return verifyBundle({ version: 1, record, originalB64, devicePublicKey: await devicePublicKeyRaw() });
 }
 
 export function parseBundle(text: string): ShieldBundle {
+  if (text.length > MAX_IMPORT_BYTES) throw new Error("file-too-large");
   const raw = JSON.parse(text) as ShieldBundle;
-  if (raw.version !== 1 || !raw.record || !raw.originalB64) throw new Error("bad-bundle");
+  const rec = raw?.record as Partial<SealRecord> | undefined;
+  if (
+    raw?.version !== 1 ||
+    typeof raw.originalB64 !== "string" ||
+    !raw.originalB64 ||
+    !rec ||
+    typeof rec.sha256 !== "string" ||
+    typeof rec.signature !== "string" ||
+    typeof rec.captureKind !== "string" ||
+    typeof rec.attest?.kind !== "string"
+  ) {
+    throw new Error("bad-bundle");
+  }
+  if (raw.devicePublicKey !== undefined && typeof raw.devicePublicKey !== "string") throw new Error("bad-bundle");
   return raw;
 }
