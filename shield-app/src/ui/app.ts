@@ -1,10 +1,11 @@
 import { arrivalHashFile, captureNative, sealWebCameraFrame } from "../capture/capture";
-import { devicePublicKeyRaw, deviceSealId } from "../crypto/seal";
+import { b64FromBytes, devicePublicKeyRaw, deviceSealId } from "../crypto/seal";
 import { makeCheckpoints, PACK_ORDER } from "../packs";
 import { isNativeOriginAvailable } from "../platform";
 import { feeForBudget, PRICING_EFFECTIVE } from "../pricing";
 import {
   activeJobId,
+  getVaultBytes,
   listJobs,
   listVault,
   putJob,
@@ -12,7 +13,7 @@ import {
 } from "../store/db";
 import type { Job, PackKind, VaultItem } from "../types";
 import { MAX_IMPORT_BYTES, parseBundle, verifyBundle, verifyItemOriginal } from "../verify/verify";
-import { parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
+import { download, parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
 import type { CloseoutPacket } from "../types";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
@@ -48,6 +49,8 @@ const ctx: ConstructionCtx = {
 };
 
 export async function start(): Promise<void> {
+  // Ask the browser not to evict the vault under storage pressure; a no-op where unsupported.
+  void navigator.storage?.persist?.();
   sealId = await deviceSealId();
   await initConstruction();
   await reload();
@@ -127,6 +130,7 @@ function captureView(native: boolean, job: Job | undefined): string {
         : "Live sensor, hashed at the shutter. Camera vs. virtual device is not proven on web."}</p>
       <div class="actions">
         <button class="btn" data-act="${native ? "native" : "webcam"}">${native ? "SEAL FRAME" : "OPEN CAMERA"}</button>
+        ${cameraFallback && !native ? `<button class="btn ghost small" data-act="system-camera">USE SYSTEM CAMERA</button>` : ""}
         <button class="btn ghost small" data-act="arrival">ARRIVAL HASH</button>
       </div>`;
   return `
@@ -204,10 +208,9 @@ function vaultView(): string {
   const open = vault.find((v) => v.record.id === openVaultId);
   if (open) {
     const rec = open.record;
-    const imgMime = /^image\/(jpeg|png)$/.test(rec.mime) ? rec.mime : "application/octet-stream";
     return `
       <button class="btn ghost small" data-act="vault-back">BACK</button>
-      <img class="thumb" alt="Sealed evidence photo" src="data:${imgMime};base64,${esc(open.originalB64)}" />
+      ${openImgUrl ? `<img class="thumb" alt="Sealed evidence photo" src="${esc(openImgUrl)}" />` : `<p class="meta">Photo bytes unavailable on this device.</p>`}
       <div class="card">
         <div class="row"><h2>${esc(rec.captureKind)}</h2><span class="chip">${esc(rec.platform)}</span></div>
         <pre>${esc(rec.sha256)}
@@ -334,9 +337,10 @@ function bind(): void {
   });
   root().querySelectorAll("[data-open]").forEach((el) => {
     el.addEventListener("click", () => {
-      openVaultId = (el as HTMLElement).dataset.open!;
-      status = "";
-      render();
+      void openVault((el as HTMLElement).dataset.open!).then(() => {
+        status = "";
+        render();
+      });
     });
   });
   root().querySelectorAll("[data-slot]").forEach((el) => {
@@ -380,7 +384,7 @@ function bind(): void {
     void guarded(async () => {
       const item = await arrivalHashFile(file, slot);
       await reload();
-      openVaultId = item.record.id;
+      await openVault(item.record.id);
       tab = "vault";
       status = "ARRIVAL-ONLY · not an origin seal";
       render();
@@ -432,6 +436,33 @@ function bind(): void {
   };
 }
 
+const CAPTURE_ERRORS: Record<string, string> = {
+  "not-native": "Native camera is only available in the iOS/Android app. Use the in-page camera or arrival hash.",
+  "camera-denied": "Camera access is off. Allow the camera for Shield in Settings, then try again.",
+  "camera-failed": "The camera did not return a photo. Try again.",
+  "empty-bytes": "The camera returned an empty photo. Try again.",
+  "plugin-missing": "The camera plugin is not installed in this build.",
+};
+
+const captureErrorText = (code: string): string => CAPTURE_ERRORS[code] ?? `Capture failed (${code}).`;
+
+let cameraFallback = false;
+
+let openImgUrl: string | null = null;
+
+const imageMime = (mime: string): string => (/^image\/(jpeg|png)$/.test(mime) ? mime : "application/octet-stream");
+
+// Photo bytes are loaded only for the record being viewed, and shown through an object URL instead of a base64 data URL.
+async function openVault(id: string | null): Promise<void> {
+  if (openImgUrl) URL.revokeObjectURL(openImgUrl);
+  openImgUrl = null;
+  openVaultId = id;
+  if (!id) return;
+  const rec = vault.find((v) => v.record.id === id)?.record;
+  const bytes = rec ? await getVaultBytes(id) : undefined;
+  if (rec && bytes) openImgUrl = URL.createObjectURL(new Blob([bytes], { type: imageMime(rec.mime) }));
+}
+
 let sealing = false;
 
 function sealError(err: unknown): string {
@@ -459,7 +490,7 @@ async function onSlot(id: string): Promise<void> {
   const job = activeJob();
   const cp = job?.checkpoints.find((c) => c.id === id);
   if (cp?.shotId) {
-    openVaultId = cp.shotId;
+    await openVault(cp.shotId);
     tab = "vault";
     render();
     return;
@@ -467,12 +498,12 @@ async function onSlot(id: string): Promise<void> {
   if (isNativeOriginAvailable()) {
     const res = await captureNative(id);
     if ("error" in res) {
-      status = res.error;
+      status = captureErrorText(res.error);
       render();
       return;
     }
     await reload();
-    openVaultId = res.item.record.id;
+    await openVault(res.item.record.id);
     tab = "vault";
     status = res.item.record.attest.kind === "none" ? "Sealed on this device · no platform attestation" : "Sealed · platform attestation claimed";
     render();
@@ -496,12 +527,13 @@ async function openWebCamera(slot: string | null): Promise<void> {
       audio: false,
     });
     status = "";
+    cameraFallback = false;
     render();
   } catch {
     camStream = null;
-    status = "Camera permission denied or unavailable. Using the system camera.";
+    cameraFallback = true;
+    status = "Camera permission denied or unavailable. Tap USE SYSTEM CAMERA to take the photo with your phone's camera app.";
     render();
-    fallbackCameraInput();
   }
 }
 
@@ -541,7 +573,7 @@ async function shutter(): Promise<void> {
   stopWebCamera();
   const item = await sealWebCameraFrame(blob, slot);
   await reload();
-  openVaultId = item.record.id;
+  await openVault(item.record.id);
   tab = "vault";
   status = "WEB CAMERA · bytes sealed at the shutter · origin not proven";
   render();
@@ -568,12 +600,12 @@ async function onAct(act: string): Promise<void> {
   if (act === "native") {
     const res = await captureNative(null);
     if ("error" in res) {
-      status = res.error === "not-native" ? "not-native · use arrival hash or the iOS/Android wrap" : res.error;
+      status = captureErrorText(res.error);
       render();
       return;
     }
     await reload();
-    openVaultId = res.item.record.id;
+    await openVault(res.item.record.id);
     tab = "vault";
     render();
     return;
@@ -585,6 +617,11 @@ async function onAct(act: string): Promise<void> {
   }
   if (act === "webcam") {
     await openWebCamera(null);
+    return;
+  }
+  if (act === "system-camera") {
+    cameraFallback = false;
+    fallbackCameraInput();
     return;
   }
   if (act === "shutter") {
@@ -630,29 +667,35 @@ async function onAct(act: string): Promise<void> {
     return;
   }
   if (act === "vault-back") {
-    openVaultId = null;
+    await openVault(null);
     status = "";
     render();
     return;
   }
   if (act === "rehash" && openVaultId) {
     const item = vault.find((v) => v.record.id === openVaultId);
-    if (!item) return;
-    const result = await verifyItemOriginal(item.record, item.originalB64);
+    const bytes = item ? await getVaultBytes(item.record.id) : undefined;
+    if (!item || !bytes) {
+      status = "Photo bytes unavailable on this device.";
+      render();
+      return;
+    }
+    const result = await verifyItemOriginal(item.record, b64FromBytes(bytes));
     status = `${result.verdict} · ${result.reasons.join(", ")}`;
     render();
     return;
   }
   if (act === "export" && openVaultId) {
     const item = vault.find((v) => v.record.id === openVaultId);
-    if (!item) return;
-    const bundle = { version: 1 as const, record: item.record, originalB64: item.originalB64, devicePublicKey: await devicePublicKeyRaw() };
-    const blob = new Blob([JSON.stringify(bundle)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${item.record.id}.shield.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    const bytes = item ? await getVaultBytes(item.record.id) : undefined;
+    if (!item || !bytes) {
+      status = "Photo bytes unavailable on this device.";
+      render();
+      return;
+    }
+    const bundle = { version: 1 as const, record: item.record, originalB64: b64FromBytes(bytes), devicePublicKey: await devicePublicKeyRaw() };
+    const stamp = item.record.createdAt.replace(/[:.]/g, "-");
+    download(`shield-photo_${item.record.id.slice(0, 8)}_${stamp}.shield.json`, new Blob([JSON.stringify(bundle)], { type: "application/json" }));
     return;
   }
   if (act === "pick-bundle") {

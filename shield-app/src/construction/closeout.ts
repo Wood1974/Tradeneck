@@ -207,7 +207,7 @@ ${packet.notes ? `<h2>Close notes</h2><pre>${esc(packet.notes)}</pre>` : ""}
 </body></html>`;
 }
 
-function download(filename: string, blob: Blob): void {
+export function download(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

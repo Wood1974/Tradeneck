@@ -1,7 +1,6 @@
 import { detectPlatform, isNativeOriginAvailable } from "../platform";
 import { attestPhotoHash } from "../native/attest";
 import {
-  b64FromBytes,
   chainStep,
   deviceSealId,
   sha256Bytes,
@@ -26,7 +25,7 @@ function uid(): string {
   return crypto.randomUUID();
 }
 
-const GPS_TIMEOUT_MS = 8000;
+const GPS_TIMEOUT_MS = 4000;
 
 async function readGps(): Promise<SealRecord["gps"]> {
   if (typeof navigator === "undefined" || !("geolocation" in navigator)) return null;
@@ -38,7 +37,7 @@ async function readGps(): Promise<SealRecord["gps"]> {
       navigator.geolocation.getCurrentPosition(
         (p) => { clearTimeout(deadline); resolve(p); },
         (e) => { clearTimeout(deadline); reject(e); },
-        { enableHighAccuracy: true, timeout: GPS_TIMEOUT_MS, maximumAge: 0 },
+        { enableHighAccuracy: true, timeout: GPS_TIMEOUT_MS, maximumAge: 5000 },
       );
     });
     return {
@@ -159,7 +158,7 @@ async function sealLocked(
   const signature = await signPayload({ ...unsigned, chainHead: head });
 
   const record: SealRecord = { ...unsigned, chainHead: head, signature };
-  const item: VaultItem = { record, originalB64: b64FromBytes(bytes) };
+  const item: VaultItem = { record };
   let updatedJob: typeof job | null = null;
   if (job && record.checkpointId) {
     updatedJob = {
@@ -167,7 +166,7 @@ async function sealLocked(
       checkpoints: job.checkpoints.map((c) => (c.id === record.checkpointId ? { ...c, shotId: record.id } : c)),
     };
   }
-  await commitSeal(item, head, updatedJob ?? null);
+  await commitSeal(item, bytes, head, updatedJob ?? null);
   return item;
 }
 

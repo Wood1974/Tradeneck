@@ -12,13 +12,19 @@ function b64(buf: ArrayBuffer): string {
   return btoa(s);
 }
 
+let keyDb: Promise<IDBDatabase> | null = null;
+
 function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  keyDb ??= new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(IDB_NAME, 1);
     req.onupgradeneeded = () => req.result.createObjectStore(STORE);
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onerror = () => {
+      keyDb = null;
+      reject(req.error);
+    };
   });
+  return keyDb;
 }
 
 async function idbGet<T>(key: string): Promise<T | undefined> {

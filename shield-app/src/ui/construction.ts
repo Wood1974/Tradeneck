@@ -47,8 +47,12 @@ export async function initConstruction(): Promise<void> {
   if (saved) draft = { ...emptyDraft(), ...saved };
 }
 
-async function saveDraft(): Promise<void> {
-  await setMeta(DRAFT_KEY, draft);
+let draftTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Typing fires on every keystroke; coalesce into one IndexedDB write.
+function saveDraft(): void {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => void setMeta(DRAFT_KEY, draft), 300);
 }
 
 function activeConstructionJob(ctx: ConstructionCtx): Job | undefined {
@@ -280,7 +284,7 @@ export function bindConstruction(ctx: ConstructionCtx): void {
   root.querySelectorAll<HTMLElement>("[data-role]").forEach((el) => {
     el.addEventListener("click", () => {
       draft.role = el.dataset.role as BriefRole;
-      void saveDraft();
+      saveDraft();
       ctx.render();
     });
   });
@@ -291,14 +295,14 @@ export function bindConstruction(ctx: ConstructionCtx): void {
   });
 
   const title = q<HTMLInputElement>("#c-title");
-  if (title) title.oninput = () => { draft.title = title.value; void saveDraft(); };
+  if (title) title.oninput = () => { draft.title = title.value; saveDraft(); };
   const trade = q<HTMLSelectElement>("#c-trade");
-  if (trade) trade.onchange = () => { draft.trade = trade.value as TradeId | ""; void saveDraft(); ctx.render(); };
+  if (trade) trade.onchange = () => { draft.trade = trade.value as TradeId | ""; saveDraft(); ctx.render(); };
   const budget = q<HTMLSelectElement>("#c-budget");
-  if (budget) budget.onchange = () => { draft.budgetBand = budget.value as BudgetBand; void saveDraft(); };
+  if (budget) budget.onchange = () => { draft.budgetBand = budget.value as BudgetBand; saveDraft(); };
   const desc = q<HTMLTextAreaElement>("#c-desc");
   if (desc) {
-    desc.oninput = () => { draft.description = desc.value; void saveDraft(); refreshMeter(root); };
+    desc.oninput = () => { draft.description = desc.value; saveDraft(); refreshMeter(root); };
   }
 
   root.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-q]").forEach((el) => {
@@ -312,7 +316,7 @@ export function bindConstruction(ctx: ConstructionCtx): void {
       if (el.checked) arr.add(el.value);
       else arr.delete(el.value);
       draft.answers[id] = [...arr];
-      void saveDraft();
+      saveDraft();
     };
   });
 
@@ -372,7 +376,8 @@ function setAnswer(id: string, value: string): void {
   draft.answers[id] = value;
   if (id === "include") draft.include = value;
   if (id === "exclude") draft.exclude = value;
-  void saveDraft();
+  saveDraft();
+  refreshMeter(document.getElementById("app")!);
 }
 
 async function editPoint(ctx: ConstructionCtx, job: Job | undefined, id: string, patch: Partial<Job["checkpoints"][number]>): Promise<void> {
@@ -461,6 +466,7 @@ async function onAct(ctx: ConstructionCtx, act: string): Promise<void> {
   if (act === "c-freeze") {
     const job = activeConstructionJob(ctx);
     if (!job) return;
+    if (!confirm("Freeze and sign this record with this device's key now?")) return;
     const vault = ctx.vault();
     const recordFor = (id: string) => vault.find((v) => v.record.id === id)?.record;
     const missing = missingPoints(job, recordFor);

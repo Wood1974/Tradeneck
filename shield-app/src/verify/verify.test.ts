@@ -36,43 +36,43 @@ describe("verifyBundle", () => {
   async function sealed() {
     const bytes = new TextEncoder().encode(`photo ${Math.random()}`).buffer;
     const item = await sealFromBytes(bytes, "image/jpeg", "web-camera", null);
-    return { item, key: await devicePublicKeyRaw() };
+    return { item, originalB64: b64FromBytes(bytes), key: await devicePublicKeyRaw() };
   }
 
   it("authenticates a record against the embedded key", async () => {
-    const { item, key } = await sealed();
-    const r = await verifyBundle({ version: 1, record: item.record, originalB64: item.originalB64, devicePublicKey: key });
+    const { item, originalB64, key } = await sealed();
+    const r = await verifyBundle({ version: 1, record: item.record, originalB64: originalB64, devicePublicKey: key });
     expect(r.reasons).toContain("record-signature-valid");
     expect(r.verdict).toBe("ARRIVAL-ONLY");
   });
 
   it("rejects edited metadata even though the photo bytes still match", async () => {
-    const { item, key } = await sealed();
+    const { item, originalB64, key } = await sealed();
     const edited = { ...item.record, createdAt: "2020-01-01T00:00:00.000Z" };
-    const r = await verifyBundle({ version: 1, record: edited, originalB64: item.originalB64, devicePublicKey: key });
+    const r = await verifyBundle({ version: 1, record: edited, originalB64: originalB64, devicePublicKey: key });
     expect(r.verdict).toBe("TAMPERED");
     expect(r.reasons).toContain("chain-head-mismatch");
     expect(r.reasons).toContain("record-signature-invalid");
   });
 
   it("rejects a record presented with a different key", async () => {
-    const { item } = await sealed();
+    const { item, originalB64 } = await sealed();
     const other = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
     const raw = b64FromBytes(await crypto.subtle.exportKey("raw", other.publicKey));
-    const r = await verifyBundle({ version: 1, record: item.record, originalB64: item.originalB64, devicePublicKey: raw });
+    const r = await verifyBundle({ version: 1, record: item.record, originalB64: originalB64, devicePublicKey: raw });
     expect(r.verdict).toBe("TAMPERED");
     expect(r.reasons).toContain("seal-id-key-mismatch");
   });
 
   it("marks a keyless bundle unauthenticated and never SEALED", async () => {
-    const { item } = await sealed();
-    const r = await verifyBundle({ version: 1, record: { ...item.record, captureKind: "native-camera", attest: { kind: "app-attest", boundHash: null, tokenPresent: true } }, originalB64: item.originalB64 });
+    const { item, originalB64 } = await sealed();
+    const r = await verifyBundle({ version: 1, record: { ...item.record, captureKind: "native-camera", attest: { kind: "app-attest", boundHash: null, tokenPresent: true } }, originalB64: originalB64 });
     expect(r.verdict).toBe("ARRIVAL-ONLY");
     expect(r.reasons).toContain("record-unauthenticated");
   });
 
   it("detects changed photo bytes", async () => {
-    const { item, key } = await sealed();
+    const { item, originalB64, key } = await sealed();
     const r = await verifyBundle({ version: 1, record: item.record, originalB64: b64FromBytes(new TextEncoder().encode("other").buffer), devicePublicKey: key });
     expect(r.verdict).toBe("TAMPERED");
   });

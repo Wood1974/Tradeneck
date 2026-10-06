@@ -111,10 +111,9 @@ export interface SealRecord {
   signature: string;
 }
 
+/** Photo bytes live in the separate `blobs` store (see store/db.ts), so listing the vault stays light. */
 export interface VaultItem {
   record: SealRecord;
-  /** JPEG/PNG bytes as base64. Original stored unmodified. */
-  originalB64: string;
 }
 
 export interface ShieldBundle {
