@@ -1,5 +1,5 @@
 import { esc } from "../esc";
-import { captureNative, sealWebCameraFrame } from "../capture/capture";
+import { captureNative } from "../capture/capture";
 import { b64FromBytes, devicePublicKeyRaw, deviceSealId } from "../crypto/seal";
 import { makeCheckpoints, PACK_ORDER } from "../packs";
 import { isNativeOriginAvailable } from "../platform";
@@ -12,7 +12,7 @@ import {
   putJob,
   setActiveJobId,
 } from "../store/db";
-import type { CameraFacing, Job, PackKind, VaultItem } from "../types";
+import type { Job, PackKind, VaultItem } from "../types";
 import { MAX_IMPORT_BYTES, parseBundle, verifyBundle, verifyItemOriginal } from "../verify/verify";
 import { download, parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
 import type { CloseoutPacket } from "../types";
@@ -37,7 +37,6 @@ let pinLat = "";
 let pinLng = "";
 let pinR = "200";
 let verifyOut = "";
-let camStream: MediaStream | null = null;
 let packetOut: (PacketVerification & { packet: CloseoutPacket }) | null = null;
 
 const ctx: ConstructionCtx = {
@@ -109,31 +108,20 @@ function view(native: boolean, job: Job | undefined): string {
 }
 
 function captureView(native: boolean, job: Job | undefined): string {
-  const originChip = native ? `<span class="chip ok">NATIVE</span>` : `<span class="chip warn">WEB · NO ORIGIN</span>`;
-  const camChip = native
-    ? `<span class="chip">CAMERA READY · ${clock()}</span>`
-    : camStream
-      ? `<span class="chip ok">WEB CAMERA · LIVE</span>`
-      : `<span class="chip">CAMERA OFF · ${clock()}</span>`;
-  const slotLabel = pendingSlot ? job?.checkpoints.find((c) => c.id === pendingSlot)?.label ?? pendingSlot : null;
+  const originChip = native ? `<span class="chip ok">NATIVE</span>` : `<span class="chip bad">NO CAPTURE IN BROWSER</span>`;
+  const camChip = native ? `<span class="chip">CAMERA READY · ${clock()}</span>` : "";
   const flipLabel = facing === "environment" ? "USE FRONT CAMERA" : "USE BACK CAMERA";
-  const finderBody = !native && camStream
-    ? `<video id="cam" class="cam${facing === "user" ? " front" : ""}" autoplay playsinline muted></video>
-      ${slotLabel ? `<p class="lede">Sealing “${esc(slotLabel)}”</p>` : ""}
+  const finderBody = native
+    ? `<div class="icon-aperture"><span></span></div>
+      <h1>Native camera</h1>
+      <p class="lede">Live camera only, front or back. Shield has no gallery or photo-file import. Platform attestation is not implemented in this build.</p>
       <div class="actions">
-        <button class="btn" data-act="shutter">SHUTTER</button>
+        <button class="btn" data-act="native">SEAL FRAME</button>
         <button class="btn ghost small" data-act="cam-flip">${flipLabel}</button>
-        <button class="btn ghost small" data-act="cam-off">CANCEL</button>
       </div>`
     : `<div class="icon-aperture"><span></span></div>
-      <h1>${native ? "Native camera" : "Browser camera"}</h1>
-      <p class="lede">${native
-        ? "Live camera only, front or back. Gallery and file imports are disabled. Platform attestation is not implemented in this build."
-        : "Live camera only, front or back. Gallery and file imports are disabled. Camera vs. virtual device is not proven on web."}</p>
-      <div class="actions">
-        <button class="btn" data-act="${native ? "native" : "webcam"}">${native ? "SEAL FRAME" : "OPEN CAMERA"}</button>
-        <button class="btn ghost small" data-act="cam-flip">${flipLabel}</button>
-      </div>`;
+      <h1>Capture needs the app</h1>
+      <p class="lede">Photos can only be taken with the live camera in the Shield iOS or Android app. A browser can plan jobs and verify records but cannot capture, and Shield has no gallery or photo-file import.</p>`;
   return `
     <div class="banner">
       <strong>${job ? "LOCKED LIST" : "NO LOCKED LIST"}</strong>
@@ -217,7 +205,6 @@ function vaultView(): string {
         <pre>${esc(rec.sha256)}
 ${esc(rec.createdAt)}
 job ${esc(rec.jobId ?? "—")} · ${esc(rec.checkpointId ?? "unbound")}
-camera ${esc(rec.facing ?? "n/a")}
 ${rec.gps ? `location ${esc(rec.gps.source)} · ±${esc(Math.round(rec.gps.acc))} m` : "no location recorded"}
 attest ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " · token not validated"}</pre>
         <div class="actions">
@@ -306,12 +293,8 @@ function specView(): string {
 }
 
 function bind(): void {
-  const cam = document.getElementById("cam") as HTMLVideoElement | null;
-  if (cam && camStream && cam.srcObject !== camStream) cam.srcObject = camStream;
-
   root().querySelectorAll("[data-tab]").forEach((el) => {
     el.addEventListener("click", () => {
-      stopWebCamera();
       tab = (el as HTMLElement).dataset.tab as Tab;
       specOpen = false;
       status = "";
@@ -422,7 +405,7 @@ function bind(): void {
 }
 
 const CAPTURE_ERRORS: Record<string, string> = {
-  "not-native": "Native camera is only available in the iOS/Android app. Use OPEN CAMERA in the browser.",
+  "not-native": "Photos can only be taken in the Shield iOS or Android app.",
   "camera-denied": "Camera access is off. Allow the camera for Shield in Settings, then try again.",
   "camera-failed": "The camera did not return a photo. Try again.",
   "empty-bytes": "The camera returned an empty photo. Try again.",
@@ -432,7 +415,6 @@ const CAPTURE_ERRORS: Record<string, string> = {
 const captureErrorText = (code: string): string => CAPTURE_ERRORS[code] ?? `Capture failed (${code}).`;
 
 let facing: "environment" | "user" = "environment";
-let camFacing: CameraFacing = "unknown";
 
 let openImgUrl: string | null = null;
 
@@ -470,8 +452,6 @@ async function guarded(fn: () => Promise<void>): Promise<void> {
   }
 }
 
-let pendingSlot: string | null = null;
-
 async function onSlot(id: string): Promise<void> {
   const job = activeJob();
   const cp = job?.checkpoints.find((c) => c.id === id);
@@ -495,65 +475,8 @@ async function onSlot(id: string): Promise<void> {
     render();
     return;
   }
-  await openWebCamera(id);
-}
-
-async function openWebCamera(slot: string | null): Promise<void> {
-  pendingSlot = slot;
+  status = "Photos can only be taken in the Shield iOS or Android app. This browser cannot capture.";
   tab = "capture";
-  specOpen = false;
-  if (!navigator.mediaDevices?.getUserMedia) {
-    status = "This browser cannot open a live camera (it needs HTTPS or localhost). Shield only accepts live camera photos.";
-    render();
-    return;
-  }
-  try {
-    camStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-      audio: false,
-    });
-    const reported = camStream.getVideoTracks()[0]?.getSettings().facingMode;
-    camFacing = reported === "environment" ? "back" : reported === "user" ? "front" : "unknown";
-    status = "";
-    render();
-  } catch {
-    camStream = null;
-    status = "Camera access is required. Allow the camera for this site, then tap OPEN CAMERA again. Photos cannot be imported.";
-    render();
-  }
-}
-
-function stopWebCamera(): void {
-  if (!camStream) return;
-  for (const t of camStream.getTracks()) t.stop();
-  camStream = null;
-}
-
-async function shutter(): Promise<void> {
-  const v = document.getElementById("cam") as HTMLVideoElement | null;
-  if (!v || !camStream || !v.videoWidth) {
-    status = "Camera not ready yet.";
-    render();
-    return;
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = v.videoWidth;
-  canvas.height = v.videoHeight;
-  canvas.getContext("2d")!.drawImage(v, 0, 0);
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
-  if (!blob) {
-    status = "Could not read the frame.";
-    render();
-    return;
-  }
-  const slot = pendingSlot;
-  pendingSlot = null;
-  stopWebCamera();
-  const item = await sealWebCameraFrame(blob, slot, camFacing);
-  await reload();
-  await openVault(item.record.id);
-  tab = "vault";
-  status = "WEB CAMERA · bytes sealed at the shutter · origin not proven";
   render();
 }
 
@@ -576,40 +499,23 @@ async function onAct(act: string): Promise<void> {
     return;
   }
   if (act === "native") {
-    const res = await captureNative(null, facing === "user" ? "front" : "back");
-    if ("error" in res) {
-      status = captureErrorText(res.error);
+    await guarded(async () => {
+      const res = await captureNative(null, facing === "user" ? "front" : "back");
+      if ("error" in res) {
+        status = captureErrorText(res.error);
+        render();
+        return;
+      }
+      await reload();
+      await openVault(res.item.record.id);
+      tab = "vault";
+      status = res.item.record.attest.kind === "none" ? "Sealed on this device · no platform attestation" : "Sealed · platform attestation claimed";
       render();
-      return;
-    }
-    await reload();
-    await openVault(res.item.record.id);
-    tab = "vault";
-    render();
-    return;
-  }
-  if (act === "webcam") {
-    await openWebCamera(null);
+    });
     return;
   }
   if (act === "cam-flip") {
     facing = facing === "environment" ? "user" : "environment";
-    if (camStream) {
-      stopWebCamera();
-      await openWebCamera(pendingSlot);
-      return;
-    }
-    render();
-    return;
-  }
-  if (act === "shutter") {
-    await guarded(shutter);
-    return;
-  }
-  if (act === "cam-off") {
-    stopWebCamera();
-    pendingSlot = null;
-    status = "";
     render();
     return;
   }

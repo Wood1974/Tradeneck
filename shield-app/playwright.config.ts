@@ -13,17 +13,18 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}`,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
-    permissions: ["camera"],
+    permissions: ["geolocation"],
+    geolocation: { latitude: 40.7608, longitude: -111.891, accuracy: 20 },
     launchOptions: {
-      args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
       // Optional: use a preinstalled Chromium instead of the one `playwright install` fetches.
       executablePath: process.env.PW_CHROMIUM_PATH || undefined,
     },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  // Serve the production build: that is what ships, and it has no dev websocket traffic.
+  // A separate "e2e" build (own output dir, never shipped) with a stand-in for the OS camera, which a
+  // browser test cannot drive. The production build contains no such code (see `npm run check:bundle`).
   webServer: {
-    command: `npm run build && npx vite preview --port ${PORT} --strictPort`,
+    command: `npx vite build --mode e2e --outDir dist-e2e && npx vite preview --outDir dist-e2e --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

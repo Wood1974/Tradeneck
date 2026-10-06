@@ -1,21 +1,24 @@
 # End-to-end tests
 
-Playwright drives the production build (`vite build` + `vite preview`) in Chromium with a fake camera
-(`--use-fake-device-for-media-stream`). Everything is in `e2e/shield.spec.ts`; there is no mocking of the app.
+Playwright drives an **e2e build** (`vite build --mode e2e --outDir dist-e2e`, never shipped) in Chromium. A browser
+cannot drive the OS camera, so that build replaces only the camera call with a stand-in (`__shieldE2ECamera`) and the
+test pretends to be the Android app. Everything after the camera (hash, chain, sign, store, freeze, verify) is the real
+code. The real Capacitor camera path is not exercised here. `npm run check:bundle` (run in CI) fails if the stand-in
+appears in the production `dist/`.
 
 ## What is covered (9 tests)
 
 | Test | Proves |
 |---|---|
-| brief to sealed point to frozen record to verified packet | lock a brief, seal point 1 via the in-page camera, freeze, export, re-import and verify `PACKET-SEALED` |
+| brief to sealed point to frozen record to verified packet | lock a brief, seal point 1, freeze, export, re-import and verify `PACKET-SEALED` |
 | an edited packet is reported as altered | changing a field after signing gives `PACKET-TAMPERED` / `hash-mismatch` |
 | pinning the wrong signer fails | a valid packet is rejected when the expected seal ID does not match |
-| a double tap on the shutter seals exactly one photo | the in-flight guard; fails if the guard is removed |
-| camera seal rehashes clean and survives a reload | record authenticates; vault persists across reload |
-| no gallery or file import path exists | no ARRIVAL HASH button or capture file input; only the Verify importer remains |
-| front camera can be chosen and still seals | the toggle restarts the stream and the lens is recorded |
-| without camera access nothing can be sealed | no fallback picker opens and the vault stays empty |
-| the whole workflow makes no network requests once loaded | runs offline (`context.setOffline(true)`) and asserts zero requests |
+| a double tap on SEAL FRAME seals exactly one photo | the in-flight guard; fails if the guard is removed |
+| a sealed photo rehashes clean and survives a reload | record authenticates; vault persists across reload |
+| back is the default, front can be chosen | the toggle changes the direction passed to the camera |
+| a denied camera seals nothing | an error shows and the vault stays empty |
+| a browser cannot capture | no capture button, video, gallery or file path; SEAL in a browser seals nothing and opens no picker |
+| the whole workflow makes no network requests | runs offline (`context.setOffline(true)`) and asserts zero requests |
 
 Signature, chain, forgery and migration edge cases are unit-tested in `src/**/*.test.ts` (`npm test`), which is
 faster and runs on every push.
@@ -32,4 +35,4 @@ CI runs this as the `e2e` job in `.github/workflows/shield-app.yml` and uploads 
 
 ## Not covered
 
-Native camera, App Attest / Play Integrity, iOS and Android devices, and real-GPS behavior need physical devices.
+The real native camera, App Attest / Play Integrity, iOS and Android devices, and real-GPS behavior need physical devices.

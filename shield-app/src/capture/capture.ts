@@ -8,7 +8,7 @@ import {
   stableStringify,
 } from "../crypto/seal";
 import { activeJobId, chainHead, commitSeal, getJob } from "../store/db";
-import type { CameraFacing, CaptureKind, SealRecord, VaultItem } from "../types";
+import type { CaptureKind, SealRecord, VaultItem } from "../types";
 
 export type CaptureError =
   | "not-native"
@@ -44,8 +44,7 @@ async function readGps(): Promise<SealRecord["gps"]> {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
       acc: pos.coords.accuracy,
-      // A browser fix can be overridden in DevTools; only a native fix is labelled "os".
-      source: isNativeOriginAvailable() ? "os" : "browser",
+      source: "os",
     };
   } catch {
     return null;
@@ -77,20 +76,31 @@ function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): num
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
 }
 
-async function capacitorStill(facing: "back" | "front"): Promise<{ bytes: ArrayBuffer; mime: string } | { error: CaptureError }> {
+type StillPhoto = { base64String?: string; format?: string };
+
+async function capacitorStill(direction: "back" | "front"): Promise<{ bytes: ArrayBuffer; mime: string } | { error: CaptureError }> {
   try {
-    const core = await import("@capacitor/core");
-    if (!core.Capacitor.isNativePlatform()) return { error: "not-native" };
-    const { Camera, CameraDirection, CameraResultType, CameraSource } = await import("@capacitor/camera");
-    const photo = await Camera.getPhoto({
-      // Camera only: no gallery source, so a stored photo cannot be sealed through this path.
-      source: CameraSource.Camera,
-      direction: facing === "front" ? CameraDirection.Front : CameraDirection.Rear,
-      resultType: CameraResultType.Base64,
-      quality: 92,
-      allowEditing: false,
-      correctOrientation: true,
-    });
+    let photo: StillPhoto;
+    if (import.meta.env.MODE === "e2e") {
+      // Test builds only (`vite build --mode e2e`): stands in for the OS camera, which a browser test cannot drive.
+      // This branch is removed from production bundles; `npm run check:bundle` fails the build if it ships.
+      const hook = (globalThis as { __shieldE2ECamera?: (d: string) => Promise<StillPhoto> | StillPhoto }).__shieldE2ECamera;
+      if (!hook) return { error: "plugin-missing" };
+      photo = await hook(direction);
+    } else {
+      const core = await import("@capacitor/core");
+      if (!core.Capacitor.isNativePlatform()) return { error: "not-native" };
+      const { Camera, CameraDirection, CameraResultType, CameraSource } = await import("@capacitor/camera");
+      photo = await Camera.getPhoto({
+        // Camera only: no gallery source, so a stored photo cannot be sealed through this path.
+        source: CameraSource.Camera,
+        direction: direction === "front" ? CameraDirection.Front : CameraDirection.Rear,
+        resultType: CameraResultType.Base64,
+        quality: 92,
+        allowEditing: false,
+        correctOrientation: true,
+      });
+    }
     if (!photo.base64String) return { error: "empty-bytes" };
     const raw = photo.base64String.replace(/^data:[^;]+;base64,/, "");
     const bin = atob(raw);
@@ -114,9 +124,8 @@ export function sealFromBytes(
   mime: string,
   kind: CaptureKind,
   checkpointId: string | null,
-  facing: CameraFacing = "unknown",
 ): Promise<VaultItem> {
-  const run = sealQueue.then(() => sealLocked(bytes, mime, kind, checkpointId, facing));
+  const run = sealQueue.then(() => sealLocked(bytes, mime, kind, checkpointId));
   sealQueue = run.catch(() => undefined);
   return run;
 }
@@ -126,7 +135,6 @@ async function sealLocked(
   mime: string,
   kind: CaptureKind,
   checkpointId: string | null,
-  facing: CameraFacing,
 ): Promise<VaultItem> {
   const createdAt = new Date().toISOString();
   const sha = await sha256Bytes(bytes);
@@ -151,7 +159,6 @@ async function sealLocked(
     prevChain: prev,
     bytes: bytes.byteLength,
     mime,
-    facing,
     gps,
     pinScore: pinScore(gps, job?.pin ?? null),
     deviceSealId: device,
@@ -175,15 +182,10 @@ async function sealLocked(
   return item;
 }
 
-export async function captureNative(checkpointId: string | null, facing: "back" | "front" = "back"): Promise<CaptureOk | { error: CaptureError }> {
+export async function captureNative(checkpointId: string | null, direction: "back" | "front" = "back"): Promise<CaptureOk | { error: CaptureError }> {
   if (!isNativeOriginAvailable()) return { error: "not-native" };
-  const still = await capacitorStill(facing);
+  const still = await capacitorStill(direction);
   if ("error" in still) return still;
   const item = await sealFromBytes(still.bytes, still.mime, "native-camera", checkpointId);
   return { item };
-}
-
-export async function sealWebCameraFrame(blob: Blob, checkpointId: string | null, facing: CameraFacing = "unknown"): Promise<VaultItem> {
-  const buf = await blob.arrayBuffer();
-  return sealFromBytes(buf, blob.type || "image/jpeg", "web-camera", checkpointId, facing);
 }

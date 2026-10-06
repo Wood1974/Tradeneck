@@ -28,6 +28,8 @@ jobs:
       - run: npm ci
       - name: Typecheck and build
         run: npm run build
+      - name: Production bundle must not contain e2e-only code
+        run: npm run check:bundle
       - name: Unit tests
         run: npm test
 

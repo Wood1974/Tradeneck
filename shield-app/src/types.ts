@@ -2,9 +2,6 @@ export type PackKind = "remodel" | "draw" | "unit" | "loss" | "shop" | "custom" 
 
 export type CaptureKind = "native-camera" | "web-camera" | "arrival-hash";
 
-/** Lens the live camera reported. Native shells cannot report it, so they record "unknown". */
-export type CameraFacing = "front" | "back" | "unknown";
-
 export type PlatformKind = "ios" | "android" | "web";
 
 export type Verdict = "SEALED" | "UNATTESTED-NATIVE" | "TAMPERED" | "ARRIVAL-ONLY" | "NO-ORIGIN";
@@ -94,8 +91,6 @@ export interface SealRecord {
   chainHead: string;
   bytes: number;
   mime: string;
-  /** Absent on records made before live-only capture. */
-  facing?: CameraFacing;
   gps: {
     lat: number;
     lng: number;

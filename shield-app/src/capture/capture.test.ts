@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chainStep, sha256Text, stableStringify, verifySignature, devicePublicKeyRaw } from "../crypto/seal";
 import { chainHead } from "../store/db";
-import { sealFromBytes } from "./capture";
+import { captureNative, sealFromBytes } from "./capture";
 
 describe("sealFromBytes", () => {
   it("derives chainHead from the stableStringify hash of the unsigned record and signs it", async () => {
@@ -28,14 +28,10 @@ describe("sealFromBytes", () => {
     expect(await chainHead()).toBe(items[2]!.record.chainHead);
   });
 
-  it("records which lens a live capture used, defaulting to unknown", async () => {
-    const bytes = new TextEncoder().encode("lens").buffer;
-    const back = await sealFromBytes(bytes, "image/jpeg", "web-camera", null, "back");
-    const front = await sealFromBytes(bytes, "image/jpeg", "web-camera", null, "front");
-    const other = await sealFromBytes(bytes, "image/jpeg", "web-camera", null);
-    expect([back.record.facing, front.record.facing, other.record.facing]).toEqual(["back", "front", "unknown"]);
-    const { chainHead, signature, ...unsigned } = back.record;
-    expect(await verifySignature(await devicePublicKeyRaw(), { ...unsigned, chainHead }, signature)).toBe(true);
+  it("seals nothing when the native camera is unavailable", async () => {
+    const before = await chainHead();
+    expect(await captureNative(null)).toEqual({ error: "not-native" });
+    expect(await chainHead()).toBe(before);
   });
 
   it("attaches no location to arrival-hash records", async () => {
