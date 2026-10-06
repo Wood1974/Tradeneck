@@ -29,7 +29,7 @@ function uid(): string {
 const GPS_TIMEOUT_MS = 8000;
 
 async function readGps(): Promise<SealRecord["gps"]> {
-  if (!("geolocation" in navigator)) return null;
+  if (typeof navigator === "undefined" || !("geolocation" in navigator)) return null;
   try {
     // The geolocation `timeout` option does not start until permission is decided, so an
     // unanswered prompt would stall the seal forever. Race it with a hard deadline.
