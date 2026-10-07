@@ -15,6 +15,10 @@
 # profile and the Apple Distribution certificate. The export xcodebuild does
 # not get -allowProvisioningUpdates or the API key, so it cannot try cloud
 # signing.
+#
+# The job runs on macos-26 and selects the newest installed Xcode 26.x.
+# Run 37676381644 used Xcode 16.4 (iOS 18.5 SDK) and App Store Connect
+# rejected the upload.
 name: Shield iOS TestFlight
 
 on:
@@ -34,7 +38,7 @@ permissions:
 jobs:
   testflight:
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'testflight'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     env:
       DEVELOPMENT_TEAM: 766456AWH4
@@ -44,6 +48,9 @@ jobs:
       PROFILE_NAME: Shield App Store
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select newest Xcode 26
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/select-xcode-26.sh"
 
       - name: Require signing credentials
         env:

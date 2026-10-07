@@ -90,9 +90,11 @@ jobs:
         run: chmod +x gradlew && ./gradlew :tradedeck-secure-capture:testDebugUnitTest :app:assembleDebug --stacktrace
 
   ios-compile:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - name: Select newest Xcode 26
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/select-xcode-26.sh"
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
