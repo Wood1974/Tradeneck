@@ -33,9 +33,10 @@ npx cap open ios                   # Xcode (macOS only; runs `pod install` on fi
 The iOS bundle id is `com.tradedeck.shield` (the existing App Store Connect app,
 same record as the older ShieldCamera build). Capacitor's `appId` stays
 `app.tradedeck.shield` because that string is also the Android application id.
-A signed TestFlight upload is the manual workflow
-`.github/workflows/shield-app-testflight.yml` (Actions → Shield iOS TestFlight
-→ Run workflow, on this branch). It does not run on push.
+Signed store uploads are manual and do not run on push:
+
+- TestFlight: `.github/workflows/shield-app-testflight.yml` (Actions → Shield iOS TestFlight).
+- Play internal track: `.github/workflows/shield-app-play-internal.yml` (Actions → Shield Android Play Internal). Package `app.tradedeck.shield`. The first AAB for a new Play app has to be uploaded by hand in Play Console before this workflow can upload.
 
 Permissions are camera + location only. There is no photo-library permission and
 no gallery import. Evidence photos go through `@tradedeck/secure-capture`
