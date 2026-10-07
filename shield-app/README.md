@@ -1,7 +1,8 @@
 # Shield (mobile) — standalone forensic photo sealing
 
-Capacitor 6 + Vite + TypeScript. No framework. Runs as a web page for development
-and wraps to iOS/Android with `npx cap add ios|android`.
+Capacitor 8 + Vite + TypeScript. No framework. Runs as a web page for development
+and wraps to iOS/Android. iOS deployment target is 15. Android minSdk is 24,
+compile/target SDK 36, JDK 21.
 
 **Everything below works with no network.** The app makes no outbound calls; an
 end-to-end test runs the brief, seal, close and verify flow with the browser offline
@@ -29,22 +30,32 @@ npx cap open android               # Android Studio → run on a device
 npx cap open ios                   # Xcode (macOS only; runs `pod install` on first sync)
 ```
 
-Permissions are declared: camera + location on Android (`AndroidManifest.xml`),
-`NSCameraUsageDescription` / `NSLocationWhenInUseUsageDescription` on iOS
-(`Info.plist`). The camera plugin is invoked with `CameraSource.Camera` only —
-the gallery is never an origin path.
+The iOS bundle id is `app.tradedeck.shield`, the same id as Android and the
+App Store Connect app Tradedeck-shield (Apple ID 6819876039, team 766456AWH4).
+Signed store uploads do not run on push. `workflow_dispatch` works after these files are on the default branch. Until then, label this pull request `testflight` or `play-internal` (the job runs only for that label; the build number is the GitHub run number).
 
-**Not wired yet:** `src/native/ios-attest.swift` and `android-integrity.kt`
-describe the App Attest / Play Integrity binding (`ShieldAttest.assert(hash)`).
-Until a Capacitor plugin exposes that bridge on `window.ShieldAttest`, native
-seals report `attest: none` and the Verify verdict is `SEALED` with
-`native-camera-no-attest`.
+- TestFlight: `.github/workflows/shield-app-testflight.yml`.
+- Play internal track: `.github/workflows/shield-app-play-internal.yml`. Package `app.tradedeck.shield`, versionName 1.0, versionCode from the GitHub run number. Without `PLAY_SERVICE_ACCOUNT_JSON` the job still builds the signed AAB and uploads the `shield-android-aab` artifact. The first AAB for a new Play app has to be uploaded by hand in Play Console before this workflow can upload.
+
+Permissions are camera + location only. There is no photo-library permission and
+no gallery import. Evidence photos go through `@tradedeck/secure-capture`
+(`plugins/secure-capture`): an in-app camera, SHA-256 of the JPEG the camera
+returned, and a hardware signature (iOS Secure Enclave P-256, Android Keystore
+with StrongBox when the device has it and TEE otherwise). Originals and signed
+records stay in app-private storage and can be listed, exported, and checked
+offline. Sync to the server is not in this build.
+
+The Vault still keeps the existing WebCrypto chain so a browser test can seal
+and verify without a device. That key is software. The hardware record is the
+evidence queue. App Attest assertions and Play Integrity tokens are TODO hooks
+on the plugin and are not requested during an offline seal. `attest` on the
+Vault record stays `none` until those calls exist.
 
 ## Tabs
 
 | Tab | What it does |
 |---|---|
-| **Capture** | **Native live camera only** (`@capacitor/camera`, camera as the only source, back by default with a front/back toggle that sets the OS camera's starting lens). There is no web camera, gallery, photo picker or file import anywhere: in a browser the Capture screen cannot capture at all. The only file input is the Verify tab's importer for `.shield-record.json` / `.shield.json` files, which can check a record but cannot create a seal. A floating camera button on every tab takes a photo in one tap and stays on the current tab (the photo is saved unbound to any checkpoint; the Build tab's per-point SEAL binds one). Every photo: SHA-256 of the bytes → hash chain (`prevChain` → `chainHead`) → ECDSA P-256 signature with this device's key (IndexedDB, non-extractable but software-held). Seals run one at a time and commit atomically. |
+| **Capture** | **In-app camera only** (`@tradedeck/secure-capture` on device; no gallery, photo picker, or file import). A browser cannot capture. The only file input is the Verify tab's importer. A floating camera button on every tab takes a photo in one tap. On device the plugin hashes the JPEG, chains it (`record_hash = SHA-256(canonical JSON \|\| "\|" \|\| prev_hash)`), and signs with the hardware key, then the app also stores a Vault copy with the existing software key. Seals run one at a time. |
 | **Jobs** | Lock a generic pack (remodel / draw / unit / loss / shop / custom) — industry-agnostic checkpoints with an optional GPS pin and a fee tier. |
 | **Vault** | Originals stay on device. REHASH recomputes the SHA-256; EXPORT writes a `.shield.json` bundle (record + original). |
 | **Verify** | Drop a photo bundle (`.shield.json`) → recomputes the hash of the embedded original: `SEALED` / `UNATTESTED-NATIVE` / `TAMPERED` / `NO-ORIGIN`. Drop a close-out record (`.shield-record.json`) → recomputes its hash and checks the device signature with the embedded public key: `PACKET-SEALED` / `PACKET-TAMPERED`, with per-point status. |
@@ -67,9 +78,9 @@ A photo sealed against a construction point is the same forensic `SealRecord` as
 
 - Proves (when verification passes): the packet hash, every point's record signature and `chainHead`, and the seal-ID-to-key binding are consistent with the public key in the file, so nothing was edited after signing. Records are checked for duplicate/forked chain links, wrong job or checkpoint, time running backwards, and future timestamps.
 - Does **not** prove who holds the signing key. The key travels inside the file, so anyone can produce a self-consistent packet with their own key. Compare the displayed signer seal ID with one you trust (the Verify tab accepts an expected ID and then fails any other signer).
-- Does not prove: photo bytes (they are not in the packet; the hashes are), that time is accurate (timestamps come from the device clock), that the photo came from a physical camera sensor rather than something fed to the OS camera layer (no attestation yet), GPS truthfulness (native fixes are not yet checked for mock providers), or that the scene was not staged. Camera output is re-encoded (JPEG quality 92), so it is not the raw sensor file. Only records whose `captureKind` is `native-camera` verify; any other kind is rejected (`unsupported-capture-kind`), so a record claiming a web, gallery or file origin can never pass.
-- Key custody: the device key is a non-extractable WebCrypto key stored in IndexedDB. That stops casual export, not a compromised app or WebView; it is not hardware-backed. If site data is cleared a new key is created, and older records still verify only against their own embedded key.
-- Native App Attest / Play Integrity (`src/native/`) is the path to origin proof and is wired but not yet backed by a plugin; the token is not stored or validated, so an attested record is reported with `attest-token-not-validated`.
+- Does not prove: photo bytes (they are not in the close-out packet; the hashes are), that time is accurate (the capture record carries wall, monotonic, and boot identity so the server can label CONSISTENT / UNVERIFIED TIME / DEVICE CLOCK MISMATCH), that the photo came from a physical camera sensor rather than something fed to the OS camera (App Attest and Play Integrity are not called yet), or that the scene was not staged. Android records `isMock` / `isFromMockProvider`. iOS records `isSimulatedBySoftware` / `isProducedByAccessory`. iOS `CLLocation.timestamp` is the OS fix time, not a raw satellite clock. The hashed JPEG is the in-app camera's file bytes (CameraX quality 95 on Android; AVFoundation `fileDataRepresentation` on iOS), not a second encode in JavaScript. Only records whose `captureKind` is `native-camera` verify; any other kind is rejected (`unsupported-capture-kind`).
+- Key custody: the Vault copy is a non-extractable WebCrypto key in IndexedDB. The evidence copy is a hardware key that does not leave the Secure Enclave or Android Keystore. A simulator or a device without a Secure Enclave records `key_security_level: software` and still seals locally; a server should refuse that level. If the outbox already has records, the key cannot be reset.
+- App Attest and Play Integrity are not implemented. The plugin returns `app_attest_assertion_b64: null` and `play_integrity_token: null`. Do not treat a sealed photo as device-attested.
 - A photo bundle (`.shield.json`) now embeds the device public key and is authenticated the same way. A bundle without a key is reported `NO-ORIGIN` with `record-unauthenticated`.
 
 ## What is recorded when a photo is sealed
@@ -81,4 +92,4 @@ All of this is in the signed record (`SealRecord`), taken in this order after th
 - `gps` (lat, lng, accuracy, source `os`) read right after, waiting up to ~4.5 s and allowed to be a fix up to 5 s old; `null` if location is off or times out. `pinScore` (distance to the job pin; `inside` only if accuracy fits the radius).
 - `jobId`, `checkpointId`, `platform` (ios/android), `captureKind` (`native-camera`), `deviceSealId`, `attest` (currently always `none`), `prevChain` / `chainHead`, and the ECDSA `signature`.
 
-Not recorded: the shutter-press instant, EXIF, device model or OS/app version, compass heading, tilt or motion, altitude, which lens was actually used (the OS camera app can switch), flash, mock-location status, or network info.
+The Vault `SealRecord` is the software copy above. The hardware capture record (see `plugins/secure-capture/README.md`) additionally stores the photo hash, previous record hash, ticket id, wall time, monotonic time, boot id or boot count, a GNSS time when a fix exists, a simulated-location flag, a sensor-snapshot hash (GPS integers, app version, key security level), and a DER signature. A local chain with no server ticket is labeled `ticket_origin: local` and is not a server ticket hash. `adoptServerTicket` is refused once any photo is in that chain.

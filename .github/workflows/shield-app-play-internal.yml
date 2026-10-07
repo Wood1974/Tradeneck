@@ -1,0 +1,214 @@
+# Signed Android App Bundle of shield-app, uploaded to the Play internal track.
+# workflow_dispatch works once this file is on the default branch.
+# Until then, label the pull request "play-internal" (do not apply it from CI).
+# Does not run on push.
+#
+# status is draft: a draft release is saved on the internal track and is not
+# rolled out to testers. An app that has never been published cannot complete
+# a rollout through the API until Play Console setup is finished, and Google
+# rejects the very first AAB from the API entirely (upload that one by hand).
+# After the first internal release has been rolled out, change status to
+# completed if testers should receive later builds automatically.
+#
+# PLAY_SERVICE_ACCOUNT_JSON is optional. Without it the job still builds the
+# signed AAB (versionName 1.0, versionCode = GitHub run number), checks the
+# upload certificate, and uploads the shield-android-aab artifact. The Play
+# upload step is skipped. The four keystore secrets are required.
+#
+# One-time Play Console setup (not done by this workflow):
+# - Create the app with package name app.tradedeck.shield.
+# - Turn on Play App Signing. The keystore in ANDROID_UPLOAD_KEYSTORE_BASE64
+#   is the upload key, not the key Google uses to sign installs.
+# - Upload the first AAB yourself (Internal testing → Create release).
+#   The Developer API cannot upload the first binary for a new app.
+# - Organization accounts can use internal testing immediately. A new personal
+#   developer account must run a closed test with testers before production.
+name: Shield Android Play Internal
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: "Android versionCode. Leave empty to use the GitHub run number. Must be higher than the last upload of app.tradedeck.shield."
+        required: false
+        default: ""
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  play-internal:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'play-internal'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PACKAGE_NAME: app.tradedeck.shield
+      ANDROID_VERSION_NAME: "1.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require signing credentials
+        env:
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          missing=0
+          for name in \
+            ANDROID_UPLOAD_KEYSTORE_BASE64 \
+            ANDROID_UPLOAD_KEYSTORE_PASSWORD \
+            ANDROID_UPLOAD_KEY_ALIAS \
+            ANDROID_UPLOAD_KEY_PASSWORD
+          do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required repo secret: ${name}. Add it under Settings → Secrets and variables → Actions."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          if [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "PLAY_UPLOAD=yes" >> "$GITHUB_ENV"
+          else
+            echo "PLAY_UPLOAD=skip" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: shield-app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: shield-app
+        run: npm ci
+
+      - name: Web build
+        working-directory: shield-app
+        run: npm run build
+
+      - name: Sync Android
+        working-directory: shield-app
+        run: npx cap sync android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Android SDK 36
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          if [ -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SM="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          else
+            SM="$(find "$SDK/cmdline-tools" -type f -name sdkmanager | head -1)"
+          fi
+          test -n "$SM" -a -x "$SM"
+          yes | "$SM" --licenses >/dev/null || true
+          "$SM" "platforms;android-36" "build-tools;36.0.0"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+
+      - name: Decode upload keystore
+        env:
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.keystore"
+          if [ ! -s "$RUNNER_TEMP/upload.keystore" ]; then
+            echo "::error::ANDROID_UPLOAD_KEYSTORE_BASE64 decoded to an empty file."
+            exit 1
+          fi
+          echo "Decoded upload keystore ($(wc -c < "$RUNNER_TEMP/upload.keystore") bytes) to a temp path. It is not committed."
+
+      - name: Set versionCode
+        run: |
+          # A play-internal label has no workflow input, so versionCode is the run number.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            CODE="${{ github.event.inputs.version_code }}"
+          else
+            CODE="${{ github.run_number }}"
+          fi
+          if [ -z "$CODE" ]; then
+            CODE="${{ github.run_number }}"
+          fi
+          if ! [[ "$CODE" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::versionCode must be a positive integer, got: ${CODE}"
+            exit 1
+          fi
+          echo "ANDROID_VERSION_CODE=$CODE" >> "$GITHUB_ENV"
+          echo "versionCode=${CODE} versionName=${ANDROID_VERSION_NAME} package=${PACKAGE_NAME}"
+
+      - name: Build signed release bundle
+        working-directory: shield-app/android
+        env:
+          ANDROID_UPLOAD_KEYSTORE_PATH: ${{ runner.temp }}/upload.keystore
+          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:bundleRelease --stacktrace
+          AAB="app/build/outputs/bundle/release/app-release.aab"
+          if [ ! -s "$AAB" ]; then
+            echo "::error::bundleRelease did not produce ${AAB}."
+            exit 1
+          fi
+          echo "AAB ready ($(wc -c < "$AAB") bytes)"
+
+      - name: Verify upload signature
+        working-directory: shield-app/android
+        run: |
+          AAB="app/build/outputs/bundle/release/app-release.aab"
+          echo "===== jarsigner -verify ====="
+          jarsigner -verify -verbose -certs "$AAB"
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          APKSIGNER=""
+          if [ -d "$SDK/build-tools" ]; then
+            APKSIGNER="$(find "$SDK/build-tools" -type f -name apksigner -print -quit)"
+          fi
+          if [ -n "$APKSIGNER" ]; then
+            echo "===== apksigner verify --print-certs ====="
+            if ! "$APKSIGNER" verify --print-certs "$AAB"; then
+              echo "::notice::apksigner does not verify an App Bundle. jarsigner -verify above is the signature check for this AAB."
+            fi
+          fi
+          echo "===== keytool -printcert ====="
+          keytool -printcert -jarfile "$AAB"
+          FP=$(keytool -printcert -jarfile "$AAB" | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | head -1 | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED="5B:21:CA:CB:82:C2:D6:E7:D2:2D:C4:A9:FB:FE:95:D4:0E:08:D1:EE:19:16:5B:4A:4E:3A:54:75:52:F3:1D:F9"
+          echo "Upload cert SHA-256: ${FP}"
+          echo "Expected SHA-256:    ${EXPECTED}"
+          if [ "$FP" != "$EXPECTED" ]; then
+            echo "::error::Upload certificate SHA-256 does not match the shield-upload key."
+            exit 1
+          fi
+
+      - name: Upload signed AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shield-android-aab
+          path: shield-app/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Skip Play upload
+        if: env.PLAY_UPLOAD != 'yes'
+        run: |
+          echo "::notice::PLAY_SERVICE_ACCOUNT_JSON is not set. The signed AAB is the shield-android-aab artifact. Upload that file by hand in Play Console (Internal testing). The Developer API cannot upload the first binary for a new app."
+
+      - name: Upload to Play internal track
+        if: env.PLAY_UPLOAD == 'yes'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: app.tradedeck.shield
+          releaseFiles: shield-app/android/app/build/outputs/bundle/release/app-release.aab
+          tracks: internal
+          status: draft

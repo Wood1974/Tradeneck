@@ -1,5 +1,6 @@
 import { esc } from "../esc";
-import { captureNative } from "../capture/capture";
+import { captureNative, warmNativeCamera, type CaptureOk } from "../capture/capture";
+import { verifyExport, type ExportPackage } from "../capture/record";
 import { b64FromBytes, devicePublicKeyRaw, deviceSealId } from "../crypto/seal";
 import { makeCheckpoints, PACK_ORDER } from "../packs";
 import { isNativeOriginAvailable } from "../platform";
@@ -56,6 +57,7 @@ export async function start(): Promise<void> {
   await reload();
   await restoreLastPacket(activeId);
   render();
+  warmNativeCamera(facing === "user" ? "front" : "back", activeId ?? undefined);
 }
 
 async function reload(): Promise<void> {
@@ -116,7 +118,7 @@ function captureView(native: boolean, job: Job | undefined): string {
   const finderBody = native
     ? `<div class="icon-aperture"><span></span></div>
       <h1>Native camera</h1>
-      <p class="lede">Live camera only, front or back. Shield has no gallery or photo-file import. Platform attestation is not implemented in this build.</p>
+      <p class="lede">Live camera only, front or back. Shield has no gallery or photo-file import. Each photo is hashed and signed with this device's hardware key.</p>
       <div class="actions">
         <button class="btn" data-act="native">SEAL FRAME</button>
         <button class="btn ghost small" data-act="cam-flip">${flipLabel}</button>
@@ -300,6 +302,7 @@ function bind(): void {
       status = "";
       toast = null;
       render();
+      if (tab === "capture") warmNativeCamera(facing === "user" ? "front" : "back", activeId ?? undefined);
     });
   });
   root().querySelectorAll("[data-act]").forEach((el) => {
@@ -380,6 +383,21 @@ function bind(): void {
         verifyOut = "NO-ORIGIN\nfile-unreadable";
         return;
       }
+      if ((raw as { schema?: unknown })?.schema === "tradedeck.shield.capture-export.v1") {
+        try {
+          const result = await verifyExport(raw as ExportPackage);
+          const lines = [
+            result.chain.verdict,
+            result.chain.summary,
+            ...result.time.map((entry) => entry.verdict),
+            `signatures ${result.signatures.join(",") || "none"}`,
+          ];
+          verifyOut = lines.join("\n");
+        } catch (err) {
+          verifyOut = `TAMPERED\n${err instanceof Error ? err.message : "export-unreadable"}`;
+        }
+        return;
+      }
       if ((raw as { schema?: unknown })?.schema === "tradedeck.shield.completion.v3") {
         try {
           const packet = parseCloseoutPacket(text);
@@ -408,12 +426,25 @@ function bind(): void {
 const CAPTURE_ERRORS: Record<string, string> = {
   "not-native": "Photos can only be taken in the Shield iOS or Android app.",
   "camera-denied": "Camera access is off. Allow the camera for Shield in Settings, then try again.",
+  "camera-cancelled": "Capture cancelled.",
   "camera-failed": "The camera did not return a photo. Try again.",
   "empty-bytes": "The camera returned an empty photo. Try again.",
   "plugin-missing": "The camera plugin is not installed in this build.",
 };
 
 const captureErrorText = (code: string): string => CAPTURE_ERRORS[code] ?? `Capture failed (${code}).`;
+
+function sealedNote(res: CaptureOk, compact: boolean): string {
+  if (res.hardware) {
+    const level = res.hardware.key_security_level;
+    return compact
+      ? `Sealed ${res.item.record.sha256.slice(0, 8)} · hardware key ${level}`
+      : `Sealed on this device · hardware key ${level}`;
+  }
+  const plain = res.item.record.attest.kind === "none";
+  if (compact) return `Sealed ${res.item.record.sha256.slice(0, 8)} · ${plain ? "no platform attestation" : "attestation claimed"}`;
+  return plain ? "Sealed on this device · no platform attestation" : "Sealed · platform attestation claimed";
+}
 
 let facing: "environment" | "user" = "environment";
 
@@ -473,7 +504,7 @@ async function onSlot(id: string): Promise<void> {
     await reload();
     await openVault(res.item.record.id);
     tab = "vault";
-    status = res.item.record.attest.kind === "none" ? "Sealed on this device · no platform attestation" : "Sealed · platform attestation claimed";
+    status = sealedNote(res, false);
     render();
     return;
   }
@@ -511,7 +542,7 @@ async function onAct(act: string): Promise<void> {
       await reload();
       await openVault(res.item.record.id);
       tab = "vault";
-      status = res.item.record.attest.kind === "none" ? "Sealed on this device · no platform attestation" : "Sealed · platform attestation claimed";
+      status = sealedNote(res, false);
       render();
     });
     return;
@@ -525,7 +556,7 @@ async function onAct(act: string): Promise<void> {
         await reload();
         const rec = res.item.record;
         toast = {
-          text: `Sealed ${rec.sha256.slice(0, 8)} · ${rec.attest.kind === "none" ? "no platform attestation" : "attestation claimed"}`,
+          text: sealedNote(res, true),
           id: rec.id,
         };
       }
@@ -554,6 +585,7 @@ async function onAct(act: string): Promise<void> {
   if (act === "cam-flip") {
     facing = facing === "environment" ? "user" : "environment";
     render();
+    warmNativeCamera(facing === "user" ? "front" : "back", activeId ?? undefined);
     return;
   }
   if (act === "lock") {
@@ -585,6 +617,7 @@ async function onAct(act: string): Promise<void> {
     tab = "capture";
     status = `locked ${job.pack} · $${job.feeUsd}`;
     render();
+    warmNativeCamera(facing === "user" ? "front" : "back", job.id);
     return;
   }
   if (act === "vault-back") {
