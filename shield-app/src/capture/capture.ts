@@ -8,18 +8,24 @@ import {
   stableStringify,
 } from "../crypto/seal";
 import { activeJobId, chainHead, commitSeal, getJob } from "../store/db";
+import type { NativeSealResult } from "@tradedeck/secure-capture";
 import type { SealRecord, VaultItem } from "../types";
 
 export type CaptureError =
   | "not-native"
   | "camera-denied"
+  | "camera-cancelled"
   | "camera-failed"
   | "empty-bytes"
   | "plugin-missing";
 
 export interface CaptureOk {
   item: VaultItem;
+  /** Hardware seal from the native plugin. Absent on the e2e stand-in path. */
+  hardware?: NativeSealResult;
 }
+
+const APP_VERSION = "0.4.0";
 
 function uid(): string {
   return crypto.randomUUID();
@@ -76,43 +82,21 @@ function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): num
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
 }
 
-type StillPhoto = { base64String?: string; format?: string };
+function bytesFromBase64(raw: string): ArrayBuffer {
+  const cleaned = raw.replace(/^data:[^;]+;base64,/, "");
+  const bin = atob(cleaned);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+}
 
-async function capacitorStill(direction: "back" | "front"): Promise<{ bytes: ArrayBuffer; mime: string } | { error: CaptureError }> {
-  try {
-    let photo: StillPhoto;
-    if (import.meta.env.MODE === "e2e") {
-      // Test builds only (`vite build --mode e2e`): stands in for the OS camera, which a browser test cannot drive.
-      // This branch is removed from production bundles; `npm run check:bundle` fails the build if it ships.
-      const hook = (globalThis as { __shieldE2ECamera?: (d: string) => Promise<StillPhoto> | StillPhoto }).__shieldE2ECamera;
-      if (!hook) return { error: "plugin-missing" };
-      photo = await hook(direction);
-    } else {
-      const core = await import("@capacitor/core");
-      if (!core.Capacitor.isNativePlatform()) return { error: "not-native" };
-      const { Camera, CameraDirection, CameraResultType, CameraSource } = await import("@capacitor/camera");
-      photo = await Camera.getPhoto({
-        // Camera only: no gallery source, so a stored photo cannot be sealed through this path.
-        source: CameraSource.Camera,
-        direction: direction === "front" ? CameraDirection.Front : CameraDirection.Rear,
-        resultType: CameraResultType.Base64,
-        quality: 92,
-        allowEditing: false,
-        correctOrientation: true,
-      });
-    }
-    if (!photo.base64String) return { error: "empty-bytes" };
-    const raw = photo.base64String.replace(/^data:[^;]+;base64,/, "");
-    const bin = atob(raw);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return { bytes: out.buffer, mime: photo.format === "png" ? "image/png" : "image/jpeg" };
-  } catch (err) {
-    const msg = String(err ?? "");
-    if (msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission")) return { error: "camera-denied" };
-    if (msg.includes("Failed to fetch") || msg.includes("Cannot find")) return { error: "plugin-missing" };
-    return { error: "camera-failed" };
-  }
+function nativeFailure(err: unknown): CaptureError {
+  const msg = String((err as { message?: string })?.message ?? err).toLowerCase();
+  if (msg.includes("camera-denied") || msg.includes("permission") || msg.includes("denied")) return "camera-denied";
+  if (msg.includes("camera-cancelled") || msg.includes("cancel")) return "camera-cancelled";
+  if (msg.includes("empty-bytes")) return "empty-bytes";
+  if (msg.includes("unavailable") || msg.includes("not implemented") || msg.includes("plugin")) return "plugin-missing";
+  return "camera-failed";
 }
 
 let sealQueue: Promise<unknown> = Promise.resolve();
@@ -167,9 +151,49 @@ async function sealLocked(bytes: ArrayBuffer, mime: string, checkpointId: string
 }
 
 export async function captureNative(checkpointId: string | null, direction: "back" | "front" = "back"): Promise<CaptureOk | { error: CaptureError }> {
+  if (import.meta.env.MODE === "e2e") {
+    // Test builds only (`vite build --mode e2e`): stands in for the OS camera, which a browser test cannot drive.
+    // This branch is removed from production bundles; `npm run check:bundle` fails the build if it ships.
+    if (!isNativeOriginAvailable()) return { error: "not-native" };
+    const hook = (globalThis as { __shieldE2ECamera?: (d: string) => Promise<{ base64String?: string; format?: string }> | { base64String?: string; format?: string } }).__shieldE2ECamera;
+    if (!hook) return { error: "plugin-missing" };
+    try {
+      const photo = await hook(direction);
+      if (!photo.base64String) return { error: "empty-bytes" };
+      const item = await sealFromBytes(bytesFromBase64(photo.base64String), photo.format === "png" ? "image/png" : "image/jpeg", checkpointId);
+      return { item };
+    } catch (err) {
+      const msg = String(err ?? "").toLowerCase();
+      if (msg.includes("denied") || msg.includes("permission")) return { error: "camera-denied" };
+      return { error: "camera-failed" };
+    }
+  }
   if (!isNativeOriginAvailable()) return { error: "not-native" };
-  const still = await capacitorStill(direction);
-  if ("error" in still) return still;
-  const item = await sealFromBytes(still.bytes, still.mime, checkpointId);
-  return { item };
+  try {
+    const { SecureCapture } = await import("@tradedeck/secure-capture");
+    const ticketId = (await activeJobId()) ?? "device";
+    const sealed = await SecureCapture.captureAndSeal({
+      checkpointId: checkpointId ?? "unbound",
+      ticketId,
+      facing: direction,
+      appVersion: APP_VERSION,
+    });
+    if (!sealed.photoBase64) return { error: "empty-bytes" };
+    const bytes = bytesFromBase64(sealed.photoBase64);
+    const sha = await sha256Bytes(bytes);
+    if (sha !== sealed.record.photo_sha256) return { error: "camera-failed" };
+    const item = await sealFromBytes(bytes, "image/jpeg", checkpointId);
+    return { item, hardware: sealed };
+  } catch (err) {
+    return { error: nativeFailure(err) };
+  }
+}
+
+/** Starts the in-app camera session before the shutter. No-op in a browser and in e2e. */
+export function warmNativeCamera(direction: "back" | "front", ticketId?: string): void {
+  if (import.meta.env.MODE === "e2e") return;
+  if (!isNativeOriginAvailable()) return;
+  void import("@tradedeck/secure-capture")
+    .then(({ SecureCapture }) => SecureCapture.warmCamera({ facing: direction, ticketId }))
+    .catch(() => undefined);
 }
