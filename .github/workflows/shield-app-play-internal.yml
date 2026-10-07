@@ -10,6 +10,11 @@
 # After the first internal release has been rolled out, change status to
 # completed if testers should receive later builds automatically.
 #
+# PLAY_SERVICE_ACCOUNT_JSON is optional. Without it the job still builds the
+# signed AAB (versionName 1.0, versionCode = GitHub run number), checks the
+# upload certificate, and uploads the shield-android-aab artifact. The Play
+# upload step is skipped. The four keystore secrets are required.
+#
 # One-time Play Console setup (not done by this workflow):
 # - Create the app with package name app.tradedeck.shield.
 # - Turn on Play App Signing. The keystore in ANDROID_UPLOAD_KEYSTORE_BASE64
@@ -58,8 +63,7 @@ jobs:
             ANDROID_UPLOAD_KEYSTORE_BASE64 \
             ANDROID_UPLOAD_KEYSTORE_PASSWORD \
             ANDROID_UPLOAD_KEY_ALIAS \
-            ANDROID_UPLOAD_KEY_PASSWORD \
-            PLAY_SERVICE_ACCOUNT_JSON
+            ANDROID_UPLOAD_KEY_PASSWORD
           do
             if [ -z "${!name}" ]; then
               echo "::error::Missing required repo secret: ${name}. Add it under Settings → Secrets and variables → Actions."
@@ -68,6 +72,11 @@ jobs:
           done
           if [ "$missing" -ne 0 ]; then
             exit 1
+          fi
+          if [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "PLAY_UPLOAD=yes" >> "$GITHUB_ENV"
+          else
+            echo "PLAY_UPLOAD=skip" >> "$GITHUB_ENV"
           fi
 
       - uses: actions/setup-node@v4
@@ -151,21 +160,51 @@ jobs:
             echo "::error::bundleRelease did not produce ${AAB}."
             exit 1
           fi
-          if ! jarsigner -verify "$AAB"; then
-            echo "::error::Release AAB is not signed. The upload keystore env vars were not applied."
+          echo "AAB ready ($(wc -c < "$AAB") bytes)"
+
+      - name: Verify upload signature
+        working-directory: shield-app/android
+        run: |
+          AAB="app/build/outputs/bundle/release/app-release.aab"
+          echo "===== jarsigner -verify ====="
+          jarsigner -verify -verbose -certs "$AAB"
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          APKSIGNER=""
+          if [ -d "$SDK/build-tools" ]; then
+            APKSIGNER="$(find "$SDK/build-tools" -type f -name apksigner -print -quit)"
+          fi
+          if [ -n "$APKSIGNER" ]; then
+            echo "===== apksigner verify --print-certs ====="
+            if ! "$APKSIGNER" verify --print-certs "$AAB"; then
+              echo "::notice::apksigner does not verify an App Bundle. jarsigner -verify above is the signature check for this AAB."
+            fi
+          fi
+          echo "===== keytool -printcert ====="
+          keytool -printcert -jarfile "$AAB"
+          FP=$(keytool -printcert -jarfile "$AAB" | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | head -1 | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED="5B:21:CA:CB:82:C2:D6:E7:D2:2D:C4:A9:FB:FE:95:D4:0E:08:D1:EE:19:16:5B:4A:4E:3A:54:75:52:F3:1D:F9"
+          echo "Upload cert SHA-256: ${FP}"
+          echo "Expected SHA-256:    ${EXPECTED}"
+          if [ "$FP" != "$EXPECTED" ]; then
+            echo "::error::Upload certificate SHA-256 does not match the shield-upload key."
             exit 1
           fi
-          echo "Signed AAB ready ($(wc -c < "$AAB") bytes)"
 
       - name: Upload signed AAB artifact
         uses: actions/upload-artifact@v4
         with:
-          name: shield-app-android-play-internal
+          name: shield-android-aab
           path: shield-app/android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 7
 
+      - name: Skip Play upload
+        if: env.PLAY_UPLOAD != 'yes'
+        run: |
+          echo "::notice::PLAY_SERVICE_ACCOUNT_JSON is not set. The signed AAB is the shield-android-aab artifact. Upload that file by hand in Play Console (Internal testing). The Developer API cannot upload the first binary for a new app."
+
       - name: Upload to Play internal track
+        if: env.PLAY_UPLOAD == 'yes'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}

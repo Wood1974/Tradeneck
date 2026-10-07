@@ -30,6 +30,9 @@ android {
     signingConfigs {
         release {
             if (hasUploadKey) {
+                // The Play upload key is an openssl PKCS12 keystore (AES-256-CBC).
+                // The default store type is JKS, which cannot read that file.
+                storeType "pkcs12"
                 storeFile file(uploadStorePath)
                 storePassword uploadStorePassword
                 keyAlias uploadKeyAlias
