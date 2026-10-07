@@ -106,6 +106,16 @@ jobs:
       - name: Install pods
         working-directory: shield-app/ios/App
         run: pod install
+      - name: App Store profile stays on the App target
+        working-directory: shield-app
+        run: |
+          python3 ios/scripts/apply-app-store-signing.py \
+            ios/App/App.xcodeproj/project.pbxproj \
+            --profile-name "Shield App Store" \
+            --profile-uuid "33e3400d-1c90-4446-9d2b-f12291dd0d96" \
+            --identity "Apple Distribution: Test (766456AWH4)" \
+            --check \
+            --check-pods ios/App/Pods/Pods.xcodeproj/project.pbxproj
       - name: Unsigned iOS compile
         working-directory: shield-app/ios/App
         run: |
