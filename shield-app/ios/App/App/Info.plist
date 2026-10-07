@@ -26,6 +26,8 @@
 	<string>Shield takes evidence photos with the in-app camera, then hashes and signs them on this device. The photo library is not used.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Shield records where a photo was taken, including whether iOS reports the fix as simulated.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

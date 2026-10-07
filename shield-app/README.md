@@ -30,6 +30,13 @@ npx cap open android               # Android Studio → run on a device
 npx cap open ios                   # Xcode (macOS only; runs `pod install` on first sync)
 ```
 
+The iOS bundle id is `com.tradedeck.shield` (the existing App Store Connect app,
+same record as the older ShieldCamera build). Capacitor's `appId` stays
+`app.tradedeck.shield` because that string is also the Android application id.
+A signed TestFlight upload is the manual workflow
+`.github/workflows/shield-app-testflight.yml` (Actions → Shield iOS TestFlight
+→ Run workflow, on this branch). It does not run on push.
+
 Permissions are camera + location only. There is no photo-library permission and
 no gallery import. Evidence photos go through `@tradedeck/secure-capture`
 (`plugins/secure-capture`): an in-app camera, SHA-256 of the JPEG the camera
