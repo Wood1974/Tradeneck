@@ -3,15 +3,18 @@
 # Until then, label the pull request "testflight" (do not apply it from CI).
 # The four secret names match Wood1974/tradedeck-shield.
 #
-# Archive and export use automatic signing. Do not pass PRODUCT_BUNDLE_IDENTIFIER
-# or CODE_SIGN_STYLE on the xcodebuild command line: those overrides apply to
-# every CocoaPods target. Run 37658335417 archived with
-# PRODUCT_BUNDLE_IDENTIFIER=app.tradedeck.shield, so the embedded frameworks
-# were built with the app id and export tried to put the app profile on them.
+# Archive uses automatic signing with the App Store Connect API key.
+# Do not pass PRODUCT_BUNDLE_IDENTIFIER or CODE_SIGN_STYLE on the xcodebuild
+# command line: those overrides apply to every CocoaPods target.
 #
-# The API key is App Manager. That role can upload a build and use an existing
-# Apple Distribution certificate. It cannot create a new distribution certificate.
-# Cloud signing fails if Xcode tries to create one.
+# Export is manual. Run 37667902575 archived with each framework's own
+# org.cocoapods.* id, then automatic export failed in
+# IDEDistributionSigningAssetsStep: the App Manager key cannot use
+# cloud-managed distribution certificates, and automatic export did not see
+# the locally installed Shield App Store profile. Export options name that
+# profile and the Apple Distribution certificate. The export xcodebuild does
+# not get -allowProvisioningUpdates or the API key, so it cannot try cloud
+# signing.
 name: Shield iOS TestFlight
 
 on:
@@ -139,8 +142,15 @@ jobs:
             echo "::error::Provisioning profile name is '${NAME}', expected '${PROFILE_NAME}' (App Store, Apple Distribution, ${BUNDLE_ID})."
             exit 1
           fi
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+          # Xcode 16 manual export reads UserData/Provisioning Profiles.
+          # MobileDevice is the older location; keep both.
+          for dir in \
+            "$HOME/Library/MobileDevice/Provisioning Profiles" \
+            "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          do
+            mkdir -p "$dir"
+            cp "$RUNNER_TEMP/profile.mobileprovision" "$dir/$UUID.mobileprovision"
+          done
           echo "Installed profile ${PROFILE_NAME} (${UUID}) for ${APP_ID}"
           echo "PROFILE_UUID=$UUID" >> "$GITHUB_ENV"
 
@@ -205,8 +215,12 @@ jobs:
           import os, plistlib
           plist = {
               "method": "app-store-connect",
+              "signingStyle": "manual",
               "teamID": os.environ["DEVELOPMENT_TEAM"],
-              "signingStyle": "automatic",
+              "signingCertificate": "Apple Distribution",
+              "provisioningProfiles": {
+                  os.environ["BUNDLE_ID"]: os.environ["PROFILE_NAME"],
+              },
               "uploadSymbols": True,
           }
           with open(os.environ["PLIST_PATH"], "wb") as fh:
@@ -242,14 +256,12 @@ jobs:
             exit 1
           fi
           set +e
+          # No -allowProvisioningUpdates and no API key: those make export
+          # request a cloud-managed distribution certificate.
           xcodebuild -exportArchive \
             -archivePath "$ARCHIVE" \
             -exportPath "$EXPORT" \
-            -exportOptionsPlist "$PLIST_PATH" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER"
+            -exportOptionsPlist "$PLIST_PATH"
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
