@@ -1,5 +1,7 @@
 # Signed Android App Bundle of shield-app, uploaded to the Play internal track.
-# Manual only. Does not run on push.
+# workflow_dispatch works once this file is on the default branch.
+# Until then, label the pull request "play-internal" (do not apply it from CI).
+# Does not run on push.
 #
 # status is draft: a draft release is saved on the internal track and is not
 # rolled out to testers. An app that has never been published cannot complete
@@ -25,6 +27,8 @@ on:
         description: "Android versionCode. Leave empty to use the GitHub run number. Must be higher than the last upload of app.tradedeck.shield."
         required: false
         default: ""
+  pull_request:
+    types: [labeled]
 
 permissions:
   contents: read
@@ -32,6 +36,7 @@ permissions:
 
 jobs:
   play-internal:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'play-internal'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -115,7 +120,12 @@ jobs:
 
       - name: Set versionCode
         run: |
-          CODE="${{ inputs.version_code }}"
+          # A play-internal label has no workflow input, so versionCode is the run number.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            CODE="${{ github.event.inputs.version_code }}"
+          else
+            CODE="${{ github.run_number }}"
+          fi
           if [ -z "$CODE" ]; then
             CODE="${{ github.run_number }}"
           fi

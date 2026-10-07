@@ -32,10 +32,10 @@ npx cap open ios                   # Xcode (macOS only; runs `pod install` on fi
 
 The iOS bundle id is `app.tradedeck.shield`, the same id as Android and the
 App Store Connect app Tradedeck-shield (Apple ID 6819876039, team 766456AWH4).
-Signed store uploads are manual and do not run on push:
+Signed store uploads do not run on push. `workflow_dispatch` works after these files are on the default branch. Until then, label this pull request `testflight` or `play-internal` (the job runs only for that label; the build number is the GitHub run number).
 
-- TestFlight: `.github/workflows/shield-app-testflight.yml` (Actions → Shield iOS TestFlight).
-- Play internal track: `.github/workflows/shield-app-play-internal.yml` (Actions → Shield Android Play Internal). Package `app.tradedeck.shield`. The first AAB for a new Play app has to be uploaded by hand in Play Console before this workflow can upload.
+- TestFlight: `.github/workflows/shield-app-testflight.yml`.
+- Play internal track: `.github/workflows/shield-app-play-internal.yml`. Package `app.tradedeck.shield`. The first AAB for a new Play app has to be uploaded by hand in Play Console before this workflow can upload.
 
 Permissions are camera + location only. There is no photo-library permission and
 no gallery import. Evidence photos go through `@tradedeck/secure-capture`

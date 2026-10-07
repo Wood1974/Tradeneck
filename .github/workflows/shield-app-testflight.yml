@@ -1,5 +1,7 @@
 # Signed iOS build of shield-app, uploaded to TestFlight.
-# Manual only. The four secrets are the same names as Wood1974/tradedeck-shield.
+# workflow_dispatch works once this file is on the default branch.
+# Until then, label the pull request "testflight" (do not apply it from CI).
+# The four secret names match Wood1974/tradedeck-shield.
 name: Shield iOS TestFlight
 
 on:
@@ -9,6 +11,8 @@ on:
         description: "CFBundleVersion. Leave empty to use the GitHub run number. Must be higher than the last TestFlight build of app.tradedeck.shield."
         required: false
         default: ""
+  pull_request:
+    types: [labeled]
 
 permissions:
   contents: read
@@ -16,6 +20,7 @@ permissions:
 
 jobs:
   testflight:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'testflight'
     runs-on: macos-15
     timeout-minutes: 45
     env:
@@ -132,7 +137,12 @@ jobs:
       - name: Set build number
         working-directory: shield-app/ios/App
         run: |
-          BUILD="${{ inputs.build_number }}"
+          # A testflight label has no workflow input, so the build number is the run number.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BUILD="${{ github.event.inputs.build_number }}"
+          else
+            BUILD="${{ github.run_number }}"
+          fi
           if [ -z "$BUILD" ]; then
             BUILD="${{ github.run_number }}"
           fi
