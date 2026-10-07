@@ -2,6 +2,16 @@
 # workflow_dispatch works once this file is on the default branch.
 # Until then, label the pull request "testflight" (do not apply it from CI).
 # The four secret names match Wood1974/tradedeck-shield.
+#
+# Archive and export use automatic signing. Do not pass PRODUCT_BUNDLE_IDENTIFIER
+# or CODE_SIGN_STYLE on the xcodebuild command line: those overrides apply to
+# every CocoaPods target. Run 37658335417 archived with
+# PRODUCT_BUNDLE_IDENTIFIER=app.tradedeck.shield, so the embedded frameworks
+# were built with the app id and export tried to put the app profile on them.
+#
+# The API key is App Manager. That role can upload a build and use an existing
+# Apple Distribution certificate. It cannot create a new distribution certificate.
+# Cloud signing fails if Xcode tries to create one.
 name: Shield iOS TestFlight
 
 on:
@@ -154,55 +164,139 @@ jobs:
           echo "CFBundleVersion=${BUILD} (marketing version stays MARKETING_VERSION in the Xcode project)"
           echo "BUILD_NUMBER=$BUILD" >> "$GITHUB_ENV"
 
-      - name: Sign only the App target
-        working-directory: shield-app
+      - name: Write App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
         run: |
-          # Command-line CODE_SIGN_STYLE and PROVISIONING_PROFILE_SPECIFIER apply to
-          # every target, including CocoaPods frameworks, and export then fails.
-          python3 ios/scripts/apply-app-store-signing.py \
-            ios/App/App.xcodeproj/project.pbxproj \
-            --profile-name "$PROFILE_NAME" \
-            --profile-uuid "$PROFILE_UUID" \
-            --identity "$SIGNING_IDENTITY"
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s\n' "$APP_STORE_CONNECT_API_PRIVATE_KEY" > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          if ! grep -q "PRIVATE KEY" "$KEY_PATH"; then
+            echo "::error::APP_STORE_CONNECT_API_PRIVATE_KEY is not a PEM private key. App Manager can use an existing distribution certificate, but Xcode cannot create one with this key."
+            exit 1
+          fi
+          echo "ASC_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
 
-      - name: Archive with manual signing
+      - name: Archive
         working-directory: shield-app/ios/App
         run: |
+          # App target stays CODE_SIGN_STYLE = Automatic in the Xcode project.
+          # Pods keep CODE_SIGNING_ALLOWED=NO. DEVELOPMENT_TEAM is the only
+          # signing setting passed on the command line.
           xcodebuild \
             -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/TradeDeckShield.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER" \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             archive
 
       - name: Export IPA
         run: |
           EXPORT="$RUNNER_TEMP/export"
           export PLIST_PATH="$RUNNER_TEMP/ExportOptions.plist"
-          # The distribution identity contains a colon, which PlistBuddy treats as a key path.
+          ARCHIVE="$RUNNER_TEMP/TradeDeckShield.xcarchive"
           python3 - <<'PY'
           import os, plistlib
           plist = {
               "method": "app-store-connect",
               "teamID": os.environ["DEVELOPMENT_TEAM"],
-              "signingStyle": "manual",
-              "signingCertificate": os.environ["SIGNING_IDENTITY"],
+              "signingStyle": "automatic",
               "uploadSymbols": True,
-              "provisioningProfiles": {
-                  os.environ["BUNDLE_ID"]: os.environ["PROFILE_NAME"],
-              },
           }
           with open(os.environ["PLIST_PATH"], "wb") as fh:
               plistlib.dump(plist, fh)
           PY
+          echo "===== Archive ApplicationProperties ====="
+          /usr/libexec/PlistBuddy -c 'Print :ApplicationProperties' "$ARCHIVE/Info.plist" || true
+          echo "===== ExportOptions.plist ====="
+          plutil -p "$PLIST_PATH"
+          echo "===== Embedded frameworks ====="
+          APP="$ARCHIVE/Products/Applications/App.app"
+          if [ ! -d "$APP/Frameworks" ]; then
+            echo "::error::Archive is missing $APP/Frameworks"
+            exit 1
+          fi
+          echo "--- App.app ---"
+          codesign -dv "$APP" 2>&1 || true
+          bad=0
+          while IFS= read -r fw; do
+            name=$(basename "$fw")
+            bid=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$fw/Info.plist" 2>/dev/null || echo missing)
+            echo "--- $name CFBundleIdentifier=$bid ---"
+            if [ -f "$fw/embedded.mobileprovision" ]; then
+              echo "HAS embedded.mobileprovision"
+            fi
+            codesign -dv "$fw" 2>&1 || true
+            if [ "$bid" = "$BUNDLE_ID" ]; then
+              echo "::error::$name was built with the app bundle id $BUNDLE_ID. A global PRODUCT_BUNDLE_IDENTIFIER override is still applied to pod targets."
+              bad=1
+            fi
+          done < <(find "$APP/Frameworks" -name '*.framework' -type d -maxdepth 2 | sort)
+          if [ "$bad" -ne 0 ]; then
+            exit 1
+          fi
+          set +e
           xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/TradeDeckShield.xcarchive" \
+            -archivePath "$ARCHIVE" \
             -exportPath "$EXPORT" \
-            -exportOptionsPlist "$PLIST_PATH"
+            -exportOptionsPlist "$PLIST_PATH" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::error::exportArchive failed with exit $status"
+            # head closes the pipe early; pipefail would hide the export status.
+            set +o pipefail
+            python3 - <<'PY' || true
+          import os
+          from pathlib import Path
+
+          roots = [Path("/var/folders")]
+          tmpdir = os.environ.get("TMPDIR")
+          if tmpdir:
+              roots.append(Path(tmpdir))
+          found = []
+          for root in roots:
+              if not root.is_dir():
+                  continue
+              for dirpath, dirnames, _filenames in os.walk(root, onerror=lambda _e: None):
+                  if dirpath.endswith(".xcdistributionlogs"):
+                      found.append(Path(dirpath))
+                      dirnames.clear()
+          if not found:
+              print("No .xcdistributionlogs bundle found.")
+          else:
+              found.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+              log_dir = found[0]
+              print(f"===== {log_dir} =====")
+              files = [path for path in sorted(log_dir.rglob("*")) if path.is_file()]
+              for path in files:
+                  print(path)
+              preferred = []
+              for name in ("IDEDistribution.standard.log", "IDEDistribution.verbose.log"):
+                  candidate = log_dir / name
+                  if candidate.is_file():
+                      preferred.append(candidate)
+              for path in files:
+                  if path.suffix == ".log" and path not in preferred:
+                      preferred.append(path)
+              for path in preferred:
+                  print(f"----- {path} -----")
+                  text = path.read_text(errors="replace").splitlines()
+                  print("\n".join(text[-300:]))
+          PY
+            set -o pipefail
+            exit "$status"
+          fi
           IPA=$(find "$EXPORT" -name '*.ipa' -print -quit)
           if [ -z "$IPA" ]; then
             echo "::error::Export produced no IPA."
