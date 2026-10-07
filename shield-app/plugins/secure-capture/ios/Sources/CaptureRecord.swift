@@ -258,7 +258,8 @@ enum CaptureRecord {
             ]
             let canonicalRequired = try canonical(required)
             precondition(canonicalRequired == "{\"boot_count\":4,\"checkpoint_id\":\"cp-1\",\"flags\":0,\"monotonic_ms\":5000,\"photo_sha256\":\"cfe8a5966f9ced4e33a1cf652c0aef5c9fec6e629d3d7cacec5b9cc794316aa3\",\"ticket_id\":\"ticket-1\",\"version\":1,\"wall_time_ms\":1700000000000}")
-            precondition(try link(required, prevHash: prev) == "fa7368ce2cbc99526824c2e757df21ca2ab234c13df4b3c4c1e18f103b5618aa")
+            let linked = try link(required, prevHash: prev)
+            precondition(linked == "fa7368ce2cbc99526824c2e757df21ca2ab234c13df4b3c4c1e18f103b5618aa", linked)
             let snapshot: [String: Any] = [
                 "heading_hundredths": Int64(18450),
                 "duration_ms": Int64(200),
@@ -293,7 +294,8 @@ enum CaptureRecord {
                 "monotonic_ms": Int64(5000),
                 "boot_count": Int64(4),
             ]
-            precondition(try ticketClockBytes(clock) == "{\"boot_count\":4,\"monotonic_ms\":5000,\"wall_time_ms\":1700000000000}")
+            let clockBytes = try ticketClockBytes(clock)
+            precondition(clockBytes == "{\"boot_count\":4,\"monotonic_ms\":5000,\"wall_time_ms\":1700000000000}", clockBytes)
             let payload = try genesisPayload(ticketHashHex: String(repeating: "ab", count: 32), observation: clock)
             let payloadHex = payload.map { String(format: "%02x", $0) }.joined()
             precondition(payloadHex == "8352b8a3bafdef0011682fb41bfa20f7f3bb83fac0b1c01169103c96a055423b", payloadHex)

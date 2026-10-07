@@ -91,7 +91,9 @@ enum EnclaveSigner {
             return .enclave(key)
         }
         let key = P256.Signing.PrivateKey()
-        try store(key.dataRepresentation, kind: "software")
+        // Software P-256 keys persist as a 32-byte raw scalar. dataRepresentation
+        // exists only on Secure Enclave keys.
+        try store(key.rawRepresentation, kind: "software")
         return .software(key)
     }
 
@@ -99,7 +101,7 @@ enum EnclaveSigner {
         guard let data = readKey() else { return nil }
         let kind = UserDefaults.standard.string(forKey: kindKey)
         if kind == "software" {
-            guard let key = try? P256.Signing.PrivateKey(dataRepresentation: data) else { return nil }
+            guard let key = try? P256.Signing.PrivateKey(rawRepresentation: data) else { return nil }
             return .software(key)
         }
         if let key = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: data) {
