@@ -30,9 +30,8 @@ npx cap open android               # Android Studio → run on a device
 npx cap open ios                   # Xcode (macOS only; runs `pod install` on first sync)
 ```
 
-The iOS bundle id is `com.tradedeck.shield` (the existing App Store Connect app,
-same record as the older ShieldCamera build). Capacitor's `appId` stays
-`app.tradedeck.shield` because that string is also the Android application id.
+The iOS bundle id is `app.tradedeck.shield`, the same id as Android and the
+App Store Connect app Tradedeck-shield (Apple ID 6819876039, team 766456AWH4).
 Signed store uploads are manual and do not run on push:
 
 - TestFlight: `.github/workflows/shield-app-testflight.yml` (Actions → Shield iOS TestFlight).
