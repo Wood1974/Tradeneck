@@ -1,5 +1,6 @@
-import { codesForTrade, CODE_CHECKPOINTS, CODE_TRADE_ORDER, toCodeRef, type CodeCheckpoint } from "../construction/codes";
-import { buildCloseoutPacket, downloadPacketFiles, missingPoints, submitCloseout } from "../construction/closeout";
+import { CODE_EDITION, codesForTrade, CODE_CHECKPOINTS, CODE_TRADE_ORDER, toCodeRef, type CodeCheckpoint } from "../construction/codes";
+import { esc } from "../esc";
+import { buildCloseoutPacket, downloadPacketFiles, missingPoints } from "../construction/closeout";
 import { generatePoints, lockedNarrative } from "../construction/points";
 import { neededQuestions, type Question } from "../construction/questions";
 import { BRIEF_READY_SCORE, scoreBrief } from "../construction/score";
@@ -20,7 +21,6 @@ export interface ConstructionCtx {
 type CView = "brief" | "points" | "codes" | "close";
 type Phase = "intake" | "questions";
 
-const API_BASE = "https://tradedeck-api.onrender.com";
 const DRAFT_KEY = "construction:draft";
 
 const BUDGET_USD: Record<BudgetBand, number> = { "": 0, under15: 5000, "15to50": 20000, over50: 50000 };
@@ -47,17 +47,17 @@ export async function initConstruction(): Promise<void> {
   if (saved) draft = { ...emptyDraft(), ...saved };
 }
 
-async function saveDraft(): Promise<void> {
-  await setMeta(DRAFT_KEY, draft);
+let draftTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Typing fires on every keystroke; coalesce into one IndexedDB write.
+function saveDraft(): void {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => void setMeta(DRAFT_KEY, draft), 300);
 }
 
 function activeConstructionJob(ctx: ConstructionCtx): Job | undefined {
   const job = ctx.jobs().find((j) => j.id === ctx.activeId());
   return job?.pack === "construction" ? job : undefined;
-}
-
-function esc(s: unknown): string {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
 function opt(value: string, label: string, current: string): string {
@@ -159,15 +159,15 @@ function pointsView(ctx: ConstructionCtx, job: Job | undefined): string {
       const rec = c.shotId ? vault.find((v) => v.record.id === c.shotId)?.record : undefined;
       const chip = rec
         ? rec.captureKind === "native-camera"
-          ? `<span class="chip ok">SEALED</span>`
-          : `<span class="chip warn">ARRIVAL-ONLY</span>`
+          ? (rec.attest.kind === "none" ? `<span class="chip warn">NATIVE · NO ATTEST</span>` : `<span class="chip ok">NATIVE</span>`)
+          : `<span class="chip bad">UNSUPPORTED</span>`
         : `<span class="chip">EMPTY</span>`;
       const code = c.code
         ? `${c.code.irc ? "IRC " + esc(c.code.irc) : c.code.ibc ? "IBC " + esc(c.code.ibc) : ""} · ${esc(c.code.name)}`
         : "NO CODE REFERENCE · TAP TO ASSIGN";
       return `<div class="card point">
         <div class="row"><h2>Point ${i + 1}</h2>${chip}</div>
-        <input data-pt-label="${esc(c.id)}" value="${esc(c.label)}" />
+        <input data-pt-label="${esc(c.id)}" value="${esc(c.label)}"${c.shotId ? " disabled" : ""} />
         <textarea data-pt-desc="${esc(c.id)}" rows="3">${esc(c.description ?? "")}</textarea>
         <div class="row">
           <button class="code-chip" data-pick-code="${esc(c.id)}">${code}</button>
@@ -180,7 +180,7 @@ function pointsView(ctx: ConstructionCtx, job: Job | undefined): string {
   const sealed = job.checkpoints.filter((c) => c.shotId).length;
   return `
     <div class="banner"><strong>5 PHOTO CHECKPOINTS</strong>${esc(job.brief.title || "Untitled")} · ${esc(labelForTrade(job.brief.trade))} · ${sealed}/${job.checkpoints.length} sealed
-      <div class="meta">Edit a label if a point is wrong. SEAL opens the camera on native, arrival hash on web. Each photo is hashed, chained, and signed by this device.</div>
+      <div class="meta">Edit a label if a point is wrong. SEAL opens the live camera (front or back; no gallery or file imports). Each photo is hashed, chained, and signed by this device.</div>
     </div>
     <div class="list">${rows}</div>
     <div class="actions"><button class="btn ghost small" data-act="c-goto-close">CLOSE THIS JOB</button></div>
@@ -203,7 +203,7 @@ function codesView(job: Job | undefined): string {
   }).join("");
   return `
     <div class="banner"><strong>${picking ? `ASSIGN CODE TO “${esc(picking.label).toUpperCase()}”` : "IRC / IBC CHECKPOINTS"}</strong>
-      ${picking ? "Tap a section to attach it to the point." : "Code sections tied to what must be photographed before concealment. Offline table; same rows as the Shield database."}
+      ${picking ? "Tap a section to attach it to the point." : `${CODE_EDITION} section numbers tied to what should be photographed before concealment. Utah adopts the 2021 IRC with state amendments, so Utah's text can differ. Summaries only, not code text: confirm with your inspector.`}
       <div>${trade ? `<button data-act="c-toggle-codes">${showAllCodes ? `Only ${esc(labelForTrade(trade))}` : "All trades"}</button>` : ""}
       ${picking ? `<button data-act="c-clear-code">No code for this point</button> <button data-act="c-cancel-pick">Cancel</button>` : ""}</div>
     </div>
@@ -212,12 +212,13 @@ function codesView(job: Job | undefined): string {
 }
 
 function codeRow(r: CodeCheckpoint, picking: Job["checkpoints"][number] | undefined): string {
-  const tag = r.irc && r.irc !== "General" ? `IRC ${esc(r.irc)}` : r.ibc ? `IBC ${esc(r.ibc)}` : "GENERAL";
+  const tag = r.irc ? `IRC ${esc(r.irc)}` : r.ibc ? `IBC ${esc(r.ibc)}` : "GENERAL";
   const attr = picking ? `data-assign-code="${esc(r.irc ?? "")}|${esc(r.name)}"` : "";
   const on = picking?.code?.name === r.name ? " on" : "";
   return `<button class="slot code-row${on}" ${attr} ${picking ? "" : "disabled"}>
     <div>
       <div><span class="chip ${r.requiredBeforeConcealment ? "warn" : ""}">${tag}</span> ${esc(r.name)}</div>
+      ${r.topic ? `<div class="meta">Covers: ${esc(r.topic)}</div>` : ""}
       <div class="meta">${esc(r.description)}</div>
       <div class="meta">Photo: ${esc(r.photoGuidance)}${r.requiredBeforeConcealment ? " · before concealment" : ""}</div>
     </div>
@@ -232,7 +233,6 @@ function closeView(ctx: ConstructionCtx, job: Job | undefined): string {
   }
   const vault = ctx.vault();
   const missing = missingPoints(job, (id) => vault.find((v) => v.record.id === id)?.record);
-  const hasSb = Boolean((globalThis as { sb?: unknown }).sb);
   const packet = lastPacket && lastPacket.job.id === job.id ? lastPacket : null;
   return `
     <div class="banner"><strong>FREEZE A LOCKTIGHT RECORD</strong>Brief, 5 points, every sealed photo's hash and signature, counts and notes — hashed and signed by this device. The record stays on this device unless you send it.
@@ -256,7 +256,6 @@ ${packet.counts.sealed}/${packet.counts.points} sealed · ${packet.counts.missin
 device ${esc(packet.deviceSealId)}</pre>
       <div class="actions">
         <button class="btn small ghost" data-act="c-download">DOWNLOAD AGAIN</button>
-        ${hasSb ? `<button class="btn small ghost" data-act="c-send">SEND TO ADMIN</button>` : ""}
       </div>
     </div>` : ""}
   `;
@@ -278,7 +277,7 @@ export function bindConstruction(ctx: ConstructionCtx): void {
   root.querySelectorAll<HTMLElement>("[data-role]").forEach((el) => {
     el.addEventListener("click", () => {
       draft.role = el.dataset.role as BriefRole;
-      void saveDraft();
+      saveDraft();
       ctx.render();
     });
   });
@@ -289,14 +288,14 @@ export function bindConstruction(ctx: ConstructionCtx): void {
   });
 
   const title = q<HTMLInputElement>("#c-title");
-  if (title) title.oninput = () => { draft.title = title.value; void saveDraft(); };
+  if (title) title.oninput = () => { draft.title = title.value; saveDraft(); };
   const trade = q<HTMLSelectElement>("#c-trade");
-  if (trade) trade.onchange = () => { draft.trade = trade.value as TradeId | ""; void saveDraft(); ctx.render(); };
+  if (trade) trade.onchange = () => { draft.trade = trade.value as TradeId | ""; saveDraft(); ctx.render(); };
   const budget = q<HTMLSelectElement>("#c-budget");
-  if (budget) budget.onchange = () => { draft.budgetBand = budget.value as BudgetBand; void saveDraft(); };
+  if (budget) budget.onchange = () => { draft.budgetBand = budget.value as BudgetBand; saveDraft(); };
   const desc = q<HTMLTextAreaElement>("#c-desc");
   if (desc) {
-    desc.oninput = () => { draft.description = desc.value; void saveDraft(); refreshMeter(root); };
+    desc.oninput = () => { draft.description = desc.value; saveDraft(); refreshMeter(root); };
   }
 
   root.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-q]").forEach((el) => {
@@ -310,7 +309,7 @@ export function bindConstruction(ctx: ConstructionCtx): void {
       if (el.checked) arr.add(el.value);
       else arr.delete(el.value);
       draft.answers[id] = [...arr];
-      void saveDraft();
+      saveDraft();
     };
   });
 
@@ -370,11 +369,14 @@ function setAnswer(id: string, value: string): void {
   draft.answers[id] = value;
   if (id === "include") draft.include = value;
   if (id === "exclude") draft.exclude = value;
-  void saveDraft();
+  saveDraft();
+  refreshMeter(document.getElementById("app")!);
 }
 
 async function editPoint(ctx: ConstructionCtx, job: Job | undefined, id: string, patch: Partial<Job["checkpoints"][number]>): Promise<void> {
   if (!job) return;
+  // A sealed photo is bound to the label it was taken under, so the label is frozen once sealed.
+  if (patch.label !== undefined && job.checkpoints.find((c) => c.id === id)?.shotId) return;
   job.checkpoints = job.checkpoints.map((c) => (c.id === id ? { ...c, ...patch } : c));
   await putJob(job);
   await ctx.reload();
@@ -387,6 +389,11 @@ async function lockBrief(ctx: ConstructionCtx): Promise<void> {
   const points = generatePoints(full);
   const fee = feeForBudget(BUDGET_USD[draft.budgetBand]);
   const existing = activeConstructionJob(ctx);
+  if (existing?.checkpoints.some((c) => c.shotId)) {
+    briefStatus = "Photos are already sealed to this job's points. Start a new brief for different points.";
+    ctx.render();
+    return;
+  }
   const job: Job = existing
     ? {
         ...existing,
@@ -452,6 +459,7 @@ async function onAct(ctx: ConstructionCtx, act: string): Promise<void> {
   if (act === "c-freeze") {
     const job = activeConstructionJob(ctx);
     if (!job) return;
+    if (!confirm("Freeze and sign this record with this device's key now?")) return;
     const vault = ctx.vault();
     const recordFor = (id: string) => vault.find((v) => v.record.id === id)?.record;
     const missing = missingPoints(job, recordFor);
@@ -469,7 +477,7 @@ async function onAct(ctx: ConstructionCtx, act: string): Promise<void> {
       await putJob(job);
       await ctx.reload();
       lastPacket = packet;
-      downloadPacketFiles(packet, downloadHtml);
+      await downloadPacketFiles(packet, downloadHtml);
       closeStatus = `Record frozen. Hash ${packet.integrity.hash.slice(0, 12)}… saved on this device and downloaded.`;
     } catch (err) {
       closeStatus = err instanceof Error ? err.message : "Could not build packet.";
@@ -478,20 +486,13 @@ async function onAct(ctx: ConstructionCtx, act: string): Promise<void> {
     return;
   }
   if (act === "c-download" && lastPacket) {
-    downloadPacketFiles(lastPacket, downloadHtml);
+    await downloadPacketFiles(lastPacket, downloadHtml);
     return;
-  }
-  if (act === "c-send" && lastPacket) {
-    closeStatus = "Sending to admin…";
-    ctx.render();
-    const res = await submitCloseout(lastPacket, API_BASE);
-    closeStatus = res.ok ? "Admin copy sent." : `Not sent (${res.error}). The record on this device is unchanged.`;
-    ctx.render();
   }
 }
 
 export async function restoreLastPacket(jobId: string | null): Promise<void> {
   if (!jobId) return;
   const packet = (await getCloseout(jobId)) as CloseoutPacket | undefined;
-  if (packet?.schema === "tradedeck.shield.completion.v2") lastPacket = packet;
+  if (packet?.schema === "tradedeck.shield.completion.v3") lastPacket = packet;
 }
