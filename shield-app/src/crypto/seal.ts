@@ -43,7 +43,7 @@ export async function sha256Bytes(data: BufferSource): Promise<string> {
   return hex(await crypto.subtle.digest("SHA-256", data));
 }
 
-export async function sha256Text(text: string): Promise<string> {
+export function sha256Text(text: string): Promise<string> {
   return sha256Bytes(new TextEncoder().encode(text));
 }
 
@@ -88,7 +88,7 @@ export function stableStringify(value: unknown): string {
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
 }
 
-export async function chainStep(prev: string, recordHash: string): Promise<string> {
+export function chainStep(prev: string, recordHash: string): Promise<string> {
   return sha256Text(`${prev}|${recordHash}`);
 }
 

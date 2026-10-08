@@ -1,6 +1,6 @@
 export type PackKind = "remodel" | "draw" | "unit" | "loss" | "shop" | "custom" | "construction";
 
-export type CaptureKind = "native-camera" | "arrival-hash";
+export type CaptureKind = "native-camera" | "web-camera" | "arrival-hash";
 
 export type PlatformKind = "ios" | "android" | "web";
 

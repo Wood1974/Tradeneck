@@ -29,7 +29,7 @@ function uid(): string {
 const GPS_TIMEOUT_MS = 8000;
 
 async function readGps(): Promise<SealRecord["gps"]> {
-  if (!("geolocation" in navigator)) return null;
+  if (typeof navigator === "undefined" || !("geolocation" in navigator)) return null;
   try {
     // The geolocation `timeout` option does not start until permission is decided, so an
     // unanswered prompt would stall the seal forever. Race it with a hard deadline.
@@ -158,6 +158,11 @@ export async function captureNative(checkpointId: string | null): Promise<Captur
   if ("error" in still) return still;
   const item = await sealFromBytes(still.bytes, still.mime, "native-camera", checkpointId);
   return { item };
+}
+
+export async function sealWebCameraFrame(blob: Blob, checkpointId: string | null): Promise<VaultItem> {
+  const buf = await blob.arrayBuffer();
+  return sealFromBytes(buf, blob.type || "image/jpeg", "web-camera", checkpointId);
 }
 
 export async function arrivalHashFile(file: File, checkpointId: string | null): Promise<VaultItem> {

@@ -82,7 +82,7 @@ export async function setActiveJobId(id: string | null): Promise<void> {
   await setMeta("activeJobId", id);
 }
 
-export async function getCloseout(jobId: string): Promise<unknown | undefined> {
+export function getCloseout(jobId: string): Promise<unknown | undefined> {
   return getMeta(`closeout:${jobId}`);
 }
 
