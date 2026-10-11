@@ -308,6 +308,7 @@ test("an unverified phone cannot seal: sign-on comes first, step by step", async
   await asNativeApp(page);
   await page.goto("/");
   await expect(page.locator("#id-h")).toBeVisible();
+  await expect(page.locator("#id-notice")).toContainText("once, while you have signal, before you head to the job");
   for (const sel of ['[data-act="native"]', '[data-act="quick-capture"]', "[data-slot]"]) await expect(page.locator(sel)).toHaveCount(0);
 
   // Checking other people's records needs no sign-on.
@@ -344,6 +345,7 @@ test("an unverified phone cannot seal: sign-on comes first, step by step", async
   await expect(page.locator(".statement")).toContainText("I took each one myself");
   await page.click('[data-act="id-sign"]');
   await expect(page.locator('[data-act="native"]')).toBeVisible();
+  await expect(page.locator(".ready")).toContainText("Ready to work offline");
 
   // The signed note survives a restart, and the first photo it allows is bound to it.
   await page.reload();
@@ -351,4 +353,35 @@ test("an unverified phone cannot seal: sign-on comes first, step by step", async
   await page.click('[data-act="native"]');
   await expect(page.locator(".thumb")).toBeVisible();
   await page.click('[data-act="export"]');
+});
+
+test("sign-on warns when the phone is offline, and says so again when signal returns", async ({ page, context }) => {
+  await asNativeApp(page);
+  await page.goto("/");
+  await expect(page.locator("#id-notice")).toContainText("once, while you have signal");
+  await page.fill("#id-email", "pro@example.test");
+
+  await context.setOffline(true);
+  await expect(page.locator("#id-notice")).toContainText("You are offline");
+  await expect(page.locator("#id-notice")).toContainText("cannot seal photos until it is done");
+  // Updating the notice must not wipe what the person already typed.
+  await expect(page.locator("#id-email")).toHaveValue("pro@example.test");
+  await expect(page.locator('[data-act="native"]')).toHaveCount(0);
+
+  await context.setOffline(false);
+  await expect(page.locator("#id-notice")).toContainText("once, while you have signal");
+});
+
+test("a signed-on phone keeps working with the network off from the start of a session", async ({ page, context }) => {
+  await asNativeApp(page);
+  await openApp(page);
+  await page.waitForLoadState("networkidle");
+  await context.setOffline(true);
+  await expect(page.locator(".ready")).toContainText("Ready to work offline");
+  await page.click('[data-act="native"]');
+  await expect(page.locator(".thumb")).toBeVisible();
+  await page.click('[data-act="rehash"]');
+  await expect(page.locator(".foot-note", { hasText: "record-signature-valid" })).toBeVisible();
+  // Sign-on is not asked for again, and no warning about being offline appears.
+  await expect(page.locator("#id-h")).toHaveCount(0);
 });

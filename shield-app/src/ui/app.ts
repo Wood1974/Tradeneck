@@ -121,6 +121,7 @@ function captureView(native: boolean, job: Job | undefined): string {
     ? `<div class="icon-aperture"><span></span></div>
       <h1>Native camera</h1>
       <p class="lede">Live camera only, front or back. Shield has no gallery or photo-file import. Platform attestation is not implemented in this build.</p>
+      <p class="fine ready">Ready to work offline: photos, sealing, closing a job and verifying records need no signal.</p>
       <div class="actions">
         <button class="btn" data-act="native">SEAL FRAME</button>
         <button class="btn ghost small" data-act="cam-flip">${flipLabel}</button>

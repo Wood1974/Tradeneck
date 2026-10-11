@@ -8,6 +8,15 @@ the person signs in, passes an ID check (photo ID plus a live selfie match, run 
 `tradedeck-api`) and signs a short statement with the device key (see *Sign-on* below). After that, capture, sealing,
 closing and verifying make no outbound calls; an end-to-end test runs that flow offline and asserts no requests.
 
+## Working offline
+
+Sign-on is the only step that needs a connection (`src/identity/client.ts` holds the app's only network call, and the build loads
+nothing from outside). Do it once, with signal, before heading to a job; the sign-on screen says so and warns when the phone is
+offline. After that the Capture screen shows "Ready to work offline": photos, sealing, GPS, briefs and checkpoints, closing a job,
+exporting and verifying records all work with no signal. You need a connection again only if the app's data is cleared or the app is
+reinstalled (a new device key means a new sign-on), or to use the optional online lookup of an attestation. Not yet tested on a
+real phone with the network off; the e2e tests switch the network off in a browser.
+
 ## Sign-on: ID check and signed note
 
 1. **Sign in** with a TradeDeck (Supabase) account. The token is kept in memory only.
