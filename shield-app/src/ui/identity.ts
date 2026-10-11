@@ -36,7 +36,7 @@ function step(): Step {
 
 const ERRORS: Record<string, string> = {
   "bad-credentials": "That email or password was not accepted.",
-  network: "Could not reach the service. Check your connection and try again.",
+  network: "Could not reach the service. Sign-on needs a connection. Check it and try again.",
   "not-signed-in": "Sign in first.",
   "consent-required": "Both boxes need to be ticked first.",
   "id-check-unavailable": "The ID check service is unavailable right now. Try again shortly.",
@@ -49,6 +49,13 @@ const ERRORS: Record<string, string> = {
 };
 const codeOf = (err: unknown): string => (typeof (err as { code?: unknown })?.code === "string" ? (err as { code: string }).code : "network");
 const errorText = (code: string): string => ERRORS[code] ?? `Something went wrong (${code}).`;
+
+const ONLINE_NOTE = "Do this once, while you have signal, before you head to the job. After sign-on Shield works with no signal.";
+const OFFLINE_NOTE = "You are offline. Sign-on needs a connection, and Shield cannot seal photos until it is done. Connect, then come back.";
+
+function noticeText(): string {
+  return typeof navigator !== "undefined" && navigator.onLine === false ? OFFLINE_NOTE : ONLINE_NOTE;
+}
 
 export function identityView(): string {
   const s = step();
@@ -83,6 +90,7 @@ export function identityView(): string {
     <section class="finder signon" aria-labelledby="id-h">
       <div class="finder-top"><span class="chip">SIGN-ON</span><span class="chip">${s === "signin" ? "1" : s === "sign" ? "3" : "2"} OF 3</span></div>
       <h1 id="id-h">Verify the photographer</h1>
+      <p class="fine notice" id="id-notice" role="status">${esc(noticeText())}</p>
       ${body[s]}
       <p class="foot-note" role="status">${esc(message)}</p>
     </section>
@@ -128,6 +136,13 @@ export function bindIdentity(root: HTMLElement, rerender: () => void): void {
   if (emailEl) emailEl.oninput = () => (email = emailEl.value.trim());
   if (!listening) {
     listening = true;
+    // Update the notice in place when the connection changes: a re-render would wipe what was typed.
+    const refreshNotice = () => {
+      const el = document.getElementById("id-notice");
+      if (el) el.textContent = noticeText();
+    };
+    window.addEventListener("online", refreshNotice);
+    window.addEventListener("offline", refreshNotice);
     // Coming back from the browser: check the result without making the person tap anything.
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible" && step() === "waiting") void refreshStatus(rerender);

@@ -174,3 +174,5 @@ pre {
 .finder.signon { justify-content: flex-start; padding-top: 52px; }
 .finder.signon .lede { max-width: none; }
 .finder.signon h1 { margin: 6px 0 10px; }
+.finder .fine.ready { text-align: center; color: var(--ok); max-width: 300px; margin: 14px 0 0; }
+.finder .fine.notice { text-align: center; margin: 0 0 6px; }
