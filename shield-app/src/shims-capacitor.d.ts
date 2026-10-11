@@ -16,6 +16,10 @@ declare module "@capacitor/camera" {
     Camera = "CAMERA",
     Photos = "PHOTOS",
   }
+  export enum CameraDirection {
+    Rear = "REAR",
+    Front = "FRONT",
+  }
   export const Camera: {
     getPhoto(options: {
       source: CameraSource;
@@ -23,6 +27,23 @@ declare module "@capacitor/camera" {
       quality?: number;
       allowEditing?: boolean;
       correctOrientation?: boolean;
+      direction?: CameraDirection;
     }): Promise<{ base64String?: string; format?: string }>;
+  };
+}
+
+declare module "@capacitor/filesystem" {
+  export enum Directory {
+    Cache = "CACHE",
+    Documents = "DOCUMENTS",
+  }
+  export const Filesystem: {
+    writeFile(options: { path: string; data: string; directory: Directory }): Promise<{ uri: string }>;
+  };
+}
+
+declare module "@capacitor/share" {
+  export const Share: {
+    share(options: { title?: string; url?: string }): Promise<unknown>;
   };
 }

@@ -1,19 +1,20 @@
-import { arrivalHashFile, captureNative } from "../capture/capture";
-import { deviceSealId } from "../crypto/seal";
+import { esc } from "../esc";
+import { captureNative } from "../capture/capture";
+import { b64FromBytes, devicePublicKeyRaw, deviceSealId } from "../crypto/seal";
 import { makeCheckpoints, PACK_ORDER } from "../packs";
 import { isNativeOriginAvailable } from "../platform";
 import { feeForBudget, PRICING_EFFECTIVE } from "../pricing";
 import {
   activeJobId,
-  getJob,
+  getVaultBytes,
   listJobs,
   listVault,
   putJob,
   setActiveJobId,
 } from "../store/db";
 import type { Job, PackKind, VaultItem } from "../types";
-import { parseBundle, verifyBundle, verifyItemOriginal } from "../verify/verify";
-import { parseCloseoutPacket, verifyCloseoutPacket, type PacketVerdict } from "../construction/closeout";
+import { MAX_IMPORT_BYTES, parseBundle, verifyBundle, verifyItemOriginal } from "../verify/verify";
+import { download, parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
 import type { CloseoutPacket } from "../types";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
@@ -36,7 +37,7 @@ let pinLat = "";
 let pinLng = "";
 let pinR = "200";
 let verifyOut = "";
-let packetOut: { verdict: PacketVerdict; reasons: string[]; packet: CloseoutPacket } | null = null;
+let packetOut: (PacketVerification & { packet: CloseoutPacket }) | null = null;
 
 const ctx: ConstructionCtx = {
   jobs: () => jobs,
@@ -48,6 +49,8 @@ const ctx: ConstructionCtx = {
 };
 
 export async function start(): Promise<void> {
+  // Ask the browser not to evict the vault under storage pressure; a no-op where unsupported.
+  void navigator.storage?.persist?.();
   sealId = await deviceSealId();
   await initConstruction();
   await reload();
@@ -91,7 +94,8 @@ export function render(): void {
       <button class="${tab === "verify" ? "on" : ""}" data-tab="verify">Verify</button>
       <button class="${tab === "construction" ? "on" : ""}" data-tab="construction">Build</button>
     </nav>
-    <input class="hidden-file" id="file-arrival" type="file" accept="image/*" />
+    ${toast ? `<div class="toast" role="status"><span>${esc(toast.text)}</span><button data-act="toast-view">VIEW</button></div>` : ""}
+    ${native ? `<button class="fab" data-act="quick-capture" aria-label="Take a photo" title="Take a photo"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>` : ""}
     <input class="hidden-file" id="file-bundle" type="file" accept="application/json,.json,.shield.json,.shield-record.json" />
   `;
   bind();
@@ -106,10 +110,20 @@ function view(native: boolean, job: Job | undefined): string {
 }
 
 function captureView(native: boolean, job: Job | undefined): string {
-  const originChip = native ? `<span class="chip ok">NATIVE</span>` : `<span class="chip warn">WEB · NO ORIGIN</span>`;
-  const camChip = native
-    ? `<span class="chip">CAMERA READY · ${clock()}</span>`
-    : `<span class="chip">CAMERA OFF · ${clock()}</span>`;
+  const originChip = native ? `<span class="chip ok">NATIVE</span>` : `<span class="chip bad">NO CAPTURE IN BROWSER</span>`;
+  const camChip = native ? `<span class="chip">CAMERA READY · ${clock()}</span>` : "";
+  const flipLabel = facing === "environment" ? "USE FRONT CAMERA" : "USE BACK CAMERA";
+  const finderBody = native
+    ? `<div class="icon-aperture"><span></span></div>
+      <h1>Native camera</h1>
+      <p class="lede">Live camera only, front or back. Shield has no gallery or photo-file import. Platform attestation is not implemented in this build.</p>
+      <div class="actions">
+        <button class="btn" data-act="native">SEAL FRAME</button>
+        <button class="btn ghost small" data-act="cam-flip">${flipLabel}</button>
+      </div>`
+    : `<div class="icon-aperture"><span></span></div>
+      <h1>Capture needs the app</h1>
+      <p class="lede">Photos can only be taken with the live camera in the Shield iOS or Android app. A browser can plan jobs and verify records but cannot capture, and Shield has no gallery or photo-file import.</p>`;
   return `
     <div class="banner">
       <strong>${job ? "LOCKED LIST" : "NO LOCKED LIST"}</strong>
@@ -118,15 +132,7 @@ function captureView(native: boolean, job: Job | undefined): string {
     </div>
     <section class="finder">
       <div class="finder-top">${originChip}${camChip}</div>
-      <div class="icon-aperture"><span></span></div>
-      <h1>${native ? "Native camera" : "No web seal"}</h1>
-      <p class="lede">${native
-        ? "Rear camera only. Hash on arrival. Attest binds later."
-        : "Origin seal is iOS/Android only. This page will not pretend."}</p>
-      <div class="actions">
-        <button class="btn" data-act="native">${native ? "SEAL FRAME" : "NATIVE CAMERA"}</button>
-        <button class="btn ghost small" data-act="arrival">ARRIVAL HASH</button>
-      </div>
+      ${finderBody}
       ${status ? `<p class="foot-note">${esc(status)}</p>` : ""}
     </section>
     ${job ? slots(job) : packChips()}
@@ -170,23 +176,22 @@ function jobsView(job: Job | undefined): string {
       <input id="budget" type="number" min="0" step="1" value="${budget}" />
       <div class="meta">${fee.feeTier} · $${fee.feeUsd} · effective ${PRICING_EFFECTIVE}</div>
       <label>LOCKED PIN (optional)</label>
-      <input id="pin-lat" placeholder="lat" value="${pinLat}" />
-      <input id="pin-lng" placeholder="lng" value="${pinLng}" />
-      <input id="pin-r" placeholder="radius m" value="${pinR}" />
+      <input id="pin-lat" placeholder="lat" inputmode="decimal" value="${esc(pinLat)}" />
+      <input id="pin-lng" placeholder="lng" inputmode="decimal" value="${esc(pinLng)}" />
+      <input id="pin-r" placeholder="radius m" inputmode="decimal" value="${esc(pinR)}" />
       <button class="btn" data-act="lock">LOCK PACK</button>
     </div>
     <div class="list">${jobs
       .map(
         (j) => `<div class="card">
           <div class="row">
-            <h2>${j.brief ? esc(j.brief.title || "construction") : j.pack} · $${j.feeUsd}</h2>
-            <button class="btn small ghost" data-activate="${j.id}">${j.id === activeId ? "ACTIVE" : "USE"}</button>
+            <h2>${j.brief ? esc(j.brief.title || "construction") : esc(j.pack)} · $${esc(j.feeUsd)}</h2>
+            <button class="btn small ghost" data-activate="${esc(j.id)}">${j.id === activeId ? "ACTIVE" : "USE"}</button>
           </div>
           <div class="meta">${j.checkpoints.filter((c) => c.shotId).length}/${j.checkpoints.length} sealed · ${j.pin ? "pin on" : "no pin"}</div>
         </div>`,
       )
       .join("")}${jobs.length ? "" : `<p class="meta">No locked lists.</p>`}</div>
-    ${job ? "" : ""}
   `;
 }
 
@@ -196,13 +201,14 @@ function vaultView(): string {
     const rec = open.record;
     return `
       <button class="btn ghost small" data-act="vault-back">BACK</button>
-      <img class="thumb" alt="" src="data:${rec.mime};base64,${open.originalB64}" />
+      ${openImgUrl ? `<img class="thumb" alt="Sealed evidence photo" src="${esc(openImgUrl)}" />` : `<p class="meta">Photo bytes unavailable on this device.</p>`}
       <div class="card">
-        <div class="row"><h2>${rec.captureKind}</h2><span class="chip">${rec.platform}</span></div>
-        <pre>${rec.sha256}
-${rec.createdAt}
-job ${rec.jobId ?? "—"} · ${rec.checkpointId ?? "unbound"}
-attest ${rec.attest.kind}${rec.attest.tokenPresent ? " · token" : ""}</pre>
+        <div class="row"><h2>${esc(rec.captureKind)}</h2><span class="chip">${esc(rec.platform)}</span></div>
+        <pre>${esc(rec.sha256)}
+${esc(rec.createdAt)}
+job ${esc(rec.jobId ?? "—")} · ${esc(rec.checkpointId ?? "unbound")}
+${rec.gps ? `location ${esc(rec.gps.source)} · ±${esc(Math.round(rec.gps.acc))} m` : "no location recorded"}
+attest ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " · token not validated"}</pre>
         <div class="actions">
           <button class="btn small" data-act="rehash">REHASH</button>
           <button class="btn ghost small" data-act="export">EXPORT</button>
@@ -215,9 +221,9 @@ attest ${rec.attest.kind}${rec.attest.tokenPresent ? " · token" : ""}</pre>
     <div class="banner"><strong>VAULT</strong>Originals stay on this device. Rehash checks bytes only.</div>
     <div class="list">${vault
       .map(
-        (v) => `<button class="card" data-open="${v.record.id}" style="width:100%;text-align:left">
-          <div class="row"><h2>${v.record.captureKind}</h2><span class="chip">${v.record.platform}</span></div>
-          <div class="meta">${v.record.sha256.slice(0, 16)}… · ${v.record.createdAt}</div>
+        (v) => `<button class="card" data-open="${esc(v.record.id)}" style="width:100%;text-align:left">
+          <div class="row"><h2>${esc(v.record.captureKind)}</h2><span class="chip">${esc(v.record.platform)}</span></div>
+          <div class="meta">${esc(v.record.sha256.slice(0, 16))}… · ${esc(v.record.createdAt)}</div>
         </button>`,
       )
       .join("")}${vault.length ? "" : `<p class="meta">Empty.</p>`}</div>
@@ -227,7 +233,9 @@ attest ${rec.attest.kind}${rec.attest.tokenPresent ? " · token" : ""}</pre>
 function verifyView(): string {
   return `
     <div class="banner"><strong>VERIFY</strong>Drop a photo bundle (.shield.json) or a close-out record (.shield-record.json). Everything is recomputed on this device.</div>
-    <div class="drop" data-act="pick-bundle">Drop a file or tap to choose</div>
+    <label class="meta" for="expected-signer">Expected device seal ID (optional, from a source you trust)</label>
+    <input id="expected-signer" autocomplete="off" placeholder="e.g. 1A2B3C4D·5E6F7A8B" />
+    <div class="drop" data-act="pick-bundle">Tap to choose a file</div>
     ${verifyOut ? `<div class="card"><pre>${esc(verifyOut)}</pre></div>` : ""}
     ${packetOut ? packetResultView(packetOut) : ""}
   `;
@@ -242,22 +250,27 @@ function packetResultView(r: NonNullable<typeof packetOut>): string {
       const rec = pt.record;
       const chip = rec
         ? rec.captureKind === "native-camera"
-          ? `<span class="chip ok">SEALED</span>`
-          : `<span class="chip warn">ARRIVAL-ONLY</span>`
+          ? rec.attest.kind === "none"
+            ? `<span class="chip warn">NATIVE · NO ATTEST</span>`
+            : `<span class="chip ok">NATIVE</span>`
+          : `<span class="chip bad">UNSUPPORTED</span>`
         : `<span class="chip bad">MISSING</span>`;
       return `<div class="slot"><div><div>${esc(pt.label)}</div><div class="meta">${esc(code)}${rec ? ` · ${esc(rec.sha256.slice(0, 16))}…` : ""}</div></div>${chip}</div>`;
     })
     .join("");
   return `
     <div class="card">
-      <div class="row"><h2>${ok ? "Record intact" : r.verdict === "PACKET-TAMPERED" ? "Record altered" : "Not a Shield record"}</h2><span class="chip ${ok ? "ok" : "bad"}">${esc(r.verdict)}</span></div>
+      <div class="row"><h2>${ok ? "Record consistent" : r.verdict === "PACKET-TAMPERED" ? "Record altered" : "Not a Shield record"}</h2><span class="chip ${ok ? "ok" : "bad"}">${esc(r.verdict)}</span></div>
       <pre>${esc(r.reasons.join("\n"))}
 hash   ${esc(p.integrity.hash)}
 closed ${esc(p.closedAt)} by ${esc(p.closedBy.role)}
 job    ${esc(p.job.title || p.job.id)} · ${esc(p.job.trade)}
-device ${esc(p.deviceSealId)}</pre>
+signer ${esc(r.signer ?? "unknown")}
+photos sealed ${esc(p.counts.sealed)} · missing ${esc(p.counts.missing)}</pre>
       <div class="slots">${points}</div>
-      <p class="foot-note">Hash and signature recomputed from the file. ${ok ? "No field in this record has changed since it was frozen." : "Do not rely on this record."}</p>
+      <p class="foot-note">${ok
+        ? `Every record signature, chain link and the packet hash check out against the key in the file. That shows nothing changed after signing; it does not show who holds the key. Compare the signer ID with one you trust. Photo files are not in this record, so photos are not re-hashed here.`
+        : "Do not rely on this record."}</p>
     </div>
   `;
 }
@@ -267,14 +280,14 @@ function specView(): string {
     <div class="card">
       <h2>Spec</h2>
       <div class="meta">
-        Proven: SHA-256 on arrival · unmodified original · hash chain<br>
-        Corroborated: locked pin score · motion later<br>
-        Not proven: web origin · EXIF · unstaged scene · GPS anti-spoof<br>
+        Proven (when verified): SHA-256 of the bytes received · signed, chained records are tamper-evident<br>
+        Corroborated: pin score (only when GPS accuracy fits the radius)<br>
+        Not proven: who holds the signing key · web origin · EXIF · unstaged scene · GPS anti-spoof · device clock<br>
         Fee does not move with verdict<br>
         standard $79 · extended $129 · major $199 · ${PRICING_EFFECTIVE}
       </div>
     </div>
-    <p class="foot-note">Copy is a placeholder. Decide wording after you run the paths.</p>
+    <p class="foot-note">Records are tamper-evident, not identity-proof: a packet shows nothing changed after signing, not who signed it.</p>
     <button class="btn ghost" data-act="spec" style="margin-top:12px">CLOSE</button>
   `;
 }
@@ -285,6 +298,7 @@ function bind(): void {
       tab = (el as HTMLElement).dataset.tab as Tab;
       specOpen = false;
       status = "";
+      toast = null;
       render();
     });
   });
@@ -309,13 +323,14 @@ function bind(): void {
   });
   root().querySelectorAll("[data-open]").forEach((el) => {
     el.addEventListener("click", () => {
-      openVaultId = (el as HTMLElement).dataset.open!;
-      status = "";
-      render();
+      void openVault((el as HTMLElement).dataset.open!).then(() => {
+        status = "";
+        render();
+      });
     });
   });
   root().querySelectorAll("[data-slot]").forEach((el) => {
-    el.addEventListener("click", () => void onSlot((el as HTMLElement).dataset.slot!));
+    el.addEventListener("click", () => void guarded(() => onSlot((el as HTMLElement).dataset.slot!)));
   });
   if (tab === "construction") bindConstruction(ctx);
 
@@ -345,87 +360,126 @@ function bind(): void {
     pinR = rad.value;
   };
 
-  const arrival = document.getElementById("file-arrival") as HTMLInputElement;
-  arrival.onchange = async () => {
-    const file = arrival.files?.[0];
-    arrival.value = "";
-    if (!file) return;
-    const slot = pendingSlot;
-    pendingSlot = null;
-    const item = await arrivalHashFile(file, slot);
-    await reload();
-    openVaultId = item.record.id;
-    tab = "vault";
-    status = "ARRIVAL-ONLY · not an origin seal";
-    render();
-  };
-
   const bundle = document.getElementById("file-bundle") as HTMLInputElement;
   bundle.onchange = async () => {
     const file = bundle.files?.[0];
     bundle.value = "";
     if (!file) return;
-    const text = await file.text();
     verifyOut = "";
     packetOut = null;
-    let raw: unknown = null;
     try {
-      raw = JSON.parse(text);
+      if (file.size > MAX_IMPORT_BYTES) {
+        verifyOut = "NO-ORIGIN\nfile-too-large";
+        return;
+      }
+      const text = await file.text();
+      let raw: unknown = null;
+      try {
+        raw = JSON.parse(text);
+      } catch {
+        verifyOut = "NO-ORIGIN\nfile-unreadable";
+        return;
+      }
+      if ((raw as { schema?: unknown })?.schema === "tradedeck.shield.completion.v3") {
+        try {
+          const packet = parseCloseoutPacket(text);
+          const expected = (document.getElementById("expected-signer") as HTMLInputElement | null)?.value.trim();
+          const result = await verifyCloseoutPacket(packet, expected || undefined);
+          packetOut = { ...result, packet };
+        } catch {
+          verifyOut = "PACKET-UNREADABLE\nbad-packet";
+        }
+        return;
+      }
+      try {
+        const result = await verifyBundle(parseBundle(text));
+        verifyOut = `${result.verdict}\n${result.reasons.join("\n")}\n${result.computedSha ?? ""}`;
+      } catch {
+        verifyOut = "NO-ORIGIN\nbundle-unreadable";
+      }
     } catch {
       verifyOut = "NO-ORIGIN\nfile-unreadable";
+    } finally {
       render();
-      return;
     }
-    if ((raw as { schema?: unknown })?.schema === "tradedeck.shield.completion.v2") {
-      try {
-        const packet = parseCloseoutPacket(text);
-        const result = await verifyCloseoutPacket(packet);
-        packetOut = { ...result, packet };
-      } catch {
-        verifyOut = "PACKET-UNREADABLE\nbad-packet";
-      }
-      render();
-      return;
-    }
-    try {
-      const parsed = parseBundle(text);
-      const result = await verifyBundle(parsed);
-      verifyOut = `${result.verdict}\n${result.reasons.join("\n")}\n${result.computedSha ?? ""}`;
-    } catch {
-      verifyOut = "NO-ORIGIN\nbundle-unreadable";
-    }
-    render();
   };
 }
 
-let pendingSlot: string | null = null;
+const CAPTURE_ERRORS: Record<string, string> = {
+  "not-native": "Photos can only be taken in the Shield iOS or Android app.",
+  "camera-denied": "Camera access is off. Allow the camera for Shield in Settings, then try again.",
+  "camera-failed": "The camera did not return a photo. Try again.",
+  "empty-bytes": "The camera returned an empty photo. Try again.",
+  "plugin-missing": "The camera plugin is not installed in this build.",
+};
+
+const captureErrorText = (code: string): string => CAPTURE_ERRORS[code] ?? `Capture failed (${code}).`;
+
+let facing: "environment" | "user" = "environment";
+
+let openImgUrl: string | null = null;
+
+const imageMime = (mime: string): string => (/^image\/(jpeg|png)$/.test(mime) ? mime : "application/octet-stream");
+
+// Photo bytes are loaded only for the record being viewed, and shown through an object URL instead of a base64 data URL.
+async function openVault(id: string | null): Promise<void> {
+  if (openImgUrl) URL.revokeObjectURL(openImgUrl);
+  openImgUrl = null;
+  openVaultId = id;
+  if (!id) return;
+  const rec = vault.find((v) => v.record.id === id)?.record;
+  const bytes = rec ? await getVaultBytes(id) : undefined;
+  if (rec && bytes) openImgUrl = URL.createObjectURL(new Blob([bytes], { type: imageMime(rec.mime) }));
+}
+
+let sealing = false;
+let toast: { text: string; id: string } | null = null;
+
+function sealError(err: unknown): string {
+  if (err instanceof DOMException && err.name === "QuotaExceededError") return "Storage full. Export your records and free space, then retry.";
+  return `Could not seal: ${err instanceof Error ? err.message : "unknown error"}`;
+}
+
+// One seal at a time: a second tap while sealing would queue a duplicate record.
+async function guarded(fn: () => Promise<void>): Promise<void> {
+  if (sealing) return;
+  sealing = true;
+  try {
+    await fn();
+  } catch (err) {
+    status = sealError(err);
+    render();
+  } finally {
+    sealing = false;
+  }
+}
 
 async function onSlot(id: string): Promise<void> {
   const job = activeJob();
   const cp = job?.checkpoints.find((c) => c.id === id);
   if (cp?.shotId) {
-    openVaultId = cp.shotId;
+    await openVault(cp.shotId);
     tab = "vault";
     render();
     return;
   }
   if (isNativeOriginAvailable()) {
-    const res = await captureNative(id);
+    const res = await captureNative(id, facing === "user" ? "front" : "back");
     if ("error" in res) {
-      status = res.error;
+      status = captureErrorText(res.error);
       render();
       return;
     }
     await reload();
-    openVaultId = res.item.record.id;
+    await openVault(res.item.record.id);
     tab = "vault";
-    status = res.item.record.attest.kind === "none" ? "SEALED bytes · attest pending" : "SEALED";
+    status = res.item.record.attest.kind === "none" ? "Sealed on this device · no platform attestation" : "Sealed · platform attestation claimed";
     render();
     return;
   }
-  pendingSlot = id;
-  status = "Web cannot origin-seal this slot. Arrival hash only.";
-  (document.getElementById("file-arrival") as HTMLInputElement).click();
+  status = "Photos can only be taken in the Shield iOS or Android app. This browser cannot capture.";
+  tab = "capture";
+  render();
 }
 
 async function onAct(act: string): Promise<void> {
@@ -447,21 +501,59 @@ async function onAct(act: string): Promise<void> {
     return;
   }
   if (act === "native") {
-    const res = await captureNative(null);
-    if ("error" in res) {
-      status = res.error === "not-native" ? "not-native · use arrival hash or the iOS/Android wrap" : res.error;
+    await guarded(async () => {
+      const res = await captureNative(null, facing === "user" ? "front" : "back");
+      if ("error" in res) {
+        status = captureErrorText(res.error);
+        render();
+        return;
+      }
+      await reload();
+      await openVault(res.item.record.id);
+      tab = "vault";
+      status = res.item.record.attest.kind === "none" ? "Sealed on this device · no platform attestation" : "Sealed · platform attestation claimed";
       render();
-      return;
+    });
+    return;
+  }
+  if (act === "quick-capture") {
+    await guarded(async () => {
+      const res = await captureNative(null, facing === "user" ? "front" : "back");
+      if ("error" in res) {
+        toast = { text: captureErrorText(res.error), id: "" };
+      } else {
+        await reload();
+        const rec = res.item.record;
+        toast = {
+          text: `Sealed ${rec.sha256.slice(0, 8)} · ${rec.attest.kind === "none" ? "no platform attestation" : "attestation claimed"}`,
+          id: rec.id,
+        };
+      }
+      render();
+      const shown = toast;
+      // Remove the node directly rather than re-rendering, so a dismissal never steals focus from a form.
+      setTimeout(() => {
+        if (toast === shown) {
+          toast = null;
+          document.querySelector(".toast")?.remove();
+        }
+      }, 8000);
+    });
+    return;
+  }
+  if (act === "toast-view") {
+    const id = toast?.id;
+    toast = null;
+    if (id) {
+      await openVault(id);
+      tab = "vault";
     }
-    await reload();
-    openVaultId = res.item.record.id;
-    tab = "vault";
     render();
     return;
   }
-  if (act === "arrival") {
-    pendingSlot = null;
-    (document.getElementById("file-arrival") as HTMLInputElement).click();
+  if (act === "cam-flip") {
+    facing = facing === "environment" ? "user" : "environment";
+    render();
     return;
   }
   if (act === "lock") {
@@ -469,10 +561,13 @@ async function onAct(act: string): Promise<void> {
     const lat = Number(pinLat);
     const lng = Number(pinLng);
     const radiusM = Number(pinR);
-    const pin =
-      Number.isFinite(lat) && Number.isFinite(lng) && pinLat !== "" && pinLng !== ""
-        ? { lat, lng, radiusM: Number.isFinite(radiusM) && radiusM > 0 ? radiusM : 200 }
-        : null;
+    const hasPin = pinLat.trim() !== "" || pinLng.trim() !== "";
+    if (hasPin && !(Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && pinLat.trim() !== "" && pinLng.trim() !== "")) {
+      status = "Pin needs a latitude between -90 and 90 and a longitude between -180 and 180.";
+      render();
+      return;
+    }
+    const pin = hasPin ? { lat, lng, radiusM: Number.isFinite(radiusM) && radiusM >= 10 && radiusM <= 5000 ? radiusM : 200 } : null;
     const job: Job = {
       id: crypto.randomUUID(),
       pack: selectedPack,
@@ -493,29 +588,35 @@ async function onAct(act: string): Promise<void> {
     return;
   }
   if (act === "vault-back") {
-    openVaultId = null;
+    await openVault(null);
     status = "";
     render();
     return;
   }
   if (act === "rehash" && openVaultId) {
     const item = vault.find((v) => v.record.id === openVaultId);
-    if (!item) return;
-    const result = await verifyItemOriginal(item.record, item.originalB64);
+    const bytes = item ? await getVaultBytes(item.record.id) : undefined;
+    if (!item || !bytes) {
+      status = "Photo bytes unavailable on this device.";
+      render();
+      return;
+    }
+    const result = await verifyItemOriginal(item.record, b64FromBytes(bytes));
     status = `${result.verdict} · ${result.reasons.join(", ")}`;
     render();
     return;
   }
   if (act === "export" && openVaultId) {
     const item = vault.find((v) => v.record.id === openVaultId);
-    if (!item) return;
-    const bundle = { version: 1 as const, record: item.record, originalB64: item.originalB64 };
-    const blob = new Blob([JSON.stringify(bundle)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${item.record.id}.shield.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const bytes = item ? await getVaultBytes(item.record.id) : undefined;
+    if (!item || !bytes) {
+      status = "Photo bytes unavailable on this device.";
+      render();
+      return;
+    }
+    const bundle = { version: 1 as const, record: item.record, originalB64: b64FromBytes(bytes), devicePublicKey: await devicePublicKeyRaw() };
+    const stamp = item.record.createdAt.replace(/[:.]/g, "-");
+    await download(`shield-photo_${item.record.id.slice(0, 8)}_${stamp}.shield.json`, new Blob([JSON.stringify(bundle)], { type: "application/json" }));
     return;
   }
   if (act === "pick-bundle") {
@@ -523,6 +624,3 @@ async function onAct(act: string): Promise<void> {
   }
 }
 
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-}

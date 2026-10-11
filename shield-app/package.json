@@ -9,10 +9,15 @@
     "preview": "vite preview --host --port 4173",
     "cap:init": "npx cap add ios && npx cap add android",
     "cap:sync": "npx cap sync",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:ui": "playwright test --ui",
+    "check:bundle": "node scripts/check-bundle.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.2.0",
+    "@playwright/test": "^1.63.0",
     "fake-indexeddb": "^6.0.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
@@ -25,6 +30,7 @@
     "@capacitor/core": "^6.2.0",
     "@capacitor/filesystem": "^6.0.2",
     "@capacitor/geolocation": "^6.0.2",
-    "@capacitor/ios": "^6.2.2"
+    "@capacitor/ios": "^6.2.2",
+    "@capacitor/share": "^6.0.4"
   }
 }

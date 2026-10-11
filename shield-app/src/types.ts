@@ -1,10 +1,11 @@
 export type PackKind = "remodel" | "draw" | "unit" | "loss" | "shop" | "custom" | "construction";
 
-export type CaptureKind = "native-camera" | "arrival-hash";
+/** Shield seals only photos taken live with the native OS camera. */
+export type CaptureKind = "native-camera";
 
 export type PlatformKind = "ios" | "android" | "web";
 
-export type Verdict = "SEALED" | "TAMPERED" | "ARRIVAL-ONLY" | "NO-ORIGIN";
+export type Verdict = "SEALED" | "UNATTESTED-NATIVE" | "TAMPERED" | "NO-ORIGIN";
 
 export type FeeTier = "standard" | "extended" | "major";
 
@@ -33,6 +34,8 @@ export interface CodeRef {
   irc: string | null;
   ibc: string | null;
   name: string;
+  /** What the cited section covers. Absent on points locked before this field existed. */
+  topic?: string;
 }
 
 export interface Checkpoint {
@@ -95,7 +98,7 @@ export interface SealRecord {
     lat: number;
     lng: number;
     acc: number;
-    source: "os" | "none";
+    source: "os";
   } | null;
   pinScore: {
     meters: number | null;
@@ -111,16 +114,17 @@ export interface SealRecord {
   signature: string;
 }
 
+/** Photo bytes live in the separate `blobs` store (see store/db.ts), so listing the vault stays light. */
 export interface VaultItem {
   record: SealRecord;
-  /** JPEG/PNG bytes as base64. Original stored unmodified. */
-  originalB64: string;
 }
 
 export interface ShieldBundle {
   version: 1;
   record: SealRecord;
   originalB64: string;
+  /** Raw P-256 public key (base64) of the signing device. Without it the record cannot be authenticated. */
+  devicePublicKey?: string;
 }
 
 export interface CloseoutPoint {
@@ -132,7 +136,7 @@ export interface CloseoutPoint {
 }
 
 export interface CloseoutBody {
-  schema: "tradedeck.shield.completion.v2";
+  schema: "tradedeck.shield.completion.v3";
   closedAt: string;
   closedBy: { role: string };
   job: {
@@ -153,6 +157,7 @@ export interface CloseoutBody {
   notes: string;
   deviceSealId: string;
   devicePublicKey: string;
+  canonicalVersion: 1;
 }
 
 export interface CloseoutPacket extends CloseoutBody {
