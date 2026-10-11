@@ -3,9 +3,45 @@
 Capacitor 6 + Vite + TypeScript. No framework. Runs as a web page for development
 and wraps to iOS/Android with `npx cap add ios|android`.
 
-**Everything below works with no network.** The app makes no outbound calls; an
-end-to-end test runs the brief, seal, close and verify flow with the browser offline
-and asserts no requests are made.
+**Sign-on needs a network once; everything after it works offline.** Before the app will take a photo,
+the person signs in, passes an ID check (photo ID plus a live selfie match, run by Stripe Identity through
+`tradedeck-api`) and signs a short statement with the device key (see *Sign-on* below). After that, capture, sealing,
+closing and verifying make no outbound calls; an end-to-end test runs that flow offline and asserts no requests.
+
+## Sign-on: ID check and signed note
+
+1. **Sign in** with a TradeDeck (Supabase) account. The token is kept in memory only.
+2. **Consent**, then **ID check**: `POST /identity/start` makes a Stripe Identity session (document + live selfie
+   match); the check opens in the browser. Stripe, not Shield, receives and keeps the ID and selfie images.
+3. **Sign the statement** (`src/identity/note.ts`) with the device key. `POST /identity/note` accepts it only after the
+   server itself asks Stripe and sees `verified`, and only if the signature, statement text, seal ID and clock check out.
+   The server then returns a **signed receipt** (ECDSA P-256, `src/identity/receipt.ts`) saying the ID check passed for
+   exactly this note. The phone checks it before saving and will not seal photos without it.
+4. The phone keeps the attestation ID, note hash and signed note: no ID image, selfie or name. Until it exists,
+   `captureNative` returns `not-verified` and nothing is sealed. Verifying other people's records needs no sign-on.
+5. Each new record signs in `attestationId` and `noteSha256`; the close-out packet embeds the note (`photographer`).
+   Verification checks the note signature, key, hash, that it predates the photos, that a packet with note-bound
+   photos cannot have the note stripped, and the receipt. Packets and records made before this existed still verify.
+
+What a packet verdict says about the ID check, from the file alone:
+- `id-check-confirmed-by-service:<kid>`: the receipt is signed by a service key **pinned in this build**
+  (`src/identity/trust.ts`), is for this exact note, and predates the photos. This relies on trusting TradeDeck's key and
+  Stripe's check; it is not proof from nothing.
+- `id-receipt-signer-unknown`: the receipt is well-formed and for this note, but no pinned key could check it (this is
+  what every build says until a key is pinned, and what a receipt from any other key says). Not confirmed.
+- `id-check-not-independently-verified`: no receipt in the file. Confirm with `GET /identity/attestations/<id>`, which
+  returns only whether it is verified, the note hash, device seal and time.
+
+A signed note does not show the scene in a photo is true. The signing key is not hardware-backed. The statement text is
+pinned in both repos by a SHA-256 test, and the receipt format by a shared test vector; change either only with a new version.
+
+Needs before it works end to end: Stripe Identity enabled on the Stripe account; the migration
+`20261011000000_shield_identity_attestations.sql` applied in `tradedeck-api`; `cryptography` installed (in
+`requirements.txt`); a receipt key made once with `python scripts/gen_receipt_key.py` in `tradedeck-api`, its private half
+set as `IDENTITY_RECEIPT_KEY` in Render (the service refuses to accept notes without it) and its public half pinned in
+`src/identity/trust.ts` before a production build; and a device test: the check opens through `window.open`, which should hand off to the system
+browser in the Capacitor shells but has not been tried on a device. Face matching needs a consent and retention
+policy that suits your states (some, such as Illinois, regulate biometric data).
 
 ## Run
 
