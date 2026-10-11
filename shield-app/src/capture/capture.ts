@@ -8,6 +8,7 @@ import {
   stableStringify,
 } from "../crypto/seal";
 import { activeJobId, chainHead, commitSeal, getJob } from "../store/db";
+import { currentAttestation } from "../identity/store";
 import type { SealRecord, VaultItem } from "../types";
 
 export type CaptureError =
@@ -15,7 +16,8 @@ export type CaptureError =
   | "camera-denied"
   | "camera-failed"
   | "empty-bytes"
-  | "plugin-missing";
+  | "plugin-missing"
+  | "not-verified";
 
 export interface CaptureOk {
   item: VaultItem;
@@ -128,7 +130,7 @@ export function sealFromBytes(bytes: ArrayBuffer, mime: string, checkpointId: st
 async function sealLocked(bytes: ArrayBuffer, mime: string, checkpointId: string | null): Promise<VaultItem> {
   const createdAt = new Date().toISOString();
   const sha = await sha256Bytes(bytes);
-  const [prev, jobId, gps, device] = await Promise.all([chainHead(), activeJobId(), readGps(), deviceSealId()]);
+  const [prev, jobId, gps, device, att] = await Promise.all([chainHead(), activeJobId(), readGps(), deviceSealId(), currentAttestation()]);
   const job = jobId ? await getJob(jobId) : undefined;
   const attest = await attestPhotoHash(sha);
 
@@ -147,6 +149,8 @@ async function sealLocked(bytes: ArrayBuffer, mime: string, checkpointId: string
     pinScore: pinScore(gps, job?.pin ?? null),
     deviceSealId: device,
     attest,
+    // Omitted (not undefined) when there is no note, so records made before the ID check still canonicalize.
+    ...(att ? { attestationId: att.attestationId, noteSha256: att.noteSha256 } : {}),
   };
 
   const recordHash = await sha256Bytes(new TextEncoder().encode(stableStringify(unsigned)));
@@ -168,6 +172,8 @@ async function sealLocked(bytes: ArrayBuffer, mime: string, checkpointId: string
 
 export async function captureNative(checkpointId: string | null, direction: "back" | "front" = "back"): Promise<CaptureOk | { error: CaptureError }> {
   if (!isNativeOriginAvailable()) return { error: "not-native" };
+  // No photo is taken, and nothing is sealed, until this device holds a signed note backed by a passed ID check.
+  if (!(await currentAttestation())) return { error: "not-verified" };
   const still = await capacitorStill(direction);
   if ("error" in still) return still;
   const item = await sealFromBytes(still.bytes, still.mime, checkpointId);

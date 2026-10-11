@@ -2,11 +2,15 @@
 
 Playwright drives an **e2e build** (`vite build --mode e2e --outDir dist-e2e`, never shipped) in Chromium. A browser
 cannot drive the OS camera, so that build replaces only the camera call with a stand-in (`__shieldE2ECamera`) and the
-test pretends to be the Android app. Everything after the camera (hash, chain, sign, store, freeze, verify) is the real
-code. The real Capacitor camera path is not exercised here. `npm run check:bundle` (run in CI) fails if the stand-in
-appears in the production `dist/`.
+test pretends to be the Android app. A second stand-in (`__shieldE2EIdentity`) scripts the answers of `tradedeck-api` and
+Stripe Identity; the phone side of sign-on (consent, statement, signing with the device key, storing, gating) is real.
+Everything after the camera (hash, chain, sign, store, freeze, verify) is the real code. Receipts are not cryptographically
+checked in these tests (no key is pinned in a test build), so they only show the packet reports `id-receipt-signer-unknown`
+and never `confirmed-by-service`; the confirmed path is covered in `src/**/*.test.ts` with a shared Python vector. Stripe and the backend are not
+exercised here (the backend has its own tests in `tradedeck-api/tests/test_identity.py`). The real Capacitor camera path is not exercised here. `npm run check:bundle` (run in CI) fails if the stand-in
+appears in the production `dist/`. The same check covers the identity stand-in.
 
-## What is covered (11 tests)
+## What is covered (12 tests)
 
 | Test | Proves |
 |---|---|
@@ -20,7 +24,8 @@ appears in the production `dist/`.
 | a double tap on the one-tap button seals one photo | the in-flight guard applies to it too |
 | a denied camera seals nothing | an error shows and the vault stays empty |
 | a browser cannot capture | no capture button, video, gallery or file path; SEAL in a browser seals nothing and opens no picker |
-| the whole workflow makes no network requests | runs offline (`context.setOffline(true)`) and asserts zero requests |
+| the whole workflow makes no network requests | after sign-on, runs offline (`context.setOffline(true)`) and asserts zero requests |
+| an unverified phone cannot seal | sign-on step by step: wrong password, consent required, no signing before the check passes, no capture control until the note is signed, note survives a reload |
 
 Signature, chain, forgery and migration edge cases are unit-tested in `src/**/*.test.ts` (`npm test`), which is
 faster and runs on every push.

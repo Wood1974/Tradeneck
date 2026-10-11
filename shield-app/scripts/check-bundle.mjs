@@ -1,8 +1,8 @@
-// Fails if the production bundle contains the e2e-only camera stand-in.
+// Fails if the production bundle contains the e2e-only camera or ID-check stand-ins.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const FORBIDDEN = ["__shieldE2ECamera"];
+const FORBIDDEN = ["__shieldE2ECamera", "__shieldE2EIdentity"];
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {

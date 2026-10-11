@@ -1,3 +1,6 @@
+import type { SignedNote } from "./identity/note";
+import type { Receipt } from "./identity/receipt";
+
 export type PackKind = "remodel" | "draw" | "unit" | "loss" | "shop" | "custom" | "construction";
 
 /** Shield seals only photos taken live with the native OS camera. */
@@ -111,6 +114,9 @@ export interface SealRecord {
     boundHash: string | null;
     tokenPresent: boolean;
   };
+  /** Signed photographer note this photo was taken under. Absent on records made before the ID check existed. */
+  attestationId?: string;
+  noteSha256?: string;
   signature: string;
 }
 
@@ -157,6 +163,15 @@ export interface CloseoutBody {
   notes: string;
   deviceSealId: string;
   devicePublicKey: string;
+  /** Signed photographer note and the ID-check service it relies on. Absent on packets made before it existed. */
+  photographer?: {
+    attestationId: string;
+    noteSha256: string;
+    note: SignedNote;
+    /** Service-signed receipt that the ID check passed. Absent on packets made before receipts existed. */
+    receipt?: Receipt;
+    idCheck: { provider: "stripe-identity" };
+  };
   canonicalVersion: 1;
 }
 
