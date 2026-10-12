@@ -10,7 +10,7 @@ and never `confirmed-by-service`; the confirmed path is covered in `src/**/*.tes
 exercised here (the backend has its own tests in `tradedeck-api/tests/test_identity.py`). The real Capacitor camera path is not exercised here. `npm run check:bundle` (run in CI) fails if the stand-in
 appears in the production `dist/`. The same check covers the identity stand-in.
 
-## What is covered (14 tests)
+## What is covered (15 tests)
 
 | Test | Proves |
 |---|---|
@@ -27,6 +27,7 @@ appears in the production `dist/`. The same check covers the identity stand-in.
 | the whole workflow makes no network requests | after sign-on, runs offline (`context.setOffline(true)`) and asserts zero requests |
 | sign-on warns when offline | the sign-on screen says to do it with signal, warns when the phone goes offline without wiping typed input, and clears the warning when signal returns |
 | a signed-on phone keeps working with the network off | after sign-on the network is switched off: the "Ready to work offline" status shows, a photo seals and rehashes clean, and sign-on is not asked for again |
+| a new person can create an account, then sign in | create-account mode: a short password or mismatched passwords send nothing and keep what was typed; a valid sign-up returns to Sign in with the email kept and a message that does not say whether the address was new; no ID check is reachable until signed in |
 | an unverified phone cannot seal | sign-on step by step: wrong password, consent required, no signing before the check passes, no capture control until the note is signed, note survives a reload |
 
 Signature, chain, forgery and migration edge cases are unit-tested in `src/**/*.test.ts` (`npm test`), which is
