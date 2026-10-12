@@ -19,6 +19,8 @@ export class IdentityError extends Error {
 
 export interface IdentityApi {
   signIn(email: string, password: string): Promise<void>;
+  /** Creates a TradeDeck account. `signedIn` is false when the account must first be confirmed from an email link. */
+  signUp(email: string, password: string): Promise<{ signedIn: boolean }>;
   signedIn(): boolean;
   start(): Promise<{ sessionId: string; status: IdStatus; url: string | null }>;
   status(): Promise<{ sessionId: string | null; status: IdStatus; verified: boolean }>;
@@ -33,8 +35,9 @@ async function call<T>(url: string, init: RequestInit): Promise<T> {
   const timer = setTimeout(() => ctl.abort(), 20000);
   try {
     const res = await fetch(url, { ...init, signal: ctl.signal });
-    const body = (await res.json().catch(() => ({}))) as { error?: string } & T;
-    if (!res.ok) throw new IdentityError(body.error ?? `http-${res.status}`);
+    const body = (await res.json().catch(() => ({}))) as { error?: string; error_code?: string } & T;
+    // tradedeck-api answers { error }; Supabase auth answers { error_code }.
+    if (!res.ok) throw new IdentityError(body.error ?? body.error_code ?? `http-${res.status}`);
     return body;
   } catch (err) {
     if (err instanceof IdentityError) throw err;
@@ -49,6 +52,18 @@ const authed = (extra: RequestInit = {}): RequestInit => {
   return { ...extra, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` } };
 };
 
+// Supabase auth error codes, mapped to the codes the sign-on screen has text for.
+const SIGNUP_ERRORS: Record<string, string> = {
+  weak_password: "weak-password",
+  user_already_exists: "account-exists",
+  email_exists: "account-exists",
+  email_address_invalid: "bad-email",
+  validation_failed: "bad-email",
+  over_email_send_rate_limit: "rate-limited",
+  over_request_rate_limit: "rate-limited",
+  signup_disabled: "signup-disabled",
+};
+
 const real: IdentityApi = {
   signedIn: () => token !== null,
   async signIn(email, password) {
@@ -61,6 +76,20 @@ const real: IdentityApi = {
     });
     if (!r.access_token) throw new IdentityError("bad-credentials");
     token = r.access_token;
+  },
+  async signUp(email, password) {
+    const r = await call<{ access_token?: string }>(`${SUPABASE_URL}/auth/v1/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+      body: JSON.stringify({ email, password }),
+    }).catch((err: unknown) => {
+      throw new IdentityError(SIGNUP_ERRORS[(err as IdentityError).code] ?? (err as IdentityError).code);
+    });
+    // With email confirmation on, no session comes back, and an address that already has an account looks
+    // the same as a new one. The screen must not say which it was.
+    if (!r.access_token) return { signedIn: false };
+    token = r.access_token;
+    return { signedIn: true };
   },
   start: () => call(`${API_BASE}/identity/start`, authed({ method: "POST", body: JSON.stringify({ consent: true, consentVersion: CONSENT_VERSION }) })),
   status: () => call(`${API_BASE}/identity/status`, authed()),

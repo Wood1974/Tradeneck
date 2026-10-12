@@ -20,7 +20,9 @@ real phone with the network off; the e2e tests switch the network off in a brows
 
 ## Sign-on: ID check and signed note
 
-1. **Sign in** with a TradeDeck (Supabase) account. The token is kept in memory only.
+1. **Sign in** with a TradeDeck (Supabase) account, or **Create account** (email and a password of at least 8 characters,
+   typed twice). Supabase emails a confirmation link, so a new account cannot sign in until it is opened; the screen then
+   returns to Sign in. It says the same thing whether or not the address already had an account. The token is kept in memory only.
 2. **Consent**, then **ID check**: `POST /identity/start` makes a Stripe Identity session (document + live selfie
    match); the check opens in the browser. Stripe, not Shield, receives and keeps the ID and selfie images.
 3. **Sign the statement** (`src/identity/note.ts`) with the device key. `POST /identity/note` accepts it only after the

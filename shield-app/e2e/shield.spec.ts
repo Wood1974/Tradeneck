@@ -46,6 +46,12 @@ async function asNativeApp(page: Page): Promise<void> {
         if (pass !== "correct-horse") throw { code: "bad-credentials" };
         (this as unknown as { _in: boolean })._in = true;
       },
+      async signUp(_email: string, pass: string) {
+        w.__idCalls.push("signUp");
+        if (pass.length < 8) throw { code: "weak-password" };
+        // Email confirmation is on: no session comes back, whether or not the address was new.
+        return { signedIn: false };
+      },
       async start() {
         w.__idCalls.push("start");
         this._status = "requires_input";
@@ -353,6 +359,47 @@ test("an unverified phone cannot seal: sign-on comes first, step by step", async
   await page.click('[data-act="native"]');
   await expect(page.locator(".thumb")).toBeVisible();
   await page.click('[data-act="export"]');
+});
+
+test("a new person can create an account, then sign in", async ({ page }) => {
+  await asNativeApp(page);
+  await page.goto("/");
+  await expect(page.locator("#id-h")).toBeVisible();
+  await expect(page.locator('[data-act="id-signin"]')).toBeVisible();
+
+  await page.click('[data-act="id-mode-create"]');
+  await expect(page.locator("#id-pass2")).toBeVisible();
+  await expect(page.locator('[data-act="id-signin"]')).toHaveCount(0);
+  const calls = () => page.evaluate(() => (window as unknown as TestWindow).__idCalls);
+
+  // Nothing is sent for a bad email, a short password, or passwords that differ.
+  await page.fill("#id-email", "new@example.test");
+  await page.fill("#id-pass", "short");
+  await page.fill("#id-pass2", "short");
+  await page.click('[data-act="id-signup"]');
+  await expect(page.locator(".foot-note", { hasText: "at least 8 characters" })).toBeVisible();
+  await page.fill("#id-pass", "correct-horse");
+  await page.fill("#id-pass2", "correct-horsf");
+  await page.click('[data-act="id-signup"]');
+  await expect(page.locator(".foot-note", { hasText: "do not match" })).toBeVisible();
+  expect(await calls()).not.toContain("signUp");
+  // The error is shown in place: what was typed is still there to fix.
+  await expect(page.locator("#id-pass")).toHaveValue("correct-horse");
+  await expect(page.locator("#id-email")).toHaveValue("new@example.test");
+
+  await page.fill("#id-pass2", "correct-horse");
+  await page.click('[data-act="id-signup"]');
+  // Back on sign-in with the email kept, and a message that does not say whether the address was new.
+  await expect(page.locator(".foot-note", { hasText: "confirmation link" })).toBeVisible();
+  await expect(page.locator('[data-act="id-signin"]')).toBeVisible();
+  await expect(page.locator("#id-email")).toHaveValue("new@example.test");
+  expect(await calls()).toContain("signUp");
+
+  // No ID check or sealing is reachable without signing in.
+  await expect(page.locator('[data-act="id-start"]')).toHaveCount(0);
+  await page.fill("#id-pass", "correct-horse");
+  await page.click('[data-act="id-signin"]');
+  await expect(page.locator('[data-act="id-start"]')).toBeVisible();
 });
 
 test("sign-on warns when the phone is offline, and says so again when signal returns", async ({ page, context }) => {
