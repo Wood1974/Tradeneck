@@ -153,3 +153,29 @@ describe("packet with a signed photographer note", () => {
     expect(v.reasons).toContain("note-after-capture");
   });
 });
+
+describe("packet from a test-mode ID check", () => {
+  it("is sealed but says the ID check was a test, never confirmed", async () => {
+    const a = await att(undefined, { testMode: true });
+    const p = await build(await record(a), a);
+    const pinned = await verifyCloseoutPacket(p, undefined, svc.keys);
+    expect(pinned.verdict).toBe("PACKET-SEALED");
+    expect(pinned.reasons).toContain(`id-check-test-mode:${svc.kid}`);
+    expect(pinned.reasons.join()).not.toContain("confirmed-by-service");
+    const unpinned = await verifyCloseoutPacket(p, undefined, {});
+    expect(unpinned.reasons).toContain("id-check-test-mode");
+    expect(unpinned.reasons.join()).not.toContain("confirmed-by-service");
+    expect(packetToHtml(p)).toContain("TEST ID CHECK");
+  });
+
+  it("cannot be turned into a confirmed packet by deleting the test mark", async () => {
+    const a = await att(undefined, { testMode: true });
+    const p = clone(await build(await record(a), a));
+    delete (p.photographer!.receipt!.payload as { testMode?: boolean }).testMode;
+    // Even re-signed with this device's key, the service's signature over the receipt no longer matches.
+    const v = await verifyCloseoutPacket(await resign(p), undefined, svc.keys);
+    expect(v.verdict).toBe("PACKET-TAMPERED");
+    expect(v.reasons).toContain("receipt-signature-invalid");
+  });
+});
+

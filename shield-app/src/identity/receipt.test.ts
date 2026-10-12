@@ -18,11 +18,11 @@ const KEYS = { "1a473f66e378a662": VECTOR_PUB };
 
 describe("receipt", () => {
   it("verifies a receipt signed by the Python backend", async () => {
-    expect(await checkReceipt(VECTOR, EXPECT, KEYS)).toEqual({ failed: [], confirmedBy: "1a473f66e378a662" });
+    expect(await checkReceipt(VECTOR, EXPECT, KEYS)).toEqual({ failed: [], confirmedBy: "1a473f66e378a662", testMode: false });
   });
 
   it("is well-formed but unconfirmed when its key is not pinned", async () => {
-    expect(await checkReceipt(VECTOR, EXPECT, {})).toEqual({ failed: [], confirmedBy: null });
+    expect(await checkReceipt(VECTOR, EXPECT, {})).toEqual({ failed: [], confirmedBy: null, testMode: false });
   });
 
   it("rejects edits, a different note, and a key id that names the wrong key", async () => {
@@ -36,3 +36,24 @@ describe("receipt", () => {
     expect((await checkReceipt({ ...VECTOR, signature: "AAAA" }, EXPECT, KEYS)).failed.length).toBeGreaterThan(0);
   });
 });
+
+describe("test-mode receipt", () => {
+  const parts = { attestationId: "77777777-7777-4777-8777-777777777777", noteSha256: "d".repeat(64), deviceSealId: "AAAAAAAA·BBBBBBBB" };
+
+  it("is valid but reported as a test, and a live receipt is not", async () => {
+    const svc = await makeServiceKey();
+    const test = await svc.receipt(parts, { testMode: true });
+    expect(await checkReceipt(test, parts, svc.keys)).toEqual({ failed: [], confirmedBy: svc.kid, testMode: true });
+    const live = await svc.receipt(parts);
+    expect(await checkReceipt(live, parts, svc.keys)).toEqual({ failed: [], confirmedBy: svc.kid, testMode: false });
+  });
+
+  it("cannot have the mark removed afterwards: it is inside the signature", async () => {
+    const svc = await makeServiceKey();
+    const test = await svc.receipt(parts, { testMode: true });
+    const { testMode: _gone, ...rest } = test.payload;
+    const stripped = { payload: rest, signature: test.signature };
+    expect((await checkReceipt(stripped, parts, svc.keys)).failed).toContain("receipt-signature-invalid");
+  });
+});
+

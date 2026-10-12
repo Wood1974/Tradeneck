@@ -15,6 +15,8 @@ export interface Receipt {
     idCheck: { provider: string; status: string };
     issuedAt: string;
     kid: string;
+    /** Signed. Present (true) only when the check ran in Stripe test mode: no real ID was checked. */
+    testMode?: boolean;
   };
   signature: string;
 }
@@ -30,13 +32,17 @@ export interface ReceiptCheck {
   failed: string[];
   /** Key id of the pinned service key that verified it, or null when no pinned key could check it. */
   confirmedBy: string | null;
+  /** True when the service says this check ran in test mode. Never counts as a confirmed ID check. */
+  testMode: boolean;
 }
 
 export async function checkReceipt(receipt: Receipt, expect: ReceiptExpectation, keys: Record<string, string> = TRUSTED_RECEIPT_KEYS): Promise<ReceiptCheck> {
   const failed: string[] = [];
   let confirmedBy: string | null = null;
+  let testMode = false;
   try {
     const p = receipt.payload;
+    testMode = p.testMode === true;
     if (p.kind !== RECEIPT_KIND || p.v !== 1) failed.push("receipt-bad-kind");
     if (p.attestationId !== expect.attestationId || p.noteSha256 !== expect.noteSha256 || p.deviceSealId !== expect.deviceSealId) failed.push("receipt-mismatch");
     if (p.idCheck?.provider !== "stripe-identity" || p.idCheck?.status !== "verified") failed.push("receipt-not-verified");
@@ -51,5 +57,5 @@ export async function checkReceipt(receipt: Receipt, expect: ReceiptExpectation,
   } catch {
     failed.push("receipt-unverifiable");
   }
-  return { failed, confirmedBy };
+  return { failed, confirmedBy, testMode };
 }
