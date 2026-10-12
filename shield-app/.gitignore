@@ -7,3 +7,5 @@ dist-e2e/
 /blob-report/
 /playwright/.cache/
 *.log
+plugins/secure-capture/android/build/
+plugins/secure-capture/android/.gradle/

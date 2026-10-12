@@ -7,11 +7,6 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: "https",
   },
-  plugins: {
-    Camera: {
-      // Gallery is never an origin path.
-    },
-  },
 };
 
 export default config;

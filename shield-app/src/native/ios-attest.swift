@@ -1,3 +1,5 @@
+// NOT COMPILED. The live iOS capture path is plugins/secure-capture (Secure Enclave).
+// App Attest generateAssertion is a TODO on that plugin and is not called here.
 // ShieldAttest — bind App Attest assertion to SHA-256 of the still.
 // Wire through a Capacitor plugin named ShieldAttest.assert(hash).
 //

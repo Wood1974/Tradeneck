@@ -1,14 +1,25 @@
 apply plugin: 'com.android.application'
 
+// Release signing is applied only when the Play upload-key env vars are set
+// (the manual Play workflow). Debug builds never read them and keep the
+// debug keystore. Do not commit a keystore or these passwords.
+def uploadStorePath = System.getenv("ANDROID_UPLOAD_KEYSTORE_PATH")
+def uploadStorePassword = System.getenv("ANDROID_UPLOAD_KEYSTORE_PASSWORD")
+def uploadKeyAlias = System.getenv("ANDROID_UPLOAD_KEY_ALIAS")
+def uploadKeyPassword = System.getenv("ANDROID_UPLOAD_KEY_PASSWORD")
+def hasUploadKey = uploadStorePath?.trim() && uploadStorePassword?.trim() && uploadKeyAlias?.trim() && uploadKeyPassword?.trim()
+
 android {
-    namespace "app.tradedeck.shield"
-    compileSdk rootProject.ext.compileSdkVersion
+    namespace = "app.tradedeck.shield"
+    compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "app.tradedeck.shield"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        def versionCodeFromEnv = System.getenv("ANDROID_VERSION_CODE")
+        versionCode (versionCodeFromEnv?.trim() ? versionCodeFromEnv.toInteger() : 1)
+        def versionNameFromEnv = System.getenv("ANDROID_VERSION_NAME")
+        versionName (versionNameFromEnv?.trim() ? versionNameFromEnv : "1.0")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +27,26 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasUploadKey) {
+                // The Play upload key is an openssl PKCS12 keystore (AES-256-CBC).
+                // The default store type is JKS, which cannot read that file.
+                storeType "pkcs12"
+                storeFile file(uploadStorePath)
+                storePassword uploadStorePassword
+                keyAlias uploadKeyAlias
+                keyPassword uploadKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasUploadKey) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

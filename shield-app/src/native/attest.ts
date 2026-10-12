@@ -1,6 +1,9 @@
 /**
  * App Attest / Play Integrity bind to photo hash.
- * Web cannot issue these tokens. Native plugins fill this in later.
+ * Web cannot issue these tokens. The live capture plugin
+ * (`plugins/secure-capture`) leaves both as null on purpose: App Attest
+ * assertions and Play Integrity tokens are enrollment/sync steps, not part
+ * of the offline seal. This function stays `none` until those calls exist.
  */
 import { detectPlatform } from "../platform";
 

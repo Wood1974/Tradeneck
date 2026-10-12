@@ -1,0 +1,27 @@
+{
+  "name": "@tradedeck/secure-capture",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TradeDeck Shield native capture and seal. In-app camera, SHA-256, hardware signature. No gallery path.",
+  "type": "module",
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "types": "src/index.d.ts",
+  "files": [
+    "src/",
+    "android/",
+    "ios/",
+    "TradedeckSecureCapture.podspec"
+  ],
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  }
+}
