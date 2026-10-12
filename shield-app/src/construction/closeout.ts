@@ -121,6 +121,7 @@ export async function verifyCloseoutPacket(packet: CloseoutPacket, expectedSigne
 
   const ph = body.photographer;
   let confirmedBy: string | null = null;
+  let testMode = false;
   if (ph) {
     try {
       for (const f of await checkNote(ph.note)) reasons.push(f);
@@ -139,6 +140,7 @@ export async function verifyCloseoutPacket(packet: CloseoutPacket, expectedSigne
       const rc = await checkReceipt(ph.receipt, { attestationId: ph.attestationId, noteSha256: ph.noteSha256, deviceSealId: ph.note.payload.deviceSealId }, receiptKeys);
       reasons.push(...rc.failed);
       confirmedBy = rc.confirmedBy;
+      testMode = rc.testMode;
       // The service issues the receipt when it accepts the note, which is before any photo it covers.
       const issued = Date.parse(ph.receipt.payload.issuedAt);
       if (records.length && issued > first) reasons.push("receipt-after-capture");
@@ -176,7 +178,10 @@ export async function verifyCloseoutPacket(packet: CloseoutPacket, expectedSigne
       expectedSigner ? "signer-pinned" : "signer-not-independently-verified",
       ...(!ph
         ? ["no-photographer-note"]
-        : confirmedBy
+        : testMode
+          // The service signed it, but as a Stripe test-mode check: no real ID. Never reported as confirmed.
+          ? ["photographer-note-valid", confirmedBy ? `id-check-test-mode:${confirmedBy}` : "id-check-test-mode"]
+          : confirmedBy
           ? ["photographer-note-valid", `id-check-confirmed-by-service:${confirmedBy}`]
           : ph.receipt
             ? ["photographer-note-valid", "id-receipt-signer-unknown"]
@@ -216,7 +221,7 @@ function photographerHtml(packet: CloseoutPacket): string {
 signed ${esc(ph.note.payload.signedAt)} by device ${esc(ph.note.payload.deviceSealId)}
 note sha256 ${esc(ph.noteSha256)}
 attestation ${esc(ph.attestationId)}
-${ph.receipt ? `service receipt signed by key ${esc(ph.receipt.payload.kid)} at ${esc(ph.receipt.payload.issuedAt)}` : "no service receipt"}</pre><p class="meta">ID check run by ${esc(ph.idCheck.provider)}. This printout cannot be verified; verify the .shield-record.json in Shield, which checks the service's signed receipt against a pinned key. A signed note does not show that the scene in a photo was honest.</p>`;
+${ph.receipt ? `service receipt signed by key ${esc(ph.receipt.payload.kid)} at ${esc(ph.receipt.payload.issuedAt)}${ph.receipt.payload.testMode ? " (TEST ID CHECK: no real ID was checked)" : ""}` : "no service receipt"}</pre><p class="meta">ID check run by ${esc(ph.idCheck.provider)}. This printout cannot be verified; verify the .shield-record.json in Shield, which checks the service's signed receipt against a pinned key. A signed note does not show that the scene in a photo was honest.</p>`;
 }
 
 export function packetToHtml(packet: CloseoutPacket): string {

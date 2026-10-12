@@ -73,6 +73,7 @@ async function asNativeApp(page: Page): Promise<void> {
             kind: "tradedeck.shield.idreceipt", v: 1, attestationId, noteSha256, deviceSealId: note.payload.deviceSealId,
             sessionSha256: "9".repeat(64), idCheck: { provider: "stripe-identity", status: "verified" },
             issuedAt: new Date().toISOString(), kid: "e2e-unpinned",
+            ...((this as unknown as { _test?: boolean })._test ? { testMode: true } : {}),
           },
           signature: "AAAA",
         };
@@ -94,7 +95,7 @@ async function completeSignOn(page: Page): Promise<void> {
   await page.evaluate(() => ((window as unknown as TestWindow).__shieldE2EIdentity._status = "verified"));
   await page.click('[data-act="id-check"]');
   await page.click('[data-act="id-sign"]');
-  await expect(page.locator(".chip", { hasText: "SIGNED NOTE ON FILE" })).toBeVisible();
+  await expect(page.locator('[data-act="native"]')).toBeVisible();
 }
 
 async function openApp(page: Page): Promise<void> {
@@ -352,6 +353,7 @@ test("an unverified phone cannot seal: sign-on comes first, step by step", async
   await page.click('[data-act="id-sign"]');
   await expect(page.locator('[data-act="native"]')).toBeVisible();
   await expect(page.locator(".ready")).toContainText("Ready to work offline");
+  await expect(page.locator(".chip", { hasText: "SIGNED NOTE ON FILE" })).toBeVisible();
 
   // The signed note survives a restart, and the first photo it allows is bound to it.
   await page.reload();
@@ -400,6 +402,18 @@ test("a new person can create an account, then sign in", async ({ page }) => {
   await page.fill("#id-pass", "correct-horse");
   await page.click('[data-act="id-signin"]');
   await expect(page.locator('[data-act="id-start"]')).toBeVisible();
+});
+
+test("a test-mode ID check is labelled and never shown as a signed, confirmed note", async ({ page }) => {
+  await asNativeApp(page);
+  await page.goto("/");
+  await page.evaluate(() => ((window as unknown as { __shieldE2EIdentity: { _test: boolean } }).__shieldE2EIdentity._test = true));
+  await completeSignOn(page);
+  await expect(page.locator(".chip", { hasText: "TEST ID CHECK" })).toBeVisible();
+  await expect(page.locator(".chip", { hasText: "SIGNED NOTE ON FILE" })).toHaveCount(0);
+  // The owner can still try the whole flow: a photo seals, and the record still verifies.
+  await page.click('[data-act="native"]');
+  await expect(page.locator(".thumb")).toBeVisible();
 });
 
 test("sign-on warns when the phone is offline, and says so again when signal returns", async ({ page, context }) => {

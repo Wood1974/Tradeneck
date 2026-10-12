@@ -17,7 +17,7 @@ import type { Job, PackKind, VaultItem } from "../types";
 import { MAX_IMPORT_BYTES, parseBundle, verifyBundle, verifyItemOriginal } from "../verify/verify";
 import { download, parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
 import type { CloseoutPacket } from "../types";
-import { bindIdentity, identityView, isAttested, loadIdentity } from "./identity";
+import { attestation, bindIdentity, identityView, isAttested, loadIdentity } from "./identity";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
 type Tab = "capture" | "jobs" | "vault" | "verify" | "construction";
@@ -117,7 +117,7 @@ function view(native: boolean, job: Job | undefined): string {
 
 function captureView(native: boolean, job: Job | undefined): string {
   const originChip = native ? `<span class="chip ok">NATIVE</span>` : `<span class="chip bad">NO CAPTURE IN BROWSER</span>`;
-  const camChip = native ? `<span class="chip">CAMERA READY · ${clock()}</span>${isAttested() ? `<span class="chip ok">SIGNED NOTE ON FILE</span>` : ""}` : "";
+  const camChip = native ? `<span class="chip">CAMERA READY · ${clock()}</span>${isAttested() ? (attestation()?.receipt.payload.testMode ? `<span class="chip bad">TEST ID CHECK · NO REAL ID</span>` : `<span class="chip ok">SIGNED NOTE ON FILE</span>`) : ""}` : "";
   const flipLabel = facing === "environment" ? "USE FRONT CAMERA" : "USE BACK CAMERA";
   const finderBody = native
     ? `<div class="icon-aperture"><span></span></div>

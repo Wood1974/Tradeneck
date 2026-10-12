@@ -41,6 +41,9 @@ What a packet verdict says about the ID check, from the file alone:
   Stripe's check; it is not proof from nothing.
 - `id-receipt-signer-unknown`: the receipt is well-formed and for this note, but no pinned key could check it (this is
   what a receipt signed by any key other than the pinned one says). Not confirmed.
+- `id-check-test-mode[:<kid>]`: the service signed the receipt, but the check ran in Stripe test mode, which the owner can use when
+  they have no real ID to test with. No real ID was checked. It is signed into the receipt, so it cannot be removed, and it is never
+  reported as confirmed. The capture screen shows "TEST ID CHECK" instead of "SIGNED NOTE ON FILE".
 - `id-check-not-independently-verified`: no receipt in the file. Confirm with `GET /identity/attestations/<id>`, which
   returns only whether it is verified, the note hash, device seal and time.
 
