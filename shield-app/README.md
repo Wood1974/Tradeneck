@@ -37,7 +37,7 @@ What a packet verdict says about the ID check, from the file alone:
   (`src/identity/trust.ts`), is for this exact note, and predates the photos. This relies on trusting TradeDeck's key and
   Stripe's check; it is not proof from nothing.
 - `id-receipt-signer-unknown`: the receipt is well-formed and for this note, but no pinned key could check it (this is
-  what every build says until a key is pinned, and what a receipt from any other key says). Not confirmed.
+  what a receipt signed by any key other than the pinned one says). Not confirmed.
 - `id-check-not-independently-verified`: no receipt in the file. Confirm with `GET /identity/attestations/<id>`, which
   returns only whether it is verified, the note hash, device seal and time.
 
@@ -47,8 +47,8 @@ pinned in both repos by a SHA-256 test, and the receipt format by a shared test 
 Needs before it works end to end: Stripe Identity enabled on the Stripe account; the migration
 `20261011000000_shield_identity_attestations.sql` applied in `tradedeck-api`; `cryptography` installed (in
 `requirements.txt`); a receipt key made once with `python scripts/gen_receipt_key.py` in `tradedeck-api`, its private half
-set as `IDENTITY_RECEIPT_KEY` in Render (the service refuses to accept notes without it) and its public half pinned in
-`src/identity/trust.ts` before a production build; and a device test: the check opens through `window.open`, which should hand off to the system
+set as `IDENTITY_RECEIPT_KEY` in Render (the service refuses to accept notes without it; done 2026-10-12) and its public half pinned in
+`src/identity/trust.ts` (done, key id `127616f5494b11b0`); and a device test: the check opens through `window.open`, which should hand off to the system
 browser in the Capacitor shells but has not been tried on a device. Face matching needs a consent and retention
 policy that suits your states (some, such as Illinois, regulate biometric data).
 

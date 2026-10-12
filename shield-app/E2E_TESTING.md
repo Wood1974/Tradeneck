@@ -4,8 +4,8 @@ Playwright drives an **e2e build** (`vite build --mode e2e --outDir dist-e2e`, n
 cannot drive the OS camera, so that build replaces only the camera call with a stand-in (`__shieldE2ECamera`) and the
 test pretends to be the Android app. A second stand-in (`__shieldE2EIdentity`) scripts the answers of `tradedeck-api` and
 Stripe Identity; the phone side of sign-on (consent, statement, signing with the device key, storing, gating) is real.
-Everything after the camera (hash, chain, sign, store, freeze, verify) is the real code. Receipts are not cryptographically
-checked in these tests (no key is pinned in a test build), so they only show the packet reports `id-receipt-signer-unknown`
+Everything after the camera (hash, chain, sign, store, freeze, verify) is the real code. Receipts in these tests are signed by a stand-in
+key, not the pinned production key, so they only show the packet reports `id-receipt-signer-unknown`
 and never `confirmed-by-service`; the confirmed path is covered in `src/**/*.test.ts` with a shared Python vector. Stripe and the backend are not
 exercised here (the backend has its own tests in `tradedeck-api/tests/test_identity.py`). The real Capacitor camera path is not exercised here. `npm run check:bundle` (run in CI) fails if the stand-in
 appears in the production `dist/`. The same check covers the identity stand-in.
