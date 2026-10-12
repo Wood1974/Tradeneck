@@ -17,6 +17,7 @@ import type { Job, PackKind, VaultItem } from "../types";
 import { MAX_IMPORT_BYTES, parseBundle, verifyBundle, verifyItemOriginal } from "../verify/verify";
 import { download, parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
 import type { CloseoutPacket } from "../types";
+import { bindIdentity, identityView, isAttested, loadIdentity } from "./identity";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
 type Tab = "capture" | "jobs" | "vault" | "verify" | "construction";
@@ -54,6 +55,7 @@ export async function start(): Promise<void> {
   void navigator.storage?.persist?.();
   sealId = await deviceSealId();
   await initConstruction();
+  await loadIdentity();
   await reload();
   await restoreLastPacket(activeId);
   render();
@@ -97,13 +99,15 @@ export function render(): void {
       <button class="${tab === "construction" ? "on" : ""}" data-tab="construction">Build</button>
     </nav>
     ${toast ? `<div class="toast" role="status"><span>${esc(toast.text)}</span><button data-act="toast-view">VIEW</button></div>` : ""}
-    ${native ? `<button class="fab" data-act="quick-capture" aria-label="Take a photo" title="Take a photo"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>` : ""}
+    ${native && isAttested() ? `<button class="fab" data-act="quick-capture" aria-label="Take a photo" title="Take a photo"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>` : ""}
     <input class="hidden-file" id="file-bundle" type="file" accept="application/json,.json,.shield.json,.shield-record.json" />
   `;
   bind();
 }
 
 function view(native: boolean, job: Job | undefined): string {
+  // Verifying other people's records needs no sign-on; everything that could lead to sealing a photo does.
+  if (native && !isAttested() && tab !== "verify") return identityView();
   if (tab === "jobs") return jobsView(job);
   if (tab === "vault") return vaultView();
   if (tab === "verify") return verifyView();
@@ -113,12 +117,13 @@ function view(native: boolean, job: Job | undefined): string {
 
 function captureView(native: boolean, job: Job | undefined): string {
   const originChip = native ? `<span class="chip ok">NATIVE</span>` : `<span class="chip bad">NO CAPTURE IN BROWSER</span>`;
-  const camChip = native ? `<span class="chip">CAMERA READY · ${clock()}</span>` : "";
+  const camChip = native ? `<span class="chip">CAMERA READY · ${clock()}</span>${isAttested() ? `<span class="chip ok">SIGNED NOTE ON FILE</span>` : ""}` : "";
   const flipLabel = facing === "environment" ? "USE FRONT CAMERA" : "USE BACK CAMERA";
   const finderBody = native
     ? `<div class="icon-aperture"><span></span></div>
       <h1>Native camera</h1>
       <p class="lede">Live camera only, front or back. Shield has no gallery or photo-file import. Each photo is hashed and signed with this device's hardware key.</p>
+      <p class="fine ready">Ready to work offline: photos, sealing, closing a job and verifying records need no signal.</p>
       <div class="actions">
         <button class="btn" data-act="native">SEAL FRAME</button>
         <button class="btn ghost small" data-act="cam-flip">${flipLabel}</button>
@@ -284,12 +289,12 @@ function specView(): string {
       <div class="meta">
         Proven (when verified): SHA-256 of the bytes received · signed, chained records are tamper-evident<br>
         Corroborated: pin score (only when GPS accuracy fits the radius)<br>
-        Not proven: who holds the signing key · web origin · EXIF · unstaged scene · GPS anti-spoof · device clock<br>
+        Not proven from the file alone: that the ID check passed (ask the service) · web origin · EXIF · unstaged scene · GPS anti-spoof · device clock<br>
         Fee does not move with verdict<br>
         standard $79 · extended $129 · major $199 · ${PRICING_EFFECTIVE}
       </div>
     </div>
-    <p class="foot-note">Records are tamper-evident, not identity-proof: a packet shows nothing changed after signing, not who signed it.</p>
+    <p class="foot-note">Records are tamper-evident. A packet shows nothing changed after signing. A signed photographer note ties the signing key to an ID check run by Stripe Identity; confirm that with the service, not from the file. It does not show the scene was honest.</p>
     <button class="btn ghost" data-act="spec" style="margin-top:12px">CLOSE</button>
   `;
 }
@@ -336,6 +341,7 @@ function bind(): void {
     el.addEventListener("click", () => void guarded(() => onSlot((el as HTMLElement).dataset.slot!)));
   });
   if (tab === "construction") bindConstruction(ctx);
+  bindIdentity(root(), render);
 
   const packSel = document.getElementById("pack-sel") as HTMLSelectElement | null;
   if (packSel) packSel.onchange = () => {
@@ -430,6 +436,7 @@ const CAPTURE_ERRORS: Record<string, string> = {
   "camera-failed": "The camera did not return a photo. Try again.",
   "empty-bytes": "The camera returned an empty photo. Try again.",
   "plugin-missing": "The camera plugin is not installed in this build.",
+  "not-verified": "Sign on first: Shield seals photos only after an ID check and a signed statement.",
 };
 
 const captureErrorText = (code: string): string => CAPTURE_ERRORS[code] ?? `Capture failed (${code}).`;

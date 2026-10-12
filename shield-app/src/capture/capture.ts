@@ -9,6 +9,7 @@ import {
 } from "../crypto/seal";
 import { activeJobId, chainHead, commitSeal, getJob } from "../store/db";
 import type { NativeSealResult } from "@tradedeck/secure-capture";
+import { currentAttestation } from "../identity/store";
 import type { SealRecord, VaultItem } from "../types";
 
 export type CaptureError =
@@ -17,7 +18,8 @@ export type CaptureError =
   | "camera-cancelled"
   | "camera-failed"
   | "empty-bytes"
-  | "plugin-missing";
+  | "plugin-missing"
+  | "not-verified";
 
 export interface CaptureOk {
   item: VaultItem;
@@ -112,7 +114,7 @@ export function sealFromBytes(bytes: ArrayBuffer, mime: string, checkpointId: st
 async function sealLocked(bytes: ArrayBuffer, mime: string, checkpointId: string | null): Promise<VaultItem> {
   const createdAt = new Date().toISOString();
   const sha = await sha256Bytes(bytes);
-  const [prev, jobId, gps, device] = await Promise.all([chainHead(), activeJobId(), readGps(), deviceSealId()]);
+  const [prev, jobId, gps, device, att] = await Promise.all([chainHead(), activeJobId(), readGps(), deviceSealId(), currentAttestation()]);
   const job = jobId ? await getJob(jobId) : undefined;
   const attest = await attestPhotoHash(sha);
 
@@ -131,6 +133,8 @@ async function sealLocked(bytes: ArrayBuffer, mime: string, checkpointId: string
     pinScore: pinScore(gps, job?.pin ?? null),
     deviceSealId: device,
     attest,
+    // Omitted (not undefined) when there is no note, so records made before the ID check still canonicalize.
+    ...(att ? { attestationId: att.attestationId, noteSha256: att.noteSha256 } : {}),
   };
 
   const recordHash = await sha256Bytes(new TextEncoder().encode(stableStringify(unsigned)));
@@ -151,10 +155,13 @@ async function sealLocked(bytes: ArrayBuffer, mime: string, checkpointId: string
 }
 
 export async function captureNative(checkpointId: string | null, direction: "back" | "front" = "back"): Promise<CaptureOk | { error: CaptureError }> {
+  if (!isNativeOriginAvailable()) return { error: "not-native" };
+  // No photo is taken, and nothing is sealed, until this device holds a signed note backed by a passed ID check.
+  // This sits above both the e2e stand-in and the native plugin so neither path can skip it.
+  if (!(await currentAttestation())) return { error: "not-verified" };
   if (import.meta.env.MODE === "e2e") {
     // Test builds only (`vite build --mode e2e`): stands in for the OS camera, which a browser test cannot drive.
     // This branch is removed from production bundles; `npm run check:bundle` fails the build if it ships.
-    if (!isNativeOriginAvailable()) return { error: "not-native" };
     const hook = (globalThis as { __shieldE2ECamera?: (d: string) => Promise<{ base64String?: string; format?: string }> | { base64String?: string; format?: string } }).__shieldE2ECamera;
     if (!hook) return { error: "plugin-missing" };
     try {
@@ -168,7 +175,6 @@ export async function captureNative(checkpointId: string | null, direction: "bac
       return { error: "camera-failed" };
     }
   }
-  if (!isNativeOriginAvailable()) return { error: "not-native" };
   try {
     const { SecureCapture } = await import("@tradedeck/secure-capture");
     const ticketId = (await activeJobId()) ?? "device";
@@ -193,7 +199,9 @@ export async function captureNative(checkpointId: string | null, direction: "bac
 export function warmNativeCamera(direction: "back" | "front", ticketId?: string): void {
   if (import.meta.env.MODE === "e2e") return;
   if (!isNativeOriginAvailable()) return;
-  void import("@tradedeck/secure-capture")
-    .then(({ SecureCapture }) => SecureCapture.warmCamera({ facing: direction, ticketId }))
+  // Not before sign-on: a signed-out phone must not open the camera, or ask for its permission, ahead of the ID check.
+  void currentAttestation()
+    .then((att) => (att ? import("@tradedeck/secure-capture") : null))
+    .then((mod) => mod?.SecureCapture.warmCamera({ facing: direction, ticketId }))
     .catch(() => undefined);
 }

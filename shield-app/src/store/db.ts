@@ -131,3 +131,20 @@ export function getCloseout(jobId: string): Promise<unknown | undefined> {
 export async function putCloseout(jobId: string, packet: unknown): Promise<void> {
   await setMeta(`closeout:${jobId}`, packet);
 }
+
+// Signed photographer note and the in-progress ID check. Holds no ID or selfie images and no name.
+export function getAttestationRaw(): Promise<unknown | undefined> {
+  return getMeta("attestation");
+}
+
+export async function putAttestation(att: unknown): Promise<void> {
+  await setMeta("attestation", att);
+}
+
+export function getIdSession(): Promise<string | undefined> {
+  return getMeta<string>("idSession");
+}
+
+export async function putIdSession(id: string | null): Promise<void> {
+  await setMeta("idSession", id);
+}

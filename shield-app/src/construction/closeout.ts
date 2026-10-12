@@ -2,6 +2,10 @@ import { esc } from "../esc";
 import { isNativeOriginAvailable } from "../platform";
 import { checkRecordAuth } from "../crypto/record";
 import { devicePublicKeyRaw, deviceSealId, sealIdForPublicKey, sha256Text, signPayload, stableStringify, verifySignature } from "../crypto/seal";
+import { checkNote, noteSha256, type Attestation } from "../identity/note";
+import { checkReceipt } from "../identity/receipt";
+import { TRUSTED_RECEIPT_KEYS } from "../identity/trust";
+import { currentAttestation } from "../identity/store";
 import type { CloseoutBody, CloseoutPacket, CloseoutPoint, Job, SealRecord } from "../types";
 
 export interface CloseoutInput {
@@ -10,6 +14,8 @@ export interface CloseoutInput {
   notes: string;
   /** Resolve a checkpoint's sealed record from the vault. */
   recordFor: (shotId: string) => SealRecord | undefined;
+  /** Photographer note to embed. Omit to use this device's current one; pass null to build a packet without it. */
+  attestation?: Attestation | null;
 }
 
 function pointsFor(job: Job, recordFor: CloseoutInput["recordFor"]): CloseoutPoint[] {
@@ -34,6 +40,7 @@ export function missingPoints(job: Job, recordFor: CloseoutInput["recordFor"]): 
 export async function buildCloseoutPacket(input: CloseoutInput): Promise<CloseoutPacket> {
   const { job } = input;
   const points = pointsFor(job, input.recordFor);
+  const att = input.attestation === undefined ? await currentAttestation() : input.attestation;
   const body: CloseoutBody = {
     canonicalVersion: 1,
     schema: PACKET_SCHEMA,
@@ -55,6 +62,8 @@ export async function buildCloseoutPacket(input: CloseoutInput): Promise<Closeou
     notes: input.notes,
     deviceSealId: await deviceSealId(),
     devicePublicKey: await devicePublicKeyRaw(),
+    // Omitted when absent so packets made before the signed note existed stay byte-identical.
+    ...(att ? { photographer: { attestationId: att.attestationId, noteSha256: att.noteSha256, note: att.note, receipt: att.receipt, idCheck: att.idCheck } } : {}),
   };
   const hash = await sha256Text(stableStringify(body));
   const signature = await signPayload(body);
@@ -78,7 +87,7 @@ const CLOCK_SKEW_MS = 5 * 60 * 1000;
  * Checks the packet is internally consistent and signed by the key it carries. It cannot prove WHO holds
  * that key: pass `expectedSigner` (a seal ID obtained out of band) to pin it.
  */
-export async function verifyCloseoutPacket(packet: CloseoutPacket, expectedSigner?: string): Promise<PacketVerification> {
+export async function verifyCloseoutPacket(packet: CloseoutPacket, expectedSigner?: string, receiptKeys: Record<string, string> = TRUSTED_RECEIPT_KEYS): Promise<PacketVerification> {
   const { integrity, ...body } = packet;
   if (!integrity?.hash || !integrity.signature || !body.devicePublicKey || !Array.isArray(body.points)) {
     return { verdict: "PACKET-UNREADABLE", reasons: ["missing-integrity"], signer: null };
@@ -110,6 +119,36 @@ export async function verifyCloseoutPacket(packet: CloseoutPacket, expectedSigne
     if (r.checkpointId !== p.id) reasons.push(`${p.id}:record-wrong-checkpoint`);
   }
 
+  const ph = body.photographer;
+  let confirmedBy: string | null = null;
+  if (ph) {
+    try {
+      for (const f of await checkNote(ph.note)) reasons.push(f);
+      if (ph.note.devicePublicKey !== body.devicePublicKey) reasons.push("note-key-mismatch");
+      if ((await noteSha256(ph.note.payload)) !== ph.noteSha256) reasons.push("note-hash-mismatch");
+    } catch {
+      reasons.push("note-unverifiable");
+    }
+    for (const r of records) {
+      if (r.attestationId !== undefined && (r.attestationId !== ph.attestationId || r.noteSha256 !== ph.noteSha256)) reasons.push(`${r.id}:attestation-mismatch`);
+    }
+    // The statement says the photos have not been edited, so it must predate every photo it covers.
+    const first = Math.min(...records.map((r) => Date.parse(r.createdAt)));
+    if (records.length && Date.parse(ph.note.payload.signedAt) > first) reasons.push("note-after-capture");
+    if (ph.receipt) {
+      const rc = await checkReceipt(ph.receipt, { attestationId: ph.attestationId, noteSha256: ph.noteSha256, deviceSealId: ph.note.payload.deviceSealId }, receiptKeys);
+      reasons.push(...rc.failed);
+      confirmedBy = rc.confirmedBy;
+      // The service issues the receipt when it accepts the note, which is before any photo it covers.
+      const issued = Date.parse(ph.receipt.payload.issuedAt);
+      if (records.length && issued > first) reasons.push("receipt-after-capture");
+      if (issued + CLOCK_SKEW_MS < Date.parse(ph.note.payload.signedAt)) reasons.push("receipt-before-note");
+    }
+  } else if (records.some((r) => r.attestationId !== undefined)) {
+    // Photos were signed as belonging to a note, but the note was stripped from the packet.
+    reasons.push("photographer-note-missing");
+  }
+
   if (new Set(records.map((r) => r.id)).size !== records.length) reasons.push("duplicate-record");
   if (new Set(records.map((r) => r.prevChain)).size !== records.length) reasons.push("chain-fork");
   const byHead = new Map(records.map((r) => [r.chainHead, r]));
@@ -135,6 +174,13 @@ export async function verifyCloseoutPacket(packet: CloseoutPacket, expectedSigne
       "signature-valid",
       `${records.length} record signature(s) valid`,
       expectedSigner ? "signer-pinned" : "signer-not-independently-verified",
+      ...(!ph
+        ? ["no-photographer-note"]
+        : confirmedBy
+          ? ["photographer-note-valid", `id-check-confirmed-by-service:${confirmedBy}`]
+          : ph.receipt
+            ? ["photographer-note-valid", "id-receipt-signer-unknown"]
+            : ["photographer-note-valid", "id-check-not-independently-verified"]),
     ],
     signer,
   };
@@ -160,6 +206,17 @@ export function parseCloseoutPacket(text: string): CloseoutPacket {
     throw new Error("bad-packet");
   }
   return raw;
+}
+
+function photographerHtml(packet: CloseoutPacket): string {
+  const ph = packet.photographer;
+  if (!ph) return `<h2>Photographer note</h2><p class="miss">None. This record was made without a signed note or ID check.</p>`;
+  return `<h2>Photographer note</h2><pre>${esc(ph.note.payload.statement)}
+
+signed ${esc(ph.note.payload.signedAt)} by device ${esc(ph.note.payload.deviceSealId)}
+note sha256 ${esc(ph.noteSha256)}
+attestation ${esc(ph.attestationId)}
+${ph.receipt ? `service receipt signed by key ${esc(ph.receipt.payload.kid)} at ${esc(ph.receipt.payload.issuedAt)}` : "no service receipt"}</pre><p class="meta">ID check run by ${esc(ph.idCheck.provider)}. This printout cannot be verified; verify the .shield-record.json in Shield, which checks the service's signed receipt against a pinned key. A signed note does not show that the scene in a photo was honest.</p>`;
 }
 
 export function packetToHtml(packet: CloseoutPacket): string {
@@ -192,7 +249,7 @@ at     ${esc(r.createdAt)}</pre>`
 Job ${esc(packet.job.id)} · ${esc(packet.job.title)} · ${esc(packet.job.trade)}<br/>
 Device seal ${esc(packet.deviceSealId)}</p>
 <p class="hash">SHA-256 ${esc(packet.integrity.hash)}<br/>Signature ${esc(packet.integrity.signature)}</p>
-<h2>Locked brief</h2><pre>${esc(packet.brief?.lockedText ?? "")}</pre>
+${photographerHtml(packet)}<h2>Locked brief</h2><pre>${esc(packet.brief?.lockedText ?? "")}</pre>
 <h2>Checkpoints</h2>${pts}
 <h2>Counts</h2><pre>${esc(JSON.stringify(packet.counts, null, 2))}</pre>
 ${packet.notes ? `<h2>Close notes</h2><pre>${esc(packet.notes)}</pre>` : ""}
