@@ -48,8 +48,8 @@ pinned in both repos by a SHA-256 test, and the receipt format by a shared test 
 Needs before it works end to end: Stripe Identity enabled on the Stripe account; the migration
 `20261011000000_shield_identity_attestations.sql` applied in `tradedeck-api`; `cryptography` installed (in
 `requirements.txt`); a receipt key made once with `python scripts/gen_receipt_key.py` in `tradedeck-api`, its private half
-set as `IDENTITY_RECEIPT_KEY` in Render (the service refuses to accept notes without it; done 2026-10-12) and its public half pinned in
-`src/identity/trust.ts` (done, key id `127616f5494b11b0`); and a device test: the check opens through `window.open`, which should hand off to the system
+set as `IDENTITY_RECEIPT_KEY` in Render (the service refuses to accept notes without it; rotated 2026-10-12) and its public half pinned in
+`src/identity/trust.ts` (done, key id `466ac7e85fc78a0f`); and a device test: the check opens through `window.open`, which should hand off to the system
 browser in the Capacitor shells but has not been tried on a device. Face matching needs a consent and retention
 policy that suits your states (some, such as Illinois, regulate biometric data).
 

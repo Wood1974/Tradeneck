@@ -7,5 +7,5 @@
  * To rotate, add the new key alongside the old one so records already sealed still verify.
  */
 export const TRUSTED_RECEIPT_KEYS: Record<string, string> = {
-  "127616f5494b11b0": "BIUGKigfYfYYJUuYTJCRYzlLzmu7Xi4Z7ppTTpcTfcrWQRu9WpIwUEHgz63y27aY6ebvYfyhzzP1VbYQbSUu2R4=",
+  "466ac7e85fc78a0f": "BPAfLxO3jzGmQdtXR/NfAwDVds4TFJuAgg8EW9kr+mXSgt9fimGGCxBb0bYfwR1pjLxTEiMIygewf6vGuvT6tF0=",
 };
