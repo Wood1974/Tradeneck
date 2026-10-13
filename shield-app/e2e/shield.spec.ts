@@ -446,3 +446,30 @@ test("a signed-on phone keeps working with the network off from the start of a s
   // Sign-on is not asked for again, and no warning about being offline appears.
   await expect(page.locator("#id-h")).toHaveCount(0);
 });
+
+test("an ID check left unfinished can be started over, and consent is asked for again", async ({ page }) => {
+  await asNativeApp(page);
+  await page.goto("/");
+  await page.fill("#id-email", "pro@example.test");
+  await page.fill("#id-pass", "correct-horse");
+  await page.click('[data-act="id-signin"]');
+  await page.check("#id-consent-bio");
+  await page.check("#id-consent-stmt");
+  await page.click('[data-act="id-start"]');
+  await expect(page.locator('[data-act="id-check"]')).toBeVisible();
+  await expect(page.locator('[data-act="id-open"]')).toBeVisible();
+
+  await page.click('[data-act="id-restart"]');
+  // Back at consent, with the boxes cleared: starting again needs fresh consent.
+  await expect(page.locator('[data-act="id-start"]')).toBeVisible();
+  await expect(page.locator("#id-consent-bio")).not.toBeChecked();
+  await page.click('[data-act="id-start"]');
+  await expect(page.locator(".foot-note", { hasText: "Both boxes" })).toBeVisible();
+  expect((await page.evaluate(() => (window as unknown as TestWindow).__idCalls)).filter((c: string) => c === "start")).toHaveLength(1);
+
+  await page.check("#id-consent-bio");
+  await page.check("#id-consent-stmt");
+  await page.click('[data-act="id-start"]');
+  await expect(page.locator('[data-act="id-check"]')).toBeVisible();
+  expect((await page.evaluate(() => (window as unknown as TestWindow).__idCalls)).filter((c: string) => c === "start")).toHaveLength(2);
+});

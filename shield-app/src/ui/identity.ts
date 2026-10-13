@@ -101,9 +101,11 @@ export function identityView(): string {
       <div class="actions"><button class="btn" data-act="id-start"${busy ? " disabled" : ""}>START ID CHECK</button></div>`,
     waiting: `
       <p class="lede">Finish the ID check in the browser window, then come back here.</p>
+      ${checkUrl ? "" : `<p class="fine">The link to the ID check page is no longer on this phone. Tap START OVER to get a new one.</p>`}
       <div class="actions">
         ${checkUrl ? `<button class="btn ghost small" data-act="id-open">REOPEN ID CHECK</button>` : ""}
         <button class="btn" data-act="id-check"${busy ? " disabled" : ""}>I FINISHED. CHECK STATUS</button>
+        <button class="btn ghost small" data-act="id-restart"${busy ? " disabled" : ""}>START OVER</button>
       </div>
       <p class="fine">Status: ${esc(idStatus.replace("_", " "))}</p>`,
     sign: `
@@ -220,6 +222,14 @@ export function bindIdentity(root: HTMLElement, rerender: () => void): void {
     checkUrl = r.url;
     await putIdSession(r.sessionId);
     if (r.url) window.open(r.url, "_blank", "noopener");
+  });
+  // The link to the ID check page lives only in memory, so a reload can leave this step with no way back to it.
+  // Starting over drops the unfinished attempt and returns to the consent step, which asks for consent again.
+  on("id-restart", async () => {
+    sessionId = null;
+    idStatus = "none";
+    checkUrl = null;
+    await putIdSession(null);
   });
   root.querySelector('[data-act="id-open"]')?.addEventListener("click", () => {
     if (checkUrl) window.open(checkUrl, "_blank", "noopener");
