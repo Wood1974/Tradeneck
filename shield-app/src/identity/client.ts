@@ -2,12 +2,9 @@ import type { SignedNote } from "./note";
 import { CONSENT_VERSION } from "./note";
 import type { Receipt } from "./receipt";
 
-// Public values: the Supabase anon key is meant to be client-visible and is protected by RLS.
-// The Stripe secret key and the service role key live only in tradedeck-api's environment.
-export const API_BASE = "https://tradedeck-api.onrender.com";
-const SUPABASE_URL = "https://jlaajejpqjldpbinktln.supabase.co";
-const SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsYWFqZWpwcWpsZHBiaW5rdGxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMDg3MTksImV4cCI6MjEwMTc4NDcxOX0.tP-seLGoJnivrYmNhhTDmDJw4Uk92D95-zrwWB1G_S4";
+// Public value: the address of the standalone Shield server. Shield has its own accounts there; it does not use
+// TradeDeck's. The Stripe keys and the receipt signing key live only in that server's environment.
+export const API_BASE = "https://tradedeck-shield.onrender.com";
 
 export type IdStatus = "none" | "requires_input" | "processing" | "verified" | "canceled";
 
@@ -18,9 +15,8 @@ export class IdentityError extends Error {
 }
 
 export interface IdentityApi {
+  /** Signs in with an account the Shield administrator created. There is no self sign-up. */
   signIn(email: string, password: string): Promise<void>;
-  /** Creates a TradeDeck account. `signedIn` is false when the account must first be confirmed from an email link. */
-  signUp(email: string, password: string): Promise<{ signedIn: boolean }>;
   signedIn(): boolean;
   start(): Promise<{ sessionId: string; status: IdStatus; url: string | null }>;
   status(): Promise<{ sessionId: string | null; status: IdStatus; verified: boolean }>;
@@ -35,9 +31,10 @@ async function call<T>(url: string, init: RequestInit): Promise<T> {
   const timer = setTimeout(() => ctl.abort(), 20000);
   try {
     const res = await fetch(url, { ...init, signal: ctl.signal });
-    const body = (await res.json().catch(() => ({}))) as { error?: string; error_code?: string } & T;
-    // tradedeck-api answers { error }; Supabase auth answers { error_code }.
-    if (!res.ok) throw new IdentityError(body.error ?? body.error_code ?? `http-${res.status}`);
+    const body = (await res.json().catch(() => ({}))) as { error?: string; detail?: unknown } & T;
+    // The identity routes answer { error }; the framework's own errors (sign-in, auth, rate limit) answer { detail }.
+    const detail = typeof body.detail === "string" ? body.detail : undefined;
+    if (!res.ok) throw new IdentityError(body.error ?? detail ?? `http-${res.status}`);
     return body;
   } catch (err) {
     if (err instanceof IdentityError) throw err;
@@ -52,48 +49,40 @@ const authed = (extra: RequestInit = {}): RequestInit => {
   return { ...extra, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` } };
 };
 
-// Supabase auth error codes, mapped to the codes the sign-on screen has text for.
-const SIGNUP_ERRORS: Record<string, string> = {
-  weak_password: "weak-password",
-  user_already_exists: "account-exists",
-  email_exists: "account-exists",
-  email_address_invalid: "bad-email",
-  validation_failed: "bad-email",
-  over_email_send_rate_limit: "rate-limited",
-  over_request_rate_limit: "rate-limited",
-  signup_disabled: "signup-disabled",
-};
+// Codes the server uses when the token is missing, wrong, expired or revoked.
+const SESSION_ENDED = new Set(["authorization_required", "invalid_access_token"]);
+
+/** Calls an authenticated route. If the server says the sign-in has ended, drop the token so sign-on starts again. */
+async function authedCall<T>(path: string, init: RequestInit = {}): Promise<T> {
+  try {
+    return await call<T>(`${API_BASE}${path}`, authed(init));
+  } catch (err) {
+    if (err instanceof IdentityError && SESSION_ENDED.has(err.code)) {
+      token = null;
+      throw new IdentityError("session-expired");
+    }
+    throw err;
+  }
+}
 
 const real: IdentityApi = {
   signedIn: () => token !== null,
   async signIn(email, password) {
-    const r = await call<{ access_token?: string }>(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    const r = await call<{ access_token?: string }>(`${API_BASE}/shield/auth/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     }).catch((err: unknown) => {
-      throw new IdentityError(err instanceof IdentityError && err.code === "network" ? "network" : "bad-credentials");
+      const code = err instanceof IdentityError ? err.code : "network";
+      if (code === "network" || code === "rate_limit_exceeded") throw new IdentityError(code === "network" ? "network" : "rate-limited");
+      throw new IdentityError("bad-credentials");
     });
     if (!r.access_token) throw new IdentityError("bad-credentials");
     token = r.access_token;
   },
-  async signUp(email, password) {
-    const r = await call<{ access_token?: string }>(`${SUPABASE_URL}/auth/v1/signup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
-      body: JSON.stringify({ email, password }),
-    }).catch((err: unknown) => {
-      throw new IdentityError(SIGNUP_ERRORS[(err as IdentityError).code] ?? (err as IdentityError).code);
-    });
-    // With email confirmation on, no session comes back, and an address that already has an account looks
-    // the same as a new one. The screen must not say which it was.
-    if (!r.access_token) return { signedIn: false };
-    token = r.access_token;
-    return { signedIn: true };
-  },
-  start: () => call(`${API_BASE}/identity/start`, authed({ method: "POST", body: JSON.stringify({ consent: true, consentVersion: CONSENT_VERSION }) })),
-  status: () => call(`${API_BASE}/identity/status`, authed()),
-  submitNote: (note) => call(`${API_BASE}/identity/note`, authed({ method: "POST", body: JSON.stringify(note) })),
+  start: () => authedCall("/identity/start", { method: "POST", body: JSON.stringify({ consent: true, consentVersion: CONSENT_VERSION }) }),
+  status: () => authedCall("/identity/status"),
+  submitNote: (note) => authedCall("/identity/note", { method: "POST", body: JSON.stringify(note) }),
 };
 
 /** Production uses the real service. Test builds (`--mode e2e`) swap in a stand-in; production bundles never contain it. */

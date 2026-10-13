@@ -4,7 +4,7 @@ import { devicePublicKeyRaw, deviceSealId, sealIdForPublicKey, sha256Text, signP
 export const NOTE_VERSION = "1";
 export const CONSENT_VERSION = "1";
 export const NOTE_KIND = "tradedeck.shield.note";
-// Must match STATEMENT in tradedeck-api/identity_core.py. Both test suites pin its SHA-256.
+// Must match STATEMENT in tradedeck-shield server/app/identity_core.py. Both test suites pin its SHA-256.
 export const NOTE_STATEMENT =
   "I am the person who took the photographs in this record. I took each one myself, live, " +
   "with this device's camera, and I have not edited, replaced or staged any of them. I " +

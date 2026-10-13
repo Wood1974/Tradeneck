@@ -16,9 +16,6 @@ let busy = false;
 let message = "";
 let email = "";
 let listening = false;
-let createMode = false;
-
-const MIN_PASSWORD = 8;
 
 export const isAttested = (): boolean => attested !== null;
 export const attestation = (): Attestation | null => attested;
@@ -41,12 +38,8 @@ const ERRORS: Record<string, string> = {
   "bad-credentials": "That email or password was not accepted.",
   network: "Could not reach the service. Sign-on needs a connection. Check it and try again.",
   "not-signed-in": "Sign in first.",
-  "weak-password": `Use a password of at least ${MIN_PASSWORD} characters.`,
-  "password-mismatch": "The two passwords do not match.",
-  "bad-email": "That email address does not look right.",
-  "account-exists": "That email already has an account. Sign in instead.",
+  "session-expired": "Your sign-in ended. Sign in again.",
   "rate-limited": "Too many tries just now. Wait a few minutes, then try again.",
-  "signup-disabled": "New accounts cannot be created right now. Try again later.",
   "consent-required": "Both boxes need to be ticked first.",
   "id-check-unavailable": "The ID check service is unavailable right now. Try again shortly.",
   "id-check-not-verified": "The ID check has not passed yet.",
@@ -69,29 +62,16 @@ function noticeText(): string {
 export function identityView(): string {
   const s = step();
   const body: Record<Step, string> = {
-    signin: createMode
-      ? `
-      <p class="lede">New to TradeDeck? Create an account. You will get an email with a link to confirm it, then come back and sign in.</p>
-      <label for="id-email">Email</label>
-      <input id="id-email" type="email" autocomplete="username" value="${esc(email)}" />
-      <label for="id-pass">Password (at least ${MIN_PASSWORD} characters)</label>
-      <input id="id-pass" type="password" autocomplete="new-password" />
-      <label for="id-pass2">Repeat the password</label>
-      <input id="id-pass2" type="password" autocomplete="new-password" />
-      <div class="actions">
-        <button class="btn" data-act="id-signup"${busy ? " disabled" : ""}>CREATE ACCOUNT</button>
-        <button class="btn ghost small" data-act="id-mode-signin">I HAVE AN ACCOUNT</button>
-      </div>`
-      : `
-      <p class="lede">Shield checks who is taking the photos, once, before it will seal any. Sign in with your TradeDeck account.</p>
+    signin: `
+      <p class="lede">Shield checks who is taking the photos, once, before it will seal any. Sign in with the account your Shield administrator made for you.</p>
       <label for="id-email">Email</label>
       <input id="id-email" type="email" autocomplete="username" value="${esc(email)}" />
       <label for="id-pass">Password</label>
       <input id="id-pass" type="password" autocomplete="current-password" />
       <div class="actions">
         <button class="btn" data-act="id-signin"${busy ? " disabled" : ""}>SIGN IN</button>
-        <button class="btn ghost small" data-act="id-mode-create">CREATE ACCOUNT</button>
-      </div>`,
+      </div>
+      <p class="fine">There is no sign-up here. Ask your administrator if you need an account or a new password.</p>`,
     consent: `
       <p class="lede">Step 2 of 3: an ID check. Stripe Identity will ask you to photograph a government photo ID and take a live selfie, then check that the face matches the ID.</p>
       <p class="fine">Stripe, not Shield, receives and keeps the ID and selfie images. Shield keeps only the result, your signed statement and the time. No ID or selfie image is stored on this phone or in TradeDeck.</p>
@@ -178,34 +158,6 @@ export function bindIdentity(root: HTMLElement, rerender: () => void): void {
   const on = (act: string, fn: () => Promise<void>) =>
     root.querySelector(`[data-act="${act}"]`)?.addEventListener("click", (e) => void run(rerender, fn, e.currentTarget as Element));
 
-  const setMode = (create: boolean) => () => {
-    if (busy) return;
-    createMode = create;
-    message = "";
-    rerender();
-  };
-  root.querySelector('[data-act="id-mode-create"]')?.addEventListener("click", setMode(true));
-  root.querySelector('[data-act="id-mode-signin"]')?.addEventListener("click", setMode(false));
-
-  // Checks that need no network are reported in place: re-rendering would wipe both password fields.
-  root.querySelector('[data-act="id-signup"]')?.addEventListener("click", (e) => {
-    const pass = (document.getElementById("id-pass") as HTMLInputElement | null)?.value ?? "";
-    const again = (document.getElementById("id-pass2") as HTMLInputElement | null)?.value ?? "";
-    const bad = !email || !email.includes("@") ? "bad-email" : pass.length < MIN_PASSWORD ? "weak-password" : pass !== again ? "password-mismatch" : null;
-    if (bad) {
-      message = errorText(bad);
-      const el = root.querySelector("section.signon .foot-note");
-      if (el) el.textContent = message;
-      return;
-    }
-    void run(rerender, async () => {
-      const r = await identityApi().signUp(email, pass);
-      if (r.signedIn) return;
-      // Neutral on purpose: this reads the same whether the address was new or already had an account.
-      createMode = false;
-      message = "If that email is new, we sent a confirmation link. Open it, then come back and sign in.";
-    }, e.currentTarget as Element);
-  });
   on("id-signin", async () => {
     const pass = (document.getElementById("id-pass") as HTMLInputElement | null)?.value ?? "";
     if (!email || !pass) throw new IdentityError("bad-credentials");
