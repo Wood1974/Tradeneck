@@ -5,8 +5,8 @@ and wraps to iOS/Android. iOS deployment target is 15. Android minSdk is 24,
 compile/target SDK 36, JDK 21.
 
 **Sign-on needs a network once; everything after it works offline.** Before the app will take a photo,
-the person signs in, passes an ID check (photo ID plus a live selfie match, run by Stripe Identity through
-`tradedeck-api`) and signs a short statement with the device key (see *Sign-on* below). After that, capture, sealing,
+the person signs in with an account the Shield administrator made, passes an ID check (photo ID plus a live selfie match,
+run by Stripe Identity through the standalone Shield server, `Wood1974/tradedeck-shield`) and signs a short statement with the device key (see *Sign-on* below). After that, capture, sealing,
 closing and verifying make no outbound calls; an end-to-end test runs that flow offline and asserts no requests.
 
 ## Working offline
@@ -50,11 +50,16 @@ What a packet verdict says about the ID check, from the file alone:
 A signed note does not show the scene in a photo is true. The signing key is not hardware-backed. The statement text is
 pinned in both repos by a SHA-256 test, and the receipt format by a shared test vector; change either only with a new version.
 
-Needs before it works end to end: Stripe Identity enabled on the Stripe account; the migration
-`20261011000000_shield_identity_attestations.sql` applied in `tradedeck-api`; `cryptography` installed (in
-`requirements.txt`); a receipt key made once with `python scripts/gen_receipt_key.py` in `tradedeck-api`, its private half
-set as `IDENTITY_RECEIPT_KEY` in Render (the service refuses to accept notes without it; rotated 2026-10-12) and its public half pinned in
-`src/identity/trust.ts` (done, key id `466ac7e85fc78a0f`); and a device test: the check opens through `window.open`, which should hand off to the system
+Shield is standalone: it does not use TradeDeck's accounts, database or server. Accounts live on the Shield server
+(`tradedeck-shield` on Render), are created by its administrator, and there is no self sign-up. The first administrator is
+made from `SHIELD_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` (remove them afterwards); later accounts come from
+`POST /shield/admin/accounts`, and a forgotten password is reset with `POST /shield/admin/accounts/<id>/reset-password`.
+The owner's test mode is `IDENTITY_TEST_MODE_EMAILS` plus `STRIPE_TEST_SECRET_KEY` on that server.
+
+Needs before it works end to end: Stripe Identity enabled on the Stripe account (a live `STRIPE_SECRET_KEY` on the server for
+real checks); a receipt key made once with `python scripts/gen_receipt_key.py`, its private half set as `IDENTITY_RECEIPT_KEY` on
+the Shield server (it refuses to accept notes without it) and its public half pinned in `src/identity/trust.ts` (done, key id
+`321c9150a35b8a0e`; the earlier TradeDeck-server key `466ac7e85fc78a0f` stays pinned so old records still verify); and a device test: the check opens through `window.open`, which should hand off to the system
 browser in the Capacitor shells but has not been tried on a device. Face matching needs a consent and retention
 policy that suits your states (some, such as Illinois, regulate biometric data).
 
