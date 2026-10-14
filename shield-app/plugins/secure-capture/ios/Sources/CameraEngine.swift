@@ -141,6 +141,8 @@ final class CaptureViewController: UIViewController {
     private let preview = CameraEngine.shared.makePreviewLayer()
     private let location: LocationFix
     private var finished = false
+    private weak var sealButton: UIButton?
+    private var watchdog: DispatchWorkItem?
 
     init(location: LocationFix) {
         self.location = location
@@ -166,12 +168,19 @@ final class CaptureViewController: UIViewController {
         seal.layer.cornerRadius = 8
         seal.addTarget(self, action: #selector(sealTapped), for: .touchUpInside)
         seal.translatesAutoresizingMaskIntoConstraints = false
+        sealButton = seal
 
-        let cancel = UIButton(type: .system)
-        cancel.setTitle("CANCEL", for: .normal)
-        cancel.setTitleColor(.white, for: .normal)
-        cancel.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
-        cancel.translatesAutoresizingMaskIntoConstraints = false
+        // A clear way out of the shutter screen. It stays live while a photo is being taken, so the camera can
+        // never trap the person, and it is a full-size touch target on a dark pill so it reads over any scene.
+        let back = UIButton(type: .system)
+        back.setTitle("\u{2039}  BACK", for: .normal)
+        back.titleLabel?.font = .boldSystemFont(ofSize: 17)
+        back.setTitleColor(.white, for: .normal)
+        back.backgroundColor = UIColor.black.withAlphaComponent(0.6)
+        back.layer.cornerRadius = 22
+        back.accessibilityLabel = "Back"
+        back.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
+        back.translatesAutoresizingMaskIntoConstraints = false
 
         let hint = UILabel()
         hint.text = "In-app camera. Gallery import is not available."
@@ -181,18 +190,21 @@ final class CaptureViewController: UIViewController {
         hint.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(seal)
-        view.addSubview(cancel)
+        view.addSubview(back)
         view.addSubview(hint)
         NSLayoutConstraint.activate([
             seal.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             seal.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -24),
             seal.widthAnchor.constraint(equalToConstant: 160),
             seal.heightAnchor.constraint(equalToConstant: 64),
-            cancel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
-            cancel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            back.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            back.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            back.widthAnchor.constraint(greaterThanOrEqualToConstant: 96),
+            back.heightAnchor.constraint(equalToConstant: 44),
             hint.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            hint.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
-            hint.leadingAnchor.constraint(greaterThanOrEqualTo: cancel.trailingAnchor, constant: 8),
+            hint.topAnchor.constraint(equalTo: back.bottomAnchor, constant: 12),
+            hint.leadingAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            hint.trailingAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
         ])
     }
 
@@ -206,10 +218,18 @@ final class CaptureViewController: UIViewController {
     }
 
     @objc private func sealTapped() {
-        view.isUserInteractionEnabled = false
+        // Only the shutter is disabled while the photo is taken. BACK stays live.
+        sealButton?.isEnabled = false
+        // If the camera never answers, leave the screen with a reason instead of freezing on it.
+        let timeout = DispatchWorkItem { [weak self] in
+            self?.finish(.failure(CaptureFailure.failedWith("the camera did not respond within 10 seconds")))
+        }
+        watchdog = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
         CameraEngine.shared.take { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.watchdog?.cancel()
                 switch result {
                 case .failure(let error):
                     self.finish(.failure(error))
@@ -239,6 +259,7 @@ final class CaptureViewController: UIViewController {
     private func finish(_ result: Result<Shot, Error>) {
         if finished { return }
         finished = true
+        watchdog?.cancel()
         dismiss(animated: true) {
             self.onShot?(result)
         }
