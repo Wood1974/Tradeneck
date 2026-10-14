@@ -19,7 +19,14 @@ export type CaptureError =
   | "camera-failed"
   | "empty-bytes"
   | "plugin-missing"
+  | "seal-failed"
   | "not-verified";
+
+/** A failed capture. `detail` is the underlying reason, shown so a failure on a real phone can be diagnosed. */
+export interface CaptureFailureResult {
+  error: CaptureError;
+  detail?: string;
+}
 
 export interface CaptureOk {
   item: VaultItem;
@@ -92,13 +99,23 @@ function bytesFromBase64(raw: string): ArrayBuffer {
   return out.buffer;
 }
 
-function nativeFailure(err: unknown): CaptureError {
+/** The underlying reason, without the leading error code, trimmed to a length that fits on screen. */
+function detailOf(err: unknown, code: string): string | undefined {
+  const raw = String((err as { message?: string })?.message ?? err ?? "").trim();
+  const cut = raw.toLowerCase().startsWith(code) ? raw.slice(code.length).replace(/^[\s:]+/, "") : raw;
+  return cut ? cut.slice(0, 160) : undefined;
+}
+
+function nativeFailure(err: unknown): CaptureFailureResult {
   const msg = String((err as { message?: string })?.message ?? err).toLowerCase();
-  if (msg.includes("camera-denied") || msg.includes("permission") || msg.includes("denied")) return "camera-denied";
-  if (msg.includes("camera-cancelled") || msg.includes("cancel")) return "camera-cancelled";
-  if (msg.includes("empty-bytes")) return "empty-bytes";
-  if (msg.includes("unavailable") || msg.includes("not implemented") || msg.includes("plugin")) return "plugin-missing";
-  return "camera-failed";
+  // The native plugin reports a code, then (for these two) the reason: "seal-failed: <why>", "camera-failed: <why>".
+  if (msg.startsWith("seal-failed")) return { error: "seal-failed", detail: detailOf(err, "seal-failed") };
+  if (msg.startsWith("camera-failed")) return { error: "camera-failed", detail: detailOf(err, "camera-failed") };
+  if (msg.includes("camera-denied") || msg.includes("permission") || msg.includes("denied")) return { error: "camera-denied" };
+  if (msg.includes("camera-cancelled") || msg.includes("cancel")) return { error: "camera-cancelled" };
+  if (msg.includes("empty-bytes")) return { error: "empty-bytes" };
+  if (msg.includes("unavailable") || msg.includes("not implemented") || msg.includes("plugin")) return { error: "plugin-missing" };
+  return { error: "camera-failed", detail: detailOf(err, "camera-failed") };
 }
 
 let sealQueue: Promise<unknown> = Promise.resolve();
@@ -154,7 +171,7 @@ async function sealLocked(bytes: ArrayBuffer, mime: string, checkpointId: string
   return item;
 }
 
-export async function captureNative(checkpointId: string | null, direction: "back" | "front" = "back"): Promise<CaptureOk | { error: CaptureError }> {
+export async function captureNative(checkpointId: string | null, direction: "back" | "front" = "back"): Promise<CaptureOk | CaptureFailureResult> {
   if (!isNativeOriginAvailable()) return { error: "not-native" };
   // No photo is taken, and nothing is sealed, until this device holds a signed note backed by a passed ID check.
   // This sits above both the e2e stand-in and the native plugin so neither path can skip it.
@@ -175,23 +192,32 @@ export async function captureNative(checkpointId: string | null, direction: "bac
       return { error: "camera-failed" };
     }
   }
+  let sealed: NativeSealResult;
   try {
     const { SecureCapture } = await import("@tradedeck/secure-capture");
     const ticketId = (await activeJobId()) ?? "device";
-    const sealed = await SecureCapture.captureAndSeal({
+    sealed = await SecureCapture.captureAndSeal({
       checkpointId: checkpointId ?? "unbound",
       ticketId,
       facing: direction,
       appVersion: APP_VERSION,
     });
+  } catch (err) {
+    return nativeFailure(err);
+  }
+  // The phone has a photo. Anything that fails from here is the app's own sealing or storage step, not the camera,
+  // so it is reported as such instead of as a camera failure.
+  try {
     if (!sealed.photoBase64) return { error: "empty-bytes" };
     const bytes = bytesFromBase64(sealed.photoBase64);
     const sha = await sha256Bytes(bytes);
-    if (sha !== sealed.record.photo_sha256) return { error: "camera-failed" };
+    if (sha !== sealed.record.photo_sha256) return { error: "seal-failed", detail: "the photo did not match its sealed record" };
     const item = await sealFromBytes(bytes, "image/jpeg", checkpointId);
     return { item, hardware: sealed };
   } catch (err) {
-    return { error: nativeFailure(err) };
+    const name = (err as { name?: string })?.name;
+    const msg = String((err as { message?: string })?.message ?? err).slice(0, 160);
+    return { error: "seal-failed", detail: name && name !== "Error" ? `${name}: ${msg}` : msg };
   }
 }
 
