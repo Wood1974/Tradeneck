@@ -437,7 +437,7 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
             "wall_time_ms": wallMs(),
             "monotonic_ms": monotonicMs(),
         ]
-        if let boot = bootIdentifier(), !boot.isEmpty { clock["boot_id"] = boot }
+        clock["boot_id"] = bootIdentifier()
         return clock
     }
 
@@ -457,7 +457,26 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
         return ms > UInt64(Int64.max) ? Int64.max : Int64(ms)
     }
 
-    private func bootIdentifier() -> String? {
+    /// Names this boot of the phone. The seal contract needs a boot identity (a boot_id or a boot_count) on the clock
+    /// it records with each ticket, and iOS has no boot count, so this must never come back empty. Without it every
+    /// seal fails with "ticket_clock needs a boot_id or a boot_count", which is what a real iPhone did.
+    private func bootIdentifier() -> String {
+        // 1. The kernel's own boot session UUID. It is not readable on every iOS version, so it cannot be the only source.
+        if let session = bootSessionUUID(), !session.isEmpty { return session }
+        // 2. When this boot started. It changes only on a restart (or a large clock correction, which at worst makes
+        //    the time check report "unverified", never "consistent").
+        var mib: [Int32] = [CTL_KERN, KERN_BOOTTIME]
+        var boot = timeval()
+        var size = MemoryLayout<timeval>.stride
+        let rc = mib.withUnsafeMutableBufferPointer { buffer -> Int32 in
+            sysctl(buffer.baseAddress, UInt32(buffer.count), &boot, &size, nil, 0)
+        }
+        if rc == 0 && boot.tv_sec > 0 { return "boottime-\(boot.tv_sec)" }
+        // 3. Last resort: when the phone started, worked out from the two clocks, in whole minutes.
+        return "uptime-\((wallMs() - monotonicMs()) / 60_000)"
+    }
+
+    private func bootSessionUUID() -> String? {
         var size = 0
         if sysctlbyname("kern.bootsessionuuid", nil, &size, nil, 0) != 0 || size <= 1 { return nil }
         var buffer = [CChar](repeating: 0, count: size)
