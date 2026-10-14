@@ -5,6 +5,7 @@ import UIKit
 enum CaptureFailure: Error {
     case denied
     case failed
+    case failedWith(String)
     case cancelled
     case empty
 
@@ -12,6 +13,8 @@ enum CaptureFailure: Error {
         switch self {
         case .denied: return "camera-denied"
         case .failed: return "camera-failed"
+        // The reason follows the code, so the app can show why the camera failed instead of a generic message.
+        case .failedWith(let detail): return "camera-failed: \(detail)"
         case .cancelled: return "camera-cancelled"
         case .empty: return "empty-bytes"
         }
@@ -55,7 +58,7 @@ final class CameraEngine: NSObject, AVCapturePhotoCaptureDelegate {
         queue.async {
             self.apply(self.position)
             guard self.configured else {
-                completion(.failure(CaptureFailure.failed))
+                completion(.failure(CaptureFailure.failedWith("the camera session has no usable camera input")))
                 return
             }
             if !self.session.isRunning { self.session.startRunning() }
@@ -75,8 +78,8 @@ final class CameraEngine: NSObject, AVCapturePhotoCaptureDelegate {
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         let callback = pending
         pending = nil
-        if error != nil {
-            callback?(.failure(CaptureFailure.failed))
+        if let error {
+            callback?(.failure(CaptureFailure.failedWith(error.localizedDescription)))
             return
         }
         guard let data = photo.fileDataRepresentation(), !data.isEmpty else {

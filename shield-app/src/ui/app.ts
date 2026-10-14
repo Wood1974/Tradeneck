@@ -436,10 +436,15 @@ const CAPTURE_ERRORS: Record<string, string> = {
   "camera-failed": "The camera did not return a photo. Try again.",
   "empty-bytes": "The camera returned an empty photo. Try again.",
   "plugin-missing": "The camera plugin is not installed in this build.",
+  "seal-failed": "The camera took a photo, but Shield could not seal it.",
   "not-verified": "Sign on first: Shield seals photos only after an ID check and a signed statement.",
 };
 
-const captureErrorText = (code: string): string => CAPTURE_ERRORS[code] ?? `Capture failed (${code}).`;
+const captureErrorText = (code: string, detail?: string): string => {
+  const base = CAPTURE_ERRORS[code] ?? `Capture failed (${code}).`;
+  // The reason is shown for the two failures that are not the person's to fix, so a bug on a phone can be reported exactly.
+  return detail && (code === "camera-failed" || code === "seal-failed") ? `${base} Reason: ${detail}` : base;
+};
 
 function sealedNote(res: CaptureOk, compact: boolean): string {
   if (res.hardware) {
@@ -504,7 +509,7 @@ async function onSlot(id: string): Promise<void> {
   if (isNativeOriginAvailable()) {
     const res = await captureNative(id, facing === "user" ? "front" : "back");
     if ("error" in res) {
-      status = captureErrorText(res.error);
+      status = captureErrorText(res.error, res.detail);
       render();
       return;
     }
@@ -542,7 +547,7 @@ async function onAct(act: string): Promise<void> {
     await guarded(async () => {
       const res = await captureNative(null, facing === "user" ? "front" : "back");
       if ("error" in res) {
-        status = captureErrorText(res.error);
+        status = captureErrorText(res.error, res.detail);
         render();
         return;
       }
@@ -558,7 +563,7 @@ async function onAct(act: string): Promise<void> {
     await guarded(async () => {
       const res = await captureNative(null, facing === "user" ? "front" : "back");
       if ("error" in res) {
-        toast = { text: captureErrorText(res.error), id: "" };
+        toast = { text: captureErrorText(res.error, res.detail), id: "" };
       } else {
         await reload();
         const rec = res.item.record;

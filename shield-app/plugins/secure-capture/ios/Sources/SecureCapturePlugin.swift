@@ -216,7 +216,7 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
     private func presentCapture(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             guard let host = self.bridge?.viewController else {
-                call.reject("camera-failed")
+                call.reject("camera-failed: no view to show the camera in")
                 return
             }
             let facing: AVCaptureDevice.Position = call.getString("facing") == "front" ? .front : .back
@@ -336,7 +336,8 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
             envelope["photoBase64"] = shot.jpeg.base64EncodedString()
             finish(call, envelope)
         } catch {
-            fail(call, "seal-failed")
+            // The reason follows the code so the app can show it. Nothing secret is in these messages.
+            fail(call, "seal-failed: \(error)")
         }
     }
 
