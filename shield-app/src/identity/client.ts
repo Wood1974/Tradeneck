@@ -21,6 +21,10 @@ export interface IdentityApi {
   start(): Promise<{ sessionId: string; status: IdStatus; url: string | null }>;
   status(): Promise<{ sessionId: string | null; status: IdStatus; verified: boolean }>;
   submitNote(note: SignedNote): Promise<{ attestationId: string; noteSha256: string; receipt: Receipt }>;
+  /** A one-time challenge to bind an Apple App Attest proof to. */
+  attestChallenge(): Promise<{ nonce: string }>;
+  /** Hands the server Apple's proof for a key. The server checks it against Apple's root and answers `trusted: true`. */
+  attestRegister(proof: { keyId: string; nonce: string; attestation: string }): Promise<{ trusted: boolean; environment?: string }>;
 }
 
 // The access token is kept in memory only. Closing the app signs out; nothing secret is written to disk.
@@ -52,10 +56,20 @@ const authed = (extra: RequestInit = {}): RequestInit => {
 // Codes the server uses when the token is missing, wrong, expired or revoked.
 const SESSION_ENDED = new Set(["authorization_required", "invalid_access_token"]);
 
-/** Calls an authenticated route. If the server says the sign-in has ended, drop the token so sign-on starts again. */
-async function authedCall<T>(path: string, init: RequestInit = {}): Promise<T> {
+// The App Attest routes take form fields, not JSON.
+const authedForm = (fields: Record<string, string>): RequestInit => {
+  if (!token) throw new IdentityError("not-signed-in");
+  return {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Bearer ${token}` },
+    body: new URLSearchParams(fields).toString(),
+  };
+};
+
+/** Runs an authenticated call. If the server says the sign-in has ended, drop the token so sign-on starts again. */
+async function withSession<T>(run: () => Promise<T>): Promise<T> {
   try {
-    return await call<T>(`${API_BASE}${path}`, authed(init));
+    return await run();
   } catch (err) {
     if (err instanceof IdentityError && SESSION_ENDED.has(err.code)) {
       token = null;
@@ -64,6 +78,9 @@ async function authedCall<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw err;
   }
 }
+
+const authedCall = <T>(path: string, init: RequestInit = {}): Promise<T> => withSession(() => call<T>(`${API_BASE}${path}`, authed(init)));
+const authedFormCall = <T>(path: string, fields: Record<string, string>): Promise<T> => withSession(() => call<T>(`${API_BASE}${path}`, authedForm(fields)));
 
 const real: IdentityApi = {
   signedIn: () => token !== null,
@@ -83,6 +100,8 @@ const real: IdentityApi = {
   start: () => authedCall("/identity/start", { method: "POST", body: JSON.stringify({ consent: true, consentVersion: CONSENT_VERSION }) }),
   status: () => authedCall("/identity/status"),
   submitNote: (note) => authedCall("/identity/note", { method: "POST", body: JSON.stringify(note) }),
+  attestChallenge: () => authedFormCall("/shield/attest/challenge", {}),
+  attestRegister: (p) => authedFormCall("/shield/attest", { key_id: p.keyId, nonce: p.nonce, attestation: p.attestation }),
 };
 
 /** Production uses the real service. Test builds (`--mode e2e`) swap in a stand-in; production bundles never contain it. */

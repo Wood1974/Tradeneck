@@ -88,3 +88,41 @@ describe("calls that need a sign-in", () => {
     expect(identityApi().signedIn()).toBe(false);
   });
 });
+
+describe("Apple device check routes", () => {
+  it("sends form fields with the bearer token, the way the Shield server reads them", async () => {
+    const { identityApi, API_BASE } = await load();
+    const login = reply(200, { access_token: "tok" });
+    await identityApi().signIn("a@b.test", "correct-horse-battery");
+    login.mockClear();
+    const fetchMock = reply(200, { nonce: "n-1", expires_at: 1 });
+    expect(await identityApi().attestChallenge()).toMatchObject({ nonce: "n-1" });
+    let [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(`${API_BASE}/shield/attest/challenge`);
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/x-www-form-urlencoded");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tok");
+
+    fetchMock.mockClear();
+    reply(200, { trusted: true, status: "attested", environment: "production" });
+    const reg = vi.mocked(fetch);
+    await identityApi().attestRegister({ keyId: "k=", nonce: "n-1", attestation: "A+B/c==" });
+    [url, init] = reg.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(`${API_BASE}/shield/attest`);
+    const body = new URLSearchParams(init.body as string);
+    expect(Object.fromEntries(body)).toEqual({ key_id: "k=", nonce: "n-1", attestation: "A+B/c==" });
+  });
+
+  it("surfaces the server's reason when it rejects Apple's proof", async () => {
+    const { identityApi } = await load();
+    reply(200, { access_token: "tok" });
+    await identityApi().signIn("a@b.test", "correct-horse-battery");
+    reply(422, { detail: "app_id_hash_mismatch" });
+    await expect(identityApi().attestRegister({ keyId: "k", nonce: "n", attestation: "a" })).rejects.toMatchObject({ code: "app_id_hash_mismatch" });
+  });
+
+  it("refuses to call while signed out", async () => {
+    const { identityApi } = await load();
+    await expect(identityApi().attestChallenge()).rejects.toMatchObject({ code: "not-signed-in" });
+  });
+});

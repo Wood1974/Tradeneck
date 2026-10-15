@@ -23,6 +23,18 @@ export class SecureCaptureWeb extends WebPlugin {
     throw this.unavailable(UNAVAILABLE);
   }
 
+  async appAttestStatus() {
+    throw this.unavailable(UNAVAILABLE);
+  }
+
+  async appAttestEnroll() {
+    throw this.unavailable(UNAVAILABLE);
+  }
+
+  async appAttestConfirm() {
+    throw this.unavailable(UNAVAILABLE);
+  }
+
   async resetKey() {
     throw this.unavailable(UNAVAILABLE);
   }
