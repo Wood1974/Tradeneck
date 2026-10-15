@@ -240,7 +240,7 @@ function closeView(ctx: ConstructionCtx, job: Job | undefined): string {
     </div>
     <div class="form">
       <label>CLOSED BY</label>
-      <select id="c-close-role">${opt("homeowner", "Homeowner", closeRole)}${opt("sub", "Subcontractor", closeRole)}${opt("gc", "General contractor", closeRole)}${opt("admin", "Admin", closeRole)}</select>
+      <select id="c-close-role">${opt("homeowner", "Homeowner", closeRole)}${opt("sub", "Subcontractor", closeRole)}${opt("gc", "General contractor", closeRole)}</select>
       <label>CLOSE NOTES</label>
       <textarea id="c-close-notes" rows="3" placeholder="Punch remaining, extras, who accepted the work.">${esc(closeNotes)}</textarea>
       <label class="check"><input type="checkbox" id="c-allow-missing" ${allowMissing ? "checked" : ""}/> Allow close with ${missing.length} unsealed point${missing.length === 1 ? "" : "s"} (gaps are filed as gaps)</label>
