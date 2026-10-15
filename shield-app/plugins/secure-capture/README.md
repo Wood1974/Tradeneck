@@ -47,13 +47,13 @@ The ticket clock compared here is the phone's wall clock at countersign (`ticket
 clientData = UTF-8("shield-genesis-v1") || SHA256(ticket_hash_raw || canonical(ticket_clock))
 ```
 
-Android signs `clientData` with `SHA256withECDSA` and must not pre-hash. iOS Secure Enclave signs the same `clientData`. App Attest would pass `SHA256(clientData)` to `generateAssertion`. That call is not made.
+Android signs `clientData` with `SHA256withECDSA` and must not pre-hash. iOS Secure Enclave signs the same `clientData`. The genesis signature carries no App Attest assertion. Per-photo seals do (see below).
 
 `ticket_clock` is the canonical JSON of `wall_time_ms`, `monotonic_ms`, and `boot_id` and/or `boot_count`.
 
 ## Not implemented
 
-- Apple App Attest (`app_attest_assertion_b64` is null). `attestKey` needs the network.
+- Server-side checking of Apple App Attest assertions. iOS enrolls a key (`appAttestEnroll`, needs the network, then `appAttestConfirm` once the server accepted Apple's proof) and each seal then stores `app_attest_assertion_b64` and `app_attest_key_id` beside the record, unsigned. The client data hash is the record's own 32-byte `record_hash`. If Apple refuses, the seal still succeeds and `app_attest_error` says why. No server accepts the plugin's records yet, so no assertion is verified.
 - Google Play Integrity (`play_integrity_token` is null). Request it at enrollment or sync, not on the offline seal path.
 - Upload, TSA countersign, and batch receipts.
 

@@ -36,7 +36,11 @@ export interface NativeSealResult {
   key_security_level: "StrongBox" | "TEE" | "SecureEnclave" | "software" | "unknown";
   attestation_chain_b64: string | null;
   attestation_challenge_source: "local" | "server";
-  app_attest_assertion_b64: null;
+  /** Apple's statement about this record hash, from the enrolled App Attest key. Null when the phone is not enrolled. */
+  app_attest_assertion_b64: string | null;
+  app_attest_key_id?: string | null;
+  /** Why no assertion was made, when the phone was enrolled but Apple refused or timed out. */
+  app_attest_error?: string;
   play_integrity_token: null;
   ticket_origin: "local" | "server";
   anchor_hash: string;
@@ -80,6 +84,12 @@ export interface SecureCapturePlugin {
     play_integrity_token: null;
     app_attest_assertion_b64: null;
   }>;
+  /** iOS only. Whether this phone has an App Attest key that the server accepted. */
+  appAttestStatus(): Promise<{ supported: boolean; enrolled: boolean; key_id: string | null }>;
+  /** iOS only. Makes a new App Attest key and Apple's proof for it, bound to the server's challenge. Needs the network. */
+  appAttestEnroll(options: { nonce: string }): Promise<{ key_id: string; attestation_b64: string }>;
+  /** iOS only. Call after the server accepted the proof: later seals then carry an assertion. */
+  appAttestConfirm(options: { keyId: string }): Promise<void>;
   resetKey(): Promise<void>;
   adoptServerTicket(options: { ticketId: string; ticketHash: string; ticketClock: TicketClock }): Promise<void>;
   listQueue(options?: { ticketId?: string }): Promise<{ records: Array<{ record_hash: string; ticket_id: string; photo_sha256: string }> }>;

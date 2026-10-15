@@ -18,6 +18,8 @@ import { MAX_IMPORT_BYTES, parseBundle, verifyBundle, verifyItemOriginal } from 
 import { download, parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
 import type { CloseoutPacket } from "../types";
 import { attestation, bindIdentity, identityView, isAttested, loadIdentity } from "./identity";
+import { identityApi } from "../identity/client";
+import { appAttestState, enrollDevice, enrollErrorText, reasonOf, type AppAttestState } from "../native/appattest";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
 type Tab = "capture" | "jobs" | "vault" | "verify" | "construction";
@@ -40,6 +42,11 @@ let pinLng = "";
 let pinR = "200";
 let verifyOut = "";
 let packetOut: (PacketVerification & { packet: CloseoutPacket }) | null = null;
+// Apple App Attest enrollment (iPhone only). Enrolled means the server accepted Apple's proof for this phone's key.
+let appAttest: AppAttestState = { state: "not-ios" };
+let enrollBusy = false;
+let enrollMessage = "";
+let autoEnrollTried = false;
 
 const ctx: ConstructionCtx = {
   jobs: () => jobs,
@@ -56,6 +63,7 @@ export async function start(): Promise<void> {
   sealId = await deviceSealId();
   await initConstruction();
   await loadIdentity();
+  appAttest = await appAttestState();
   await reload();
   await restoreLastPacket(activeId);
   render();
@@ -117,7 +125,8 @@ function view(native: boolean, job: Job | undefined): string {
 
 function captureView(native: boolean, job: Job | undefined): string {
   const originChip = native ? `<span class="chip ok">NATIVE</span>` : `<span class="chip bad">NO CAPTURE IN BROWSER</span>`;
-  const camChip = native ? `<span class="chip">CAMERA READY · ${clock()}</span>${isAttested() ? (attestation()?.receipt.payload.testMode ? `<span class="chip bad">TEST ID CHECK · NO REAL ID</span>` : `<span class="chip ok">SIGNED NOTE ON FILE</span>`) : ""}` : "";
+  const enrolledChip = native && isAttested() && appAttest.state === "enrolled" ? `<span class="chip ok">DEVICE ENROLLED WITH APPLE</span>` : "";
+  const camChip = native ? `<span class="chip">CAMERA READY · ${clock()}</span>${isAttested() ? (attestation()?.receipt.payload.testMode ? `<span class="chip bad">TEST ID CHECK · NO REAL ID</span>` : `<span class="chip ok">SIGNED NOTE ON FILE</span>`) : ""}${enrolledChip}` : "";
   const flipLabel = facing === "environment" ? "USE FRONT CAMERA" : "USE BACK CAMERA";
   const finderBody = native
     ? `<div class="icon-aperture"><span></span></div>
@@ -142,9 +151,53 @@ function captureView(native: boolean, job: Job | undefined): string {
       ${finderBody}
       ${status ? `<p class="foot-note">${esc(status)}</p>` : ""}
     </section>
+    ${enrollCard()}
     ${job ? slots(job) : packChips()}
     <p class="foot-note">Bytes received. Origin proven: ${native ? "device path only" : "no"}.</p>
   `;
+}
+
+/** Offered on an iPhone that has signed on but is not enrolled with Apple. Never blocks taking a photo. */
+function enrollCard(): string {
+  if (!isNativeOriginAvailable() || !isAttested()) return "";
+  if (appAttest.state === "not-ios" || appAttest.state === "enrolled") return "";
+  if (appAttest.state === "unsupported") {
+    return `<p class="foot-note">Apple's device check is not available on this phone. Photos are still sealed and signed with the hardware key.</p>`;
+  }
+  const signedIn = identityApi().signedIn();
+  return `
+    <section class="finder signon" aria-labelledby="aa-h">
+      <div class="finder-top"><span class="chip">APPLE DEVICE CHECK</span><span class="chip warn">NOT ENROLLED</span></div>
+      <h1 id="aa-h">Enroll this phone with Apple</h1>
+      <p class="fine">Needs signal, once. Apple vouches that this app is a genuine copy running on a genuine iPhone, and the Shield server checks that. Photos then carry Apple's proof, which nothing checks yet.</p>
+      ${signedIn ? "" : `<label for="aa-email">Email</label><input id="aa-email" type="email" autocomplete="username" /><label for="aa-pass">Password</label><input id="aa-pass" type="password" autocomplete="current-password" />`}
+      <div class="actions"><button class="btn" data-act="attest-enroll"${enrollBusy ? " disabled" : ""}>${enrollBusy ? "ENROLLING…" : "ENROLL THIS PHONE"}</button></div>
+      ${enrollMessage ? `<p class="foot-note" role="status">${esc(enrollMessage)}</p>` : ""}
+    </section>`;
+}
+
+async function runEnroll(creds: { email: string; pass: string } | null): Promise<void> {
+  enrollBusy = true;
+  enrollMessage = "";
+  render();
+  try {
+    if (creds) await identityApi().signIn(creds.email, creds.pass);
+    const result = await enrollDevice();
+    enrollMessage = result.ok ? "" : enrollErrorText(result.reason);
+  } catch (err) {
+    enrollMessage = enrollErrorText(reasonOf(err));
+  }
+  enrollBusy = false;
+  appAttest = await appAttestState();
+  render();
+}
+
+// Right after sign-on the phone is online and signed in, so enroll once without another tap. A failure shows on the card.
+function maybeAutoEnroll(): void {
+  if (autoEnrollTried || enrollBusy || appAttest.state !== "not-enrolled") return;
+  if (!isNativeOriginAvailable() || !isAttested() || !identityApi().signedIn()) return;
+  autoEnrollTried = true;
+  void runEnroll(null);
 }
 
 function packChips(): string {
@@ -342,6 +395,7 @@ function bind(): void {
   });
   if (tab === "construction") bindConstruction(ctx);
   bindIdentity(root(), render);
+  maybeAutoEnroll();
 
   const packSel = document.getElementById("pack-sel") as HTMLSelectElement | null;
   if (packSel) packSel.onchange = () => {
@@ -449,9 +503,15 @@ const captureErrorText = (code: string, detail?: string): string => {
 function sealedNote(res: CaptureOk, compact: boolean): string {
   if (res.hardware) {
     const level = res.hardware.key_security_level;
+    // Apple's proof is recorded with the photo but nothing checks it yet, so say exactly that and no more.
+    const apple = res.hardware.app_attest_assertion_b64
+      ? " · Apple device proof recorded, not yet checked"
+      : res.hardware.app_attest_error
+        ? ` · Apple device proof failed: ${res.hardware.app_attest_error}`
+        : "";
     return compact
-      ? `Sealed ${res.item.record.sha256.slice(0, 8)} · hardware key ${level}`
-      : `Sealed on this device · hardware key ${level}`;
+      ? `Sealed ${res.item.record.sha256.slice(0, 8)} · hardware key ${level}${apple}`
+      : `Sealed on this device · hardware key ${level}${apple}`;
   }
   const plain = res.item.record.attest.kind === "none";
   if (compact) return `Sealed ${res.item.record.sha256.slice(0, 8)} · ${plain ? "no platform attestation" : "attestation claimed"}`;
@@ -526,6 +586,19 @@ async function onSlot(id: string): Promise<void> {
 }
 
 async function onAct(act: string): Promise<void> {
+  if (act === "attest-enroll") {
+    if (enrollBusy) return;
+    // Read the form before runEnroll re-renders, which would wipe what was typed.
+    const email = (document.getElementById("aa-email") as HTMLInputElement | null)?.value.trim() ?? "";
+    const pass = (document.getElementById("aa-pass") as HTMLInputElement | null)?.value ?? "";
+    if (!identityApi().signedIn() && (!email || !pass)) {
+      enrollMessage = "Enter the email and password you signed in with.";
+      render();
+      return;
+    }
+    await runEnroll(identityApi().signedIn() ? null : { email, pass });
+    return;
+  }
   if (act === "spec") {
     specOpen = !specOpen;
     render();

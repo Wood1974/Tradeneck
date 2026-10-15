@@ -5,13 +5,7 @@ import Security
 /// P-256 key that stays in the Secure Enclave when the device has one.
 /// The simulator and a few older devices do not. Those fall back to a software
 /// P-256 key in the Keychain, and the record says `software` so a server can refuse it.
-/// The private key is never exported. App Attest is a later enrollment step.
-///
-/// TODO(app-attest): at enrollment call DCAppAttestService.attestKey, and per record
-/// call generateAssertion(keyId, clientDataHash: SHA256(clientData)) or the raw
-/// 32-byte record hash, once the server names which clientDataHash it expects.
-/// attestKey needs the network, so the offline seal path must not call it.
-/// This type does not call DCAppAttestService.
+/// The private key is never exported. App Attest is a separate key, handled in AppAttest.swift.
 enum EnclaveSigner {
     struct Material {
         let publicUncompressedB64: String

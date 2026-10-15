@@ -22,9 +22,14 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "exportQueue", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "readOriginal", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "verifyLocal", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "appAttestStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "appAttestEnroll", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "appAttestConfirm", returnType: CAPPluginReturnPromise),
     ]
 
     private let sealQueue = DispatchQueue(label: "app.tradedeck.shield.seal")
+    // Enrollment waits on Apple and the network, so it must not hold up a seal.
+    private let attestQueue = DispatchQueue(label: "app.tradedeck.shield.attest")
     private let sealLock = NSLock()
     private let location = LocationFix()
 
@@ -75,7 +80,7 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
             do {
                 let challenge = self.base64(call.getString("challengeBase64"))
                 let material = try EnclaveSigner.ensure(serverChallenge: challenge)
-                // TODO(app-attest): DCAppAttestService.attestKey is an online enrollment step.
+                // App Attest enrollment is its own step: appAttestEnroll / appAttestConfirm. This key is separate.
                 // TODO(play-integrity): not applicable on iOS. The Android plugin owns that hook.
                 let json: [String: Any] = [
                     "public_key_uncompressed_b64": material.publicUncompressedB64,
@@ -91,6 +96,41 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
                 self.fail(call, "seal-failed")
             }
         }
+    }
+
+    @objc func appAttestStatus(_ call: CAPPluginCall) {
+        let keyId = AppAttest.confirmedKeyId()
+        finish(call, [
+            "supported": AppAttest.isSupported,
+            "enrolled": keyId != nil,
+            "key_id": keyId.map { $0 as Any } ?? NSNull(),
+        ])
+    }
+
+    /// Step one of enrollment. Needs the network (Apple is contacted) and a fresh server challenge.
+    @objc func appAttestEnroll(_ call: CAPPluginCall) {
+        guard let nonce = call.getString("nonce"), !nonce.isEmpty else {
+            fail(call, "attest-failed: no challenge from the server")
+            return
+        }
+        attestQueue.async {
+            do {
+                let enrolled = try AppAttest.enroll(nonce: nonce)
+                self.finish(call, ["key_id": enrolled.keyId, "attestation_b64": enrolled.attestation.base64EncodedString()])
+            } catch {
+                self.fail(call, "attest-failed: \(AppAttest.describe(error))")
+            }
+        }
+    }
+
+    /// Step two, after the server accepted the proof. From here seals carry an assertion.
+    @objc func appAttestConfirm(_ call: CAPPluginCall) {
+        guard let keyId = call.getString("keyId"), !keyId.isEmpty else {
+            fail(call, "attest-failed: no key id")
+            return
+        }
+        AppAttest.confirm(keyId: keyId)
+        call.resolve()
     }
 
     @objc func resetKey(_ call: CAPPluginCall) {
@@ -115,7 +155,7 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
                 let material = try EnclaveSigner.ensure(serverChallenge: nil)
                 let client = try CaptureRecord.genesisClientData(ticketHashHex: ticketHash, observation: normalized)
                 let der = try EnclaveSigner.sign(client)
-                // TODO(app-attest): generateAssertion(keyId, clientDataHash: SHA256(client)) is not called.
+                // The genesis signature carries no App Attest assertion; seals do (see sealShot).
                 let json: [String: Any] = [
                     "signature_der_b64": der.base64EncodedString(),
                     "signature_kind": "secure-enclave-p256",
@@ -312,7 +352,17 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
             let recordHash = sealed["record_hash"] as? String ?? ""
             hashes.append(recordHash)
             chain["records"] = hashes
-            let body: [String: Any] = [
+            // Apple's statement about this record hash, from the enrolled App Attest key. It is stored beside the
+            // signed record, not inside it, and a failure here never stops the seal: the reason is kept instead.
+            var attestFields: [String: Any] = ["app_attest_key_id": NSNull(), "app_attest_assertion_b64": NSNull()]
+            do {
+                if let proof = try AppAttest.assertion(recordHashHex: recordHash) {
+                    attestFields = ["app_attest_key_id": proof.keyId, "app_attest_assertion_b64": proof.assertion.base64EncodedString()]
+                }
+            } catch {
+                attestFields["app_attest_error"] = AppAttest.describe(error)
+            }
+            var body: [String: Any] = [
                 "schema": "tradedeck.shield.capture.v1",
                 "record": sealed,
                 "sensor_snapshot": snapshot,
@@ -323,13 +373,13 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
                 "key_security_level": material.securityLevel,
                 "attestation_chain_b64": NSNull(),
                 "attestation_challenge_source": material.challengeSource,
-                "app_attest_assertion_b64": NSNull(),
                 "play_integrity_token": NSNull(),
                 "ticket_origin": chain["ticket_origin"] as? String ?? "local",
                 "anchor_hash": chain["anchor_hash"] as? String ?? "",
                 "ticket_clock": chain["ticket_clock"] as? [String: Any] ?? [:],
                 "mime": "image/jpeg",
             ]
+            body.merge(attestFields) { _, new in new }
             try Outbox.writeRecord(recordHash: recordHash, json: body, photo: shot.jpeg)
             try Outbox.writeChain(ticketId: ticketId, chain: chain)
             var envelope = body
