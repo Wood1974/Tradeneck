@@ -63,11 +63,21 @@ export async function start(): Promise<void> {
   sealId = await deviceSealId();
   await initConstruction();
   await loadIdentity();
-  appAttest = await appAttestState();
   await reload();
   await restoreLastPacket(activeId);
   render();
   warmNativeCamera(facing === "user" ? "front" : "back", activeId ?? undefined);
+  // Apple's device check is optional, so the screen is drawn before asking the phone about it and never waits on it.
+  void refreshAppAttest();
+}
+
+async function refreshAppAttest(): Promise<void> {
+  try {
+    appAttest = await appAttestState();
+  } catch {
+    return;
+  }
+  render();
 }
 
 async function reload(): Promise<void> {
@@ -188,8 +198,8 @@ async function runEnroll(creds: { email: string; pass: string } | null): Promise
     enrollMessage = enrollErrorText(reasonOf(err));
   }
   enrollBusy = false;
-  appAttest = await appAttestState();
   render();
+  await refreshAppAttest();
 }
 
 // Right after sign-on the phone is online and signed in, so enroll once without another tap. A failure shows on the card.
