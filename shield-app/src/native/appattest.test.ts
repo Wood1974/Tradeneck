@@ -109,3 +109,17 @@ describe("enrolling this phone with Apple", () => {
     expect(enrollErrorText("network")).toContain("Could not reach the Shield server");
   });
 });
+
+describe("the device check never holds the app up", () => {
+  it("gives up on a phone that never answers", async () => {
+    vi.useFakeTimers();
+    try {
+      appAttestStatus.mockReturnValueOnce(new Promise(() => undefined));
+      const pending = appAttestState();
+      await vi.advanceTimersByTimeAsync(4100);
+      expect(await pending).toEqual({ state: "not-enrolled" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

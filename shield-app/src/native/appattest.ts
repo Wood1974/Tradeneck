@@ -24,10 +24,21 @@ async function plugin() {
 
 const onIphone = (): boolean => import.meta.env.MODE !== "e2e" && isNativeOriginAvailable() && detectPlatform() === "ios";
 
+/** Gives up on a native call that never answers, so an optional feature can never hold the app up. */
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timed out")), ms);
+    work.then(
+      (v) => (clearTimeout(timer), resolve(v)),
+      (e) => (clearTimeout(timer), reject(e)),
+    );
+  });
+}
+
 export async function appAttestState(): Promise<AppAttestState> {
   if (!onIphone()) return { state: "not-ios" };
   try {
-    const s = await (await plugin()).appAttestStatus();
+    const s = await withTimeout(plugin().then((sc) => sc.appAttestStatus()), 4000);
     if (!s.supported) return { state: "unsupported" };
     return s.enrolled && s.key_id ? { state: "enrolled", keyId: s.key_id } : { state: "not-enrolled" };
   } catch {
@@ -51,11 +62,12 @@ export async function enrollDevice(): Promise<EnrollResult> {
   try {
     const { nonce } = await api.attestChallenge();
     const sc = await plugin();
-    const proof = await sc.appAttestEnroll({ nonce });
+    // The phone gives Apple 30 seconds; this only guards a call that never comes back at all.
+    const proof = await withTimeout(sc.appAttestEnroll({ nonce }), 45000);
     const accepted = await api.attestRegister({ keyId: proof.key_id, nonce, attestation: proof.attestation_b64 });
     if (!accepted.trusted) return { ok: false, reason: "server-rejected" };
     // Only now does the phone use this key. A rejected proof leaves nothing behind to retry against.
-    await sc.appAttestConfirm({ keyId: proof.key_id });
+    await withTimeout(sc.appAttestConfirm({ keyId: proof.key_id }), 10000);
     return { ok: true, keyId: proof.key_id };
   } catch (err) {
     return { ok: false, reason: reasonOf(err) };
