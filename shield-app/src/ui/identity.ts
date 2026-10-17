@@ -4,6 +4,8 @@ import { IdentityError, identityApi, type IdStatus } from "../identity/client";
 import { NOTE_STATEMENT, noteSha256, signNote, type Attestation } from "../identity/note";
 import { checkReceipt } from "../identity/receipt";
 import { currentAttestation, saveAttestation } from "../identity/store";
+import { resetEntry, resetOpen, resetView } from "./reset";
+import { bindPasswordToggles, EMAIL_ATTRS, passwordField } from "./fields";
 
 // Sign-on: account sign-in, then an ID check run by Stripe Identity (photo ID plus a live selfie match),
 // then a statement signed with this device's key. Nothing can be sealed until all three are done.
@@ -62,16 +64,17 @@ function noticeText(): string {
 export function identityView(): string {
   const s = step();
   const body: Record<Step, string> = {
-    signin: `
+    signin: resetOpen() ? resetView() : `
       <p class="lede">Shield checks who is taking the photos, once, before it will seal any. Sign in with the account your Shield administrator made for you.</p>
       <label for="id-email">Email</label>
-      <input id="id-email" type="email" autocomplete="username" value="${esc(email)}" />
+      <input id="id-email" type="email" autocomplete="username" ${EMAIL_ATTRS} value="${esc(email)}" />
       <label for="id-pass">Password</label>
-      <input id="id-pass" type="password" autocomplete="current-password" />
+      ${passwordField("id-pass", "current-password")}
       <div class="actions">
         <button class="btn" data-act="id-signin"${busy ? " disabled" : ""}>SIGN IN</button>
       </div>
-      <p class="fine">There is no sign-up here. Ask your administrator if you need an account or a new password.</p>`,
+      ${resetEntry()}
+      <p class="fine">There is no sign-up here. Ask your administrator if you need an account.</p>`,
     consent: `
       <p class="lede">Step 2 of 3: an ID check. Stripe Identity will ask you to photograph a government photo ID and take a live selfie, then check that the face matches the ID.</p>
       <p class="fine">Stripe, not Shield, receives and keeps the ID and selfie images. Shield keeps only the result, your signed statement and the time. No ID or selfie image is stored on this phone or in TradeDeck.</p>
@@ -99,7 +102,7 @@ export function identityView(): string {
       <h1 id="id-h">Verify the photographer</h1>
       <p class="fine notice" id="id-notice" role="status">${esc(noticeText())}</p>
       ${body[s]}
-      <p class="foot-note" role="status">${esc(message)}</p>
+      <p class="foot-note" role="status" data-id-status>${esc(message)}</p>
     </section>
     <p class="foot-note">A signed note ties photos to a person who passed an ID check. It does not show that what a photo shows is true. You can still verify other people's records without signing on.</p>`;
 }
@@ -128,17 +131,27 @@ async function run(rerender: () => void, fn: () => Promise<void>, button: Elemen
   message = "";
   // Disable in place instead of re-rendering, which would wipe what was typed into the form.
   (button as HTMLButtonElement | null)?.setAttribute("disabled", "");
+  let failed = false;
   try {
     await fn();
   } catch (err) {
+    failed = true;
     message = errorText(codeOf(err));
   } finally {
     busy = false;
-    rerender();
+    // A failure on the sign-in form is shown in place, so the person can fix a typo instead of retyping everything.
+    const line = document.querySelector("[data-id-status]");
+    if (failed && step() === "signin" && line) {
+      line.textContent = message;
+      (button as HTMLButtonElement | null)?.removeAttribute("disabled");
+    } else {
+      rerender();
+    }
   }
 }
 
 export function bindIdentity(root: HTMLElement, rerender: () => void): void {
+  bindPasswordToggles(root);
   const emailEl = root.querySelector<HTMLInputElement>("#id-email");
   if (emailEl) emailEl.oninput = () => (email = emailEl.value.trim());
   if (!listening) {

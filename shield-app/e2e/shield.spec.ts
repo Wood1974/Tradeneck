@@ -46,6 +46,14 @@ async function asNativeApp(page: Page): Promise<void> {
         if (pass !== "correct-horse") throw { code: "bad-credentials" };
         (this as unknown as { _in: boolean })._in = true;
       },
+      async requestReset(email: string) {
+        w.__idCalls.push("requestReset:" + email);
+      },
+      async confirmReset(email: string, code: string, password: string) {
+        w.__idCalls.push("confirmReset:" + email);
+        if (code !== "12345678") throw { code: "invalid_or_expired_code" };
+        if (password.length < 12) throw { code: "password_length_invalid" };
+      },
       async start() {
         w.__idCalls.push("start");
         this._status = "requires_input";
@@ -321,6 +329,15 @@ test("an unverified phone cannot seal: sign-on comes first, step by step", async
   await page.fill("#id-pass", "wrong");
   await page.click('[data-act="id-signin"]');
   await expect(page.locator(".foot-note", { hasText: "not accepted" })).toBeVisible();
+  // A wrong password keeps what was typed, and SHOW lets the person see it to fix it.
+  await expect(page.locator("#id-email")).toHaveValue("pro@example.test");
+  await expect(page.locator("#id-pass")).toHaveValue("wrong");
+  await expect(page.locator("#id-pass")).toHaveAttribute("type", "password");
+  await page.click('[data-pw-toggle="id-pass"]');
+  await expect(page.locator("#id-pass")).toHaveAttribute("type", "text");
+  await expect(page.locator("#id-pass")).toHaveValue("wrong");
+  await page.click('[data-pw-toggle="id-pass"]');
+  await expect(page.locator("#id-pass")).toHaveAttribute("type", "password");
   await page.fill("#id-pass", "correct-horse");
   await page.click('[data-act="id-signin"]');
 
@@ -355,6 +372,30 @@ test("an unverified phone cannot seal: sign-on comes first, step by step", async
   await page.click('[data-act="native"]');
   await expect(page.locator(".thumb")).toBeVisible();
   await page.click('[data-act="export"]');
+});
+
+test("a forgotten password is reset with an emailed code, from the sign-on screen", async ({ page }) => {
+  await asNativeApp(page);
+  await page.goto("/");
+  await page.fill("#id-email", "pro@example.test");
+  await page.click('[data-act="rs-open"]');
+  await expect(page.locator("#rs-email")).toHaveValue("pro@example.test");
+  await page.click('[data-act="rs-send"]');
+  await expect(page.locator('[data-act="rs-confirm"]')).toBeVisible();
+  // A wrong code says so in place and keeps what was typed.
+  await page.fill("#rs-code", "00000000");
+  await page.fill("#rs-new", "a-long-new-password");
+  await page.fill("#rs-new2", "a-long-new-password");
+  await page.click('[data-act="rs-confirm"]');
+  await expect(page.locator("[data-reset-status]")).toContainText("wrong or has expired");
+  await expect(page.locator("#rs-new")).toHaveValue("a-long-new-password");
+  await page.fill("#rs-code", "1234 5678");
+  await page.click('[data-act="rs-confirm"]');
+  await expect(page.locator(".fine", { hasText: "Password changed" })).toBeVisible();
+  // Back on the sign-in screen, with the notice shown.
+  await expect(page.locator('[data-act="id-signin"]')).toBeVisible();
+  const calls = await page.evaluate(() => (window as unknown as TestWindow).__idCalls);
+  expect(calls).toEqual(["requestReset:pro@example.test", "confirmReset:pro@example.test", "confirmReset:pro@example.test"]);
 });
 
 test("sign-on offers no self sign-up, and an ended sign-in sends the person back to sign in", async ({ page }) => {

@@ -19,6 +19,8 @@ import { download, parseCloseoutPacket, verifyCloseoutPacket, type PacketVerific
 import type { CloseoutPacket } from "../types";
 import { attestation, bindIdentity, identityView, isAttested, loadIdentity } from "./identity";
 import { identityApi } from "../identity/client";
+import { bindReset, resetEntry, resetOpen, resetView } from "./reset";
+import { EMAIL_ATTRS, passwordField } from "./fields";
 import { appAttestState, enrollDevice, enrollErrorText, reasonOf, type AppAttestState } from "../native/appattest";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
@@ -72,12 +74,16 @@ export async function start(): Promise<void> {
 }
 
 async function refreshAppAttest(): Promise<void> {
+  let next: AppAttestState;
   try {
-    appAttest = await appAttestState();
+    next = await appAttestState();
   } catch {
     return;
   }
-  render();
+  // Redraw only on a change: a redraw wipes whatever is half-typed into a form.
+  const changed = JSON.stringify(next) !== JSON.stringify(appAttest);
+  appAttest = next;
+  if (changed) render();
 }
 
 async function reload(): Promise<void> {
@@ -180,16 +186,26 @@ function enrollCard(): string {
       <div class="finder-top"><span class="chip">APPLE DEVICE CHECK</span><span class="chip warn">NOT ENROLLED</span></div>
       <h1 id="aa-h">Enroll this phone with Apple</h1>
       <p class="fine">Needs signal, once. Apple vouches that this app is a genuine copy running on a genuine iPhone, and the Shield server checks that. Photos then carry Apple's proof, which nothing checks yet.</p>
-      ${signedIn ? "" : `<label for="aa-email">Email</label><input id="aa-email" type="email" autocomplete="username" /><label for="aa-pass">Password</label><input id="aa-pass" type="password" autocomplete="current-password" />`}
+      ${!signedIn && resetOpen() ? resetView() : `${signedIn ? "" : `<label for="aa-email">Email</label><input id="aa-email" type="email" autocomplete="username" ${EMAIL_ATTRS} /><label for="aa-pass">Password</label>${passwordField("aa-pass", "current-password")}`}
       <div class="actions"><button class="btn" data-act="attest-enroll"${enrollBusy ? " disabled" : ""}>${enrollBusy ? "ENROLLING…" : "ENROLL THIS PHONE"}</button></div>
-      ${enrollMessage ? `<p class="foot-note" role="status">${esc(enrollMessage)}</p>` : ""}
+      <p class="foot-note" role="status" data-enroll-status>${esc(enrollMessage)}</p>
+      ${signedIn ? "" : resetEntry()}`}
     </section>`;
 }
 
 async function runEnroll(creds: { email: string; pass: string } | null): Promise<void> {
   enrollBusy = true;
   enrollMessage = "";
-  render();
+  // With a form on screen, disable the button in place: a re-render would wipe the email and password just typed.
+  const button = document.querySelector<HTMLButtonElement>('[data-act="attest-enroll"]');
+  if (creds && button) {
+    button.setAttribute("disabled", "");
+    button.textContent = "ENROLLING…";
+    const line = document.querySelector("[data-enroll-status]");
+    if (line) line.textContent = "";
+  } else {
+    render();
+  }
   try {
     if (creds) await identityApi().signIn(creds.email, creds.pass);
     const result = await enrollDevice();
@@ -198,6 +214,14 @@ async function runEnroll(creds: { email: string; pass: string } | null): Promise
     enrollMessage = enrollErrorText(reasonOf(err));
   }
   enrollBusy = false;
+  const line = document.querySelector("[data-enroll-status]");
+  if (creds && button && button.isConnected && line && !identityApi().signedIn()) {
+    // Sign-in failed: say so under the form and leave what was typed, so a typo can be fixed.
+    line.textContent = enrollMessage;
+    button.removeAttribute("disabled");
+    button.textContent = "ENROLL THIS PHONE";
+    return;
+  }
   render();
   await refreshAppAttest();
 }
@@ -375,7 +399,7 @@ function bind(): void {
   });
   root().querySelectorAll("[data-act]").forEach((el) => {
     const act = (el as HTMLElement).dataset.act!;
-    if (act.startsWith("c-")) return;
+    if (act.startsWith("c-") || act.startsWith("rs-")) return;
     el.addEventListener("click", () => void onAct(act));
   });
   root().querySelectorAll("[data-pack]").forEach((el) => {
@@ -405,6 +429,7 @@ function bind(): void {
   });
   if (tab === "construction") bindConstruction(ctx);
   bindIdentity(root(), render);
+  bindReset(root(), render);
   maybeAutoEnroll();
 
   const packSel = document.getElementById("pack-sel") as HTMLSelectElement | null;
