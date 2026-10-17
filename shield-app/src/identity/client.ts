@@ -21,6 +21,10 @@ export interface IdentityApi {
   start(): Promise<{ sessionId: string; status: IdStatus; url: string | null }>;
   status(): Promise<{ sessionId: string | null; status: IdStatus; verified: boolean }>;
   submitNote(note: SignedNote): Promise<{ attestationId: string; noteSha256: string; receipt: Receipt }>;
+  /** Emails a one-time code to the account's address. The server answers the same whether or not the email has an account. */
+  requestReset(email: string): Promise<void>;
+  /** Spends the emailed code and sets a new password. Signs the account out everywhere. */
+  confirmReset(email: string, code: string, newPassword: string): Promise<void>;
   /** A one-time challenge to bind an Apple App Attest proof to. */
   attestChallenge(): Promise<{ nonce: string }>;
   /** Hands the server Apple's proof for a key. The server checks it against Apple's root and answers `trusted: true`. */
@@ -100,6 +104,16 @@ const real: IdentityApi = {
   start: () => authedCall("/identity/start", { method: "POST", body: JSON.stringify({ consent: true, consentVersion: CONSENT_VERSION }) }),
   status: () => authedCall("/identity/status"),
   submitNote: (note) => authedCall("/identity/note", { method: "POST", body: JSON.stringify(note) }),
+  async requestReset(email) {
+    await call(`${API_BASE}/shield/auth/forgot`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+  },
+  async confirmReset(email, code, newPassword) {
+    await call(`${API_BASE}/shield/auth/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, code, new_password: newPassword }),
+    });
+  },
   attestChallenge: () => authedFormCall("/shield/attest/challenge", {}),
   attestRegister: (p) => authedFormCall("/shield/attest", { key_id: p.keyId, nonce: p.nonce, attestation: p.attestation }),
 };
