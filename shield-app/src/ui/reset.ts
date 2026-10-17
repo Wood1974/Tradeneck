@@ -1,5 +1,6 @@
 import { esc } from "../esc";
 import { identityApi } from "../identity/client";
+import { bindPasswordToggles, EMAIL_ATTRS, passwordField } from "./fields";
 
 // Forgot password: an emailed one-time code. Shared by the two places a signed-out person can be: the sign-on
 // screen and the enroll card. The server answers the same whether or not the email has an account, so this screen
@@ -93,13 +94,13 @@ export function resetView(): string {
     return `
       <p class="lede">Enter the 8-digit code from the email, then choose a new password (at least 12 characters).</p>
       <label for="rs-email">Email</label>
-      <input id="rs-email" type="email" autocomplete="username" value="${esc(email)}" />
+      <input id="rs-email" type="email" autocomplete="username" ${EMAIL_ATTRS} value="${esc(email)}" />
       <label for="rs-code">Code</label>
       <input id="rs-code" inputmode="numeric" autocomplete="one-time-code" maxlength="12" />
       <label for="rs-new">New password</label>
-      <input id="rs-new" type="password" autocomplete="new-password" />
+      ${passwordField("rs-new", "new-password")}
       <label for="rs-new2">New password again</label>
-      <input id="rs-new2" type="password" autocomplete="new-password" />
+      ${passwordField("rs-new2", "new-password")}
       <div class="actions">
         <button class="btn" data-act="rs-confirm"${busy ? " disabled" : ""}>SET NEW PASSWORD</button>
         <button class="btn ghost small" data-act="rs-again"${busy ? " disabled" : ""}>SEND A NEW CODE</button>
@@ -110,7 +111,7 @@ export function resetView(): string {
   return `
     <p class="lede">Forgot your password? Enter your account email. If it has a Shield account, a one-time code is emailed to it.</p>
     <label for="rs-email">Email</label>
-    <input id="rs-email" type="email" autocomplete="username" value="${esc(email)}" />
+    <input id="rs-email" type="email" autocomplete="username" ${EMAIL_ATTRS} value="${esc(email)}" />
     <div class="actions">
       <button class="btn" data-act="rs-send"${busy ? " disabled" : ""}>SEND CODE</button>
       <button class="btn ghost small" data-act="rs-have">I ALREADY HAVE A CODE</button>
@@ -127,6 +128,7 @@ export function resetEntry(): string {
 const value = (root: ParentNode, sel: string): string => (root.querySelector<HTMLInputElement>(sel)?.value ?? "").toString();
 
 export function bindReset(root: ParentNode, rerender: () => void): void {
+  bindPasswordToggles(root);
   const on = (act: string, fn: () => Promise<void> | void) =>
     root.querySelector(`[data-act="${act}"]`)?.addEventListener("click", (e) => {
       if (busy) return;
