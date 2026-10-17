@@ -329,6 +329,15 @@ test("an unverified phone cannot seal: sign-on comes first, step by step", async
   await page.fill("#id-pass", "wrong");
   await page.click('[data-act="id-signin"]');
   await expect(page.locator(".foot-note", { hasText: "not accepted" })).toBeVisible();
+  // A wrong password keeps what was typed, and SHOW lets the person see it to fix it.
+  await expect(page.locator("#id-email")).toHaveValue("pro@example.test");
+  await expect(page.locator("#id-pass")).toHaveValue("wrong");
+  await expect(page.locator("#id-pass")).toHaveAttribute("type", "password");
+  await page.click('[data-pw-toggle="id-pass"]');
+  await expect(page.locator("#id-pass")).toHaveAttribute("type", "text");
+  await expect(page.locator("#id-pass")).toHaveValue("wrong");
+  await page.click('[data-pw-toggle="id-pass"]');
+  await expect(page.locator("#id-pass")).toHaveAttribute("type", "password");
   await page.fill("#id-pass", "correct-horse");
   await page.click('[data-act="id-signin"]');
 
