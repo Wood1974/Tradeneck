@@ -164,9 +164,12 @@ pre {
 
 /* Sign-on (ID check and signed statement) */
 .finder label { display: block; text-align: left; font-size: 12px; letter-spacing: 0.08em; color: var(--muted); margin: 12px 0 4px; font-family: ui-sans-serif, system-ui, sans-serif; }
-.finder input[type="email"], .finder input[type="password"] {
+.finder input[type="email"], .finder .pw input {
   width: 100%; min-height: 44px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; color: var(--text);
 }
+.finder .pw { position: relative; }
+.finder .pw input { padding-right: 76px; }
+.finder .pw-toggle { position: absolute; right: 4px; top: 0; bottom: 0; min-width: 64px; background: none; border: 0; color: var(--mint); font-size: 12px; letter-spacing: 0.12em; }
 .finder label.check { display: flex; gap: 10px; align-items: flex-start; letter-spacing: 0; font-size: 13px; color: var(--text); text-align: left; }
 .finder label.check input { margin-top: 3px; width: 20px; height: 20px; flex: none; }
 .statement { margin: 12px 0; padding: 12px 14px; border-left: 3px solid var(--mint-2); background: var(--panel-2); text-align: left; font-size: 13px; line-height: 1.5; border-radius: 0 12px 12px 0; }
