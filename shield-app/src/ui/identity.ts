@@ -4,6 +4,7 @@ import { IdentityError, identityApi, type IdStatus } from "../identity/client";
 import { NOTE_STATEMENT, noteSha256, signNote, type Attestation } from "../identity/note";
 import { checkReceipt } from "../identity/receipt";
 import { currentAttestation, saveAttestation } from "../identity/store";
+import { resetEntry, resetOpen, resetView } from "./reset";
 
 // Sign-on: account sign-in, then an ID check run by Stripe Identity (photo ID plus a live selfie match),
 // then a statement signed with this device's key. Nothing can be sealed until all three are done.
@@ -62,7 +63,7 @@ function noticeText(): string {
 export function identityView(): string {
   const s = step();
   const body: Record<Step, string> = {
-    signin: `
+    signin: resetOpen() ? resetView() : `
       <p class="lede">Shield checks who is taking the photos, once, before it will seal any. Sign in with the account your Shield administrator made for you.</p>
       <label for="id-email">Email</label>
       <input id="id-email" type="email" autocomplete="username" value="${esc(email)}" />
@@ -71,7 +72,8 @@ export function identityView(): string {
       <div class="actions">
         <button class="btn" data-act="id-signin"${busy ? " disabled" : ""}>SIGN IN</button>
       </div>
-      <p class="fine">There is no sign-up here. Ask your administrator if you need an account or a new password.</p>`,
+      ${resetEntry()}
+      <p class="fine">There is no sign-up here. Ask your administrator if you need an account.</p>`,
     consent: `
       <p class="lede">Step 2 of 3: an ID check. Stripe Identity will ask you to photograph a government photo ID and take a live selfie, then check that the face matches the ID.</p>
       <p class="fine">Stripe, not Shield, receives and keeps the ID and selfie images. Shield keeps only the result, your signed statement and the time. No ID or selfie image is stored on this phone or in TradeDeck.</p>

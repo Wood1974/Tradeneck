@@ -53,7 +53,7 @@ pinned in both repos by a SHA-256 test, and the receipt format by a shared test 
 Shield is standalone: it does not use TradeDeck's accounts, database or server. Accounts live on the Shield server
 (`tradedeck-shield` on Render), are created by its administrator, and there is no self sign-up. The first administrator is
 made from `SHIELD_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` (remove them afterwards); later accounts come from
-`POST /shield/admin/accounts`, and a forgotten password is reset with `POST /shield/admin/accounts/<id>/reset-password`.
+`POST /shield/admin/accounts`, and a forgotten password is reset in the app with **Forgot password?**, which emails a one-time code (`POST /shield/auth/forgot`, then `/shield/auth/reset`; the server sends it through Resend). An administrator can still reset one with `POST /shield/admin/accounts/<id>/reset-password`.
 The owner's test mode is `IDENTITY_TEST_MODE_EMAILS` plus `STRIPE_TEST_SECRET_KEY` on that server.
 
 Needs before it works end to end: Stripe Identity enabled on the Stripe account (a live `STRIPE_SECRET_KEY` on the server for
