@@ -223,9 +223,10 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func exportQueue(_ call: CAPPluginCall) {
         let wanted = call.getString("ticketId")
+        let includePhotos = call.getBool("includePhotos") ?? false
         let packages = Outbox.ticketIds().compactMap { ticketId -> [String: Any]? in
             if let wanted, wanted != ticketId { return nil }
-            return exportPackage(ticketId)
+            return exportPackage(ticketId, includePhotos: includePhotos)
         }
         call.resolve(bridgeObject(["packages": packages]))
     }
@@ -461,11 +462,16 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
         ]
     }
 
-    private func exportPackage(_ ticketId: String) -> [String: Any] {
+    /// With `includePhotos`, each record carries its original JPEG as `photo_b64`, so whoever verifies the package can
+    /// hash the image themselves. Without it the package proves nothing about the image.
+    private func exportPackage(_ ticketId: String, includePhotos: Bool) -> [String: Any] {
         let chain = Outbox.chain(ticketId: ticketId) ?? [:]
         let records: [[String: Any]] = hashes(chain).compactMap { hash in
             guard var stored = Outbox.readRecord(recordHash: hash) else { return nil }
             stored.removeValue(forKey: "photoBase64")
+            if includePhotos, let photo = Outbox.readPhoto(recordHash: hash) {
+                stored["photo_b64"] = photo.base64EncodedString()
+            }
             return stored
         }
         return [

@@ -216,10 +216,11 @@ class SecureCapturePlugin : Plugin() {
     @PluginMethod
     fun exportQueue(call: PluginCall) {
         val wanted = call.getString("ticketId")
+        val includePhotos = call.getBoolean("includePhotos") ?: false
         val packages = JSONArray()
         for (ticketId in outbox.ticketIds()) {
             if (wanted != null && ticketId != wanted) continue
-            packages.put(exportPackage(ticketId))
+            packages.put(exportPackage(ticketId, includePhotos))
         }
         call.resolve(JSObject(JSONObject().put("packages", packages).toString()))
     }
@@ -384,13 +385,17 @@ class SecureCapturePlugin : Plugin() {
         "0"
     }
 
-    private fun exportPackage(ticketId: String): JSONObject {
+    /** With includePhotos, each record carries its original JPEG as photo_b64 so the verifier can hash the image itself. */
+    private fun exportPackage(ticketId: String, includePhotos: Boolean): JSONObject {
         val chain = outbox.chain(ticketId) ?: JSONObject()
         val records = JSONArray()
         val hashes = chain.optJSONArray("records") ?: JSONArray()
         for (i in 0 until hashes.length()) {
             val stored = outbox.readRecord(hashes.getString(i)) ?: continue
             stored.remove("photoBase64")
+            if (includePhotos) {
+                outbox.readPhoto(hashes.getString(i))?.let { stored.put("photo_b64", Base64.encodeToString(it, Base64.NO_WRAP)) }
+            }
             records.put(stored)
         }
         return JSONObject()

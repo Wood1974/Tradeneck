@@ -59,4 +59,4 @@ Android signs `clientData` with `SHA256withECDSA` and must not pre-hash. iOS Sec
 
 ## Export
 
-`exportQueue` returns `{ packages: [...] }` with schema `tradedeck.shield.capture-export.v1`. `verifyLocal` checks the chain, the hardware signature, the photo bytes, and the time label on device. `readOriginal` returns the JPEG for one record hash.
+`exportQueue` returns `{ packages: [...] }` with schema `tradedeck.shield.capture-export.v1`. Pass `includePhotos: true` to put each original JPEG in the package as `photo_b64`; the Verify tab then hashes it and compares it with the signed `photo_sha256`. A package without image bytes proves nothing about the images, and the Verify tab says so. `verifyLocal` checks the chain, the hardware signature, the photo bytes, and the time label on device. `readOriginal` returns the JPEG for one record hash.

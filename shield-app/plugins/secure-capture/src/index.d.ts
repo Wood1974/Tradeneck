@@ -53,7 +53,8 @@ export interface ExportPackage {
   ticket_origin: "local" | "server";
   anchor_hash: string;
   ticket_clock: TicketClock | null;
-  records: Array<Omit<NativeSealResult, "photoBase64">>;
+  /** Each record carries `photo_b64` (the original JPEG) only when exported with `includePhotos`. */
+  records: Array<Omit<NativeSealResult, "photoBase64"> & { photo_b64?: string }>;
 }
 
 export const SecureCapture: SecureCapturePlugin;
@@ -93,7 +94,7 @@ export interface SecureCapturePlugin {
   resetKey(): Promise<void>;
   adoptServerTicket(options: { ticketId: string; ticketHash: string; ticketClock: TicketClock }): Promise<void>;
   listQueue(options?: { ticketId?: string }): Promise<{ records: Array<{ record_hash: string; ticket_id: string; photo_sha256: string }> }>;
-  exportQueue(options?: { ticketId?: string }): Promise<{ packages: ExportPackage[] }>;
+  exportQueue(options?: { ticketId?: string; includePhotos?: boolean }): Promise<{ packages: ExportPackage[] }>;
   readOriginal(options: { recordHash: string }): Promise<{ photoBase64: string; mime: "image/jpeg" }>;
   verifyLocal(options?: { ticketId?: string }): Promise<{
     packages: Array<{

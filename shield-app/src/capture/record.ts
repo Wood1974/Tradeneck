@@ -703,11 +703,43 @@ function bytesFromB64(value: string): Uint8Array {
   return out;
 }
 
+const SEALED_EXTRAS = new Set(["prev_hash", "record_hash"]);
+
+/** Fields on a record that the signed bytes do not cover. Anything outside the signed list and the two links is one. */
+export function unsignedRecordFields(record: object): string[] {
+  const signed = new Set<string>(RECORD_FIELDS);
+  return Object.keys(record).filter((key) => !signed.has(key) && !SEALED_EXTRAS.has(key));
+}
+
+/**
+ * Decodes base64 only when it is the canonical encoding of exactly those bytes. atob alone ignores whitespace and
+ * accepts padding that does not round-trip, so two different strings could stand for one image.
+ */
+function strictBytesFromB64(value: string): Uint8Array | null {
+  if (typeof value !== "string" || value === "" || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return null;
+  let bin: string;
+  try {
+    bin = atob(value);
+  } catch {
+    return null;
+  }
+  if (btoa(bin) !== value) return null;
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
 export interface ExportRecord {
   record: SealedCapture;
   sensor_snapshot?: Record<string, unknown> | null;
   signature_der_b64?: string;
   public_key_uncompressed_b64?: string;
+  /** The original JPEG, base64. Optional: an export made without it proves nothing about the image. */
+  photo_b64?: string | null;
+  /**
+   * An exporter's own claim about the image hash. Nothing signs it, so it is never evidence and verifyExport
+   * ignores it. Kept in the type only so older files still parse.
+   */
   photo_sha256_bytes?: string | null;
 }
 
@@ -726,12 +758,20 @@ export interface ExportVerification {
   time: TimeResult[];
   signatures: Array<"valid" | "invalid" | "absent">;
   sensor: Array<"match" | "mismatch" | "absent">;
+  /**
+   * Per record: the SHA-256 of the image bytes carried in the export against the signed photo_sha256.
+   * "absent" means no image bytes came with the record, so no image was checked.
+   */
   photos: Array<"match" | "mismatch" | "absent">;
 }
 
-/** Verify an export with the same byte rules the server uses. Photo bytes are optional. */
+/** Verify an export with the same byte rules the server uses. Image bytes are optional, and without them no image is checked. */
 export async function verifyExport(pkg: ExportPackage): Promise<ExportVerification> {
   if (pkg?.schema !== "tradedeck.shield.capture-export.v1") fail("unsupported export schema");
+  for (const [index, item] of pkg.records.entries()) {
+    const extra = unsignedRecordFields(item.record);
+    if (extra.length) fail(`record ${index + 1} carries fields the signature does not cover: ${extra.join(", ")}`);
+  }
   const chain = await verifyChain(
     pkg.records.map((item) => item.record as unknown as Record<string, unknown>),
     pkg.anchor_hash,
@@ -755,8 +795,12 @@ export async function verifyExport(pkg: ExportPackage): Promise<ExportVerificati
       const digest = await hashWhole(item.sensor_snapshot);
       sensor.push(digest === item.record.sensor_hash ? "match" : "mismatch");
     } else sensor.push("absent");
-    if (item.photo_sha256_bytes) photos.push(item.photo_sha256_bytes === item.record.photo_sha256 ? "match" : "mismatch");
-    else photos.push("absent");
+    // Only image bytes inside the package count, hashed here and compared with the signed photo_sha256. A hash the
+    // exporter merely states is not evidence.
+    if (item.photo_b64 != null) {
+      const bytes = strictBytesFromB64(item.photo_b64);
+      photos.push(bytes && (await photoSha256(bytes as BufferSource)) === item.record.photo_sha256 ? "match" : "mismatch");
+    } else photos.push("absent");
     if (item.signature_der_b64 && item.public_key_uncompressed_b64) {
       const message = signingMessage(item.record as unknown as Record<string, unknown>, item.record.prev_hash);
       const ok = await verifyHardwareSignature(item.public_key_uncompressed_b64, message, item.signature_der_b64);
