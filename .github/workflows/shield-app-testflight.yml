@@ -194,22 +194,42 @@ jobs:
           fi
           echo "ASC_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
 
+      - name: Sign the App target manually for the archive
+        working-directory: shield-app/ios/App
+        run: |
+          # Automatic signing with -allowProvisioningUpdates asks Apple for a new Apple Development certificate and
+          # profile on every run (each runner is fresh). They pile up until the account reaches its certificate limit
+          # and the archive fails with "Choose a certificate to revoke". The distribution certificate and the App Store
+          # profile are already installed above, so sign the App target's Release configuration with those. This edits
+          # the runner's checkout only; the project file in the repo keeps automatic signing for local builds.
+          python3 - <<'PY'
+          import os, pathlib
+          path = pathlib.Path("App.xcodeproj/project.pbxproj")
+          text = path.read_text()
+          old = "\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;\n\t\t\t\tCODE_SIGN_STYLE = Automatic;\n"
+          new = ("\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;\n"
+                 "\t\t\t\tCODE_SIGN_IDENTITY = \"Apple Distribution\";\n"
+                 "\t\t\t\tCODE_SIGN_STYLE = Manual;\n"
+                 "\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = \"" + os.environ["PROFILE_NAME"] + "\";\n")
+          if text.count(old) != 1:
+              raise SystemExit("::error::Expected exactly one Release signing block for the App target, found %d" % text.count(old))
+          path.write_text(text.replace(old, new))
+          print("App target Release now signs manually with", os.environ["PROFILE_NAME"])
+          PY
+
       - name: Archive
         working-directory: shield-app/ios/App
         run: |
-          # App target stays CODE_SIGN_STYLE = Automatic in the Xcode project.
-          # Pods keep CODE_SIGNING_ALLOWED=NO. DEVELOPMENT_TEAM is the only
-          # signing setting passed on the command line.
+          # The App target is patched above to sign manually with the installed distribution certificate and App
+          # Store profile. Pods keep CODE_SIGNING_ALLOWED=NO. No -allowProvisioningUpdates and no API key here, so
+          # Xcode cannot create certificates or profiles in the Apple account. DEVELOPMENT_TEAM is the only signing
+          # setting passed on the command line.
           xcodebuild \
             -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/TradeDeckShield.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER" \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
             archive
 
