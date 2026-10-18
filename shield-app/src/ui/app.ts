@@ -1,6 +1,7 @@
 import { esc } from "../esc";
 import { captureNative, warmNativeCamera, type CaptureOk } from "../capture/capture";
 import { verifyExport, type ExportPackage } from "../capture/record";
+import { exportReport } from "./exportReport";
 import { b64FromBytes, devicePublicKeyRaw, deviceSealId } from "../crypto/seal";
 import { makeCheckpoints, PACK_ORDER } from "../packs";
 import { isNativeOriginAvailable } from "../platform";
@@ -481,13 +482,7 @@ function bind(): void {
       if ((raw as { schema?: unknown })?.schema === "tradedeck.shield.capture-export.v1") {
         try {
           const result = await verifyExport(raw as ExportPackage);
-          const lines = [
-            result.chain.verdict,
-            result.chain.summary,
-            ...result.time.map((entry) => entry.verdict),
-            `signatures ${result.signatures.join(",") || "none"}`,
-          ];
-          verifyOut = lines.join("\n");
+          verifyOut = exportReport(result).join("\n");
         } catch (err) {
           verifyOut = `TAMPERED\n${err instanceof Error ? err.message : "export-unreadable"}`;
         }
