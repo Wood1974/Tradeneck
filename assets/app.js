@@ -406,32 +406,44 @@ async function contactWorker(wid){
 }
 
 // ─── CHECKR INTEGRATION ────────────────────────────────────────────────────────
-// NOTE: Checkr is SUSPENDED pending Wasatch-area screener onboarding.
-// All API code, Flask endpoints (/api/checkr/start, /api/checkr/webhook),
-// and Supabase columns (checkr_candidate_id, checkr_status, checkr_cleared_at)
-// are preserved intact and ready to activate.
-//
-// Original Checkr API call (preserved for when we go live):
-// async function startCheckr(){
-//   if(!STATE.user?.id){alert('Sign in required');return;}
-//   const btn=event.target;btn.disabled=true;btn.textContent='Starting…';
-//   const {data,error}=await fetch('/api/checkr/start',{
-//     method:'POST',
-//     headers:{'Content-Type':'application/json'},
-//     body:JSON.stringify({user_id:STATE.user.id,email:STATE.user.email,name:STATE.profile.full_name||'User'})
-//   }).then(r=>r.json());
-//   if(error||!data?.candidate_id){alert('Could not start background check. Try again later.');btn.disabled=false;btn.textContent='Start Background Check';return;}
-//   STATE.profile.checkr_candidate_id=data.candidate_id;
-//   await sb.from('profiles').update({checkr_candidate_id:data.candidate_id,checkr_status:'pending'}).eq('id',STATE.user.id);
-//   renderProfile();
-// }
-function startCheckr(){
-  alert(
-    'Background Verification\n\n' +
-    "We're onboarding verified screeners for the Wasatch area.\n\n" +
-    "You'll receive a text when your background check slot opens.\n\n" +
-    '— TradeDeck Team'
-  );
+// Live. POST tradedeck-api /checkr/start creates the Checkr candidate + hosted
+// invitation; we send the user to Checkr's page, which handles the FCRA
+// disclosure, consent and SSN/DOB. Checkr's webhook (/checkr/webhook) sets
+// checkr_status. If the backend has no Checkr key yet it answers 503
+// not_configured and we show the holding message instead -- adding
+// CHECKR_API_KEY + CHECKR_PACKAGE on Render turns this on, no frontend change.
+// (Named CHECKR_API, not API_BASE: shield.js declares API_BASE in the same
+// global scope and a second const would break both scripts.)
+const CHECKR_API = 'https://tradedeck-api.onrender.com';
+const CHECKR_HOLD_MSG =
+  'Background Verification\n\n' +
+  "We're onboarding verified screeners for the Wasatch area.\n\n" +
+  "You'll receive a text when your background check slot opens.\n\n" +
+  '\u2014 TradeDeck Team';
+
+async function startCheckr(ev){
+  if(!STATE.user?.id){alert('Sign in required');return;}
+  const btn=(ev&&ev.target)||null, label=btn?btn.textContent:'';
+  const reset=()=>{if(btn){btn.disabled=false;btn.textContent=label;}};
+  if(btn){btn.disabled=true;btn.textContent='Starting\u2026';}
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session){alert('Please sign in again.');reset();return;}
+    const r=await fetch(CHECKR_API+'/checkr/start',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token}
+    });
+    const j=await r.json().catch(()=>({}));
+    if(r.status===503&&j.error==='not_configured'){alert(CHECKR_HOLD_MSG);reset();return;}
+    if(r.status===409){STATE.profile.checkr_status='cleared';renderProfile();return;}
+    if(!r.ok||!j.invitation_url){alert(j.error||'Could not start background check. Try again later.');reset();return;}
+    STATE.profile.checkr_candidate_id=j.candidate_id;
+    STATE.profile.checkr_status='pending';
+    // Same-tab navigation: window.open after an await is blocked on iOS Safari.
+    location.href=j.invitation_url;
+  }catch(e){
+    alert('Could not reach the server. Try again in a minute.');reset();
+  }
 }
 
 // ─── PROFILE ──────────────────────────────────────────────────────────────────
@@ -472,11 +484,22 @@ function renderProfile(){
       `:p.checkr_status==='pending'?`
         <div style="padding:12px;background:#3a3a1a;border:1px solid #facc15;border-radius:4px;margin:12px 0">
           <p style="color:#facc15;font-weight:bold">⏱ Verification pending</p>
-          <p class="text-muted" style="font-size:12px;margin-top:4px">Check back in 1-2 business days</p>
+          <p class="text-muted" style="font-size:12px;margin-top:4px">Check back in 1-2 business days. Didn't finish Checkr's form?</p>
+        </div>
+        <button class="btn btn-outline btn-block btn-sm" onclick="startCheckr(event)">Resume on Checkr</button>
+      `:p.checkr_status==='consider'?`
+        <div style="padding:12px;background:#3a2a1a;border:1px solid #fb923c;border-radius:4px;margin:12px 0">
+          <p style="color:#fb923c;font-weight:bold">Report under review</p>
+          <p class="text-muted" style="font-size:12px;margin-top:4px">Checkr will email you about next steps. Your report is at candidate.checkr.com.</p>
+        </div>
+      `:['suspended','canceled','dispute'].includes(p.checkr_status)?`
+        <div style="padding:12px;background:#2a2a2a;border:1px solid #888;border-radius:4px;margin:12px 0">
+          <p style="font-weight:bold">Check on hold</p>
+          <p class="text-muted" style="font-size:12px;margin-top:4px">Checkr needs more information &mdash; look for their email or visit candidate.checkr.com.</p>
         </div>
       `:`
-        <button class="btn btn-primary btn-block" onclick="startCheckr()">Start Background Check</button>
-        <p class="text-muted" style="font-size:12px;margin-top:8px">Takes 1-2 business days. Required for verified badges.</p>
+        <button class="btn btn-primary btn-block" onclick="startCheckr(event)">Start Background Check</button>
+        <p class="text-muted" style="font-size:12px;margin-top:8px">Run by Checkr. You consent and enter your details on Checkr's secure page &mdash; TradeDeck never sees your SSN. Takes 1-2 business days.</p>
       `}
     </div>
     <button class="btn btn-outline btn-block mt8" onclick="signOut()">Sign Out</button>
