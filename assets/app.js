@@ -214,7 +214,7 @@ function renderHires(){
       <div class="card">
         <div class="flex between"><h3>${esc(h.job_title)}</h3><span class="badge badge-teal">${h.relation==='you_hired'?'You hired':'Hired you'}</span></div>
         <p>${esc(h.other_name||'TradeDeck member')}${h.other_company?' · '+esc(h.other_company):''}${h.other_trade?' · '+esc(h.other_trade):''}</p>
-        <div class="flex gap8 mt8" style="flex-wrap:wrap;align-items:center"><button class="btn btn-primary btn-sm" onclick="messageUser('${esc(h.other_id)}','${esc(h.job_id)}',this)">Message</button>${contactLinks(h)}</div>
+        <div class="flex gap8 mt8" style="flex-wrap:wrap;align-items:center"><button class="btn btn-primary btn-sm" onclick="messageUser('${esc(h.other_id)}','${esc(h.job_id)}',this)">Message</button>${contactLinks(h)}<button class="btn btn-outline btn-sm" onclick="openRating('${esc(h.job_id)}','${esc(h.other_id)}')">Rate ${esc((h.other_name||'').split(' ')[0]||'them')}</button></div>
       </div>`).join('')}`;
 }
 
@@ -344,7 +344,7 @@ function renderWork() {
     tradeEl.style.display = 'none';
     el.innerHTML = STATE.jobs.length ? STATE.jobs.map(j=>{
       const isOwn = !!(j.owner_id && STATE.user && j.owner_id === STATE.user.id);
-      const canRate = !!(j.owner_id && STATE.user && j.owner_id !== STATE.user.id);
+      const canRate = !!(j.owner_id && STATE.user && j.owner_id !== STATE.user.id); // = can message the poster
       const applied = !!STATE.appliedJobIds[j.id];
       const count = STATE.applicantCounts[j.id]||0;
       return `
@@ -359,7 +359,7 @@ function renderWork() {
             ? `<button class="btn btn-outline btn-sm" onclick="openApplicants('${j.id}')">View Applicants</button>`
             : `<button class="btn ${applied?'btn-outline':'btn-primary'} btn-sm" ${applied?'disabled':''} onclick="applyToJob('${j.id}',this)">${applied?'Applied':'Apply'}</button>`}
         </div>
-        ${canRate ? `<div class="flex gap8 mt8"><button class="btn btn-outline btn-sm" onclick="messageUser('${esc(j.owner_id)}','${esc(j.id)}',this)">Message Poster</button><button class="btn btn-outline btn-sm" onclick="openRating('${j.id}','${j.owner_id}')">Rate Job</button></div>` : ''}
+        ${canRate ? `<div class="flex gap8 mt8"><button class="btn btn-outline btn-sm" onclick="messageUser('${esc(j.owner_id)}','${esc(j.id)}',this)">Message Poster</button></div>` : ''}
       </div>`;
     }).join('') : '<p class="text-muted" style="padding:20px 0">No open jobs yet. Be the first to post.</p>';
   }
@@ -877,12 +877,20 @@ async function submitRating(){
   const {error} = await sb.from('reviews').insert({
     job_id:      STATE.currentRatingJobId,
     reviewer_id: STATE.user.id,
-    reviewee_id: STATE.currentRatingRevieweeId, // the job's poster — set by openRating(), not the reviewer
+    reviewee_id: STATE.currentRatingRevieweeId, // the other party of the hire -- set by openRating() from Your Hires
     rating:      STATE.currentRating,
     body:        document.getElementById('review-text').value
   });
-  if (error){alert(error.message);return;}
+  if (error){
+    // reviews_insert RLS only allows the two parties of an accepted hire;
+    // reviews_job_id_reviewer_id_key allows one review per person per job.
+    if (error.code==='23505') alert("You've already rated this job.");
+    else if (error.code==='42501') alert('Only people hired on this job, and the person who hired them, can rate it.');
+    else alert(error.message);
+    return;
+  }
   closeOverlay('rating-overlay');
+  alert('Thanks, your rating was saved.');
 }
 function closeOverlay(id){document.getElementById(id).classList.remove('open');}
 
