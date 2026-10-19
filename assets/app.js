@@ -8,7 +8,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let STATE = {
   user:null, profile:null, isAdmin:false,
   jobs:[], kslJobs:[],
-  appliedJobIds:{}, applicantCounts:{}, hires:[], convos:[], activeConvo:null, threadMsgs:[],
+  appliedJobIds:{}, applicantCounts:{}, hires:[], convos:[], requests:[], activeConvo:null, threadMsgs:[],
   activeWorkTab:'open', activeCounty:'all', activeTrade:'all', activeAdmTab:'users', admLoaded:false,
   shieldLoaded:false,
   currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0
@@ -454,6 +454,7 @@ function startMessaging(){
   if (msgChannel || !sb.channel) return;
   msgChannel = sb.channel('td-messages')
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'messages'}, payload => onIncomingMessage(payload.new))
+    .on('postgres_changes', {event:'*', schema:'public', table:'conversations'}, () => loadInbox())
     .subscribe();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadInbox(); });
 }
@@ -468,7 +469,9 @@ function timeAgo(ts){
 }
 
 function updateMsgBadge(){
-  const n = (STATE.convos||[]).reduce((t,c)=>t+(c.unread||0),0);
+  const unread = (STATE.convos||[]).reduce((t,c)=>t+(c.unread||0),0);
+  const pending = (STATE.requests||[]).filter(r=>r.direction==='incoming'&&r.status==='pending').length;
+  const n = unread + pending;
   const b = document.getElementById('msg-badge');
   if (!b) return;
   b.style.display = n ? '' : 'none';
@@ -477,9 +480,10 @@ function updateMsgBadge(){
 
 async function loadInbox(){
   if (!STATE.user) return;
-  const {data, error} = await sb.rpc('my_conversations');
-  if (error){ const el=document.getElementById('msg-inbox'); if(el) el.innerHTML=`<p class="text-muted">Could not load messages. ${esc(error.message)}</p>`; return; }
-  STATE.convos = data || [];
+  const [convRes, reqRes] = await Promise.all([sb.rpc('my_conversations'), sb.rpc('my_message_requests')]);
+  if (convRes.error){ const el=document.getElementById('msg-inbox'); if(el) el.innerHTML=`<p class="text-muted">Could not load messages. ${esc(convRes.error.message)}</p>`; return; }
+  STATE.convos = convRes.data || [];
+  STATE.requests = reqRes.data || [];
   updateMsgBadge();
   renderInbox();
 }
@@ -488,11 +492,24 @@ function renderInbox(){
   const el = document.getElementById('msg-inbox');
   if (!el) return;
   const list = STATE.convos||[];
-  if (!list.length){
-    el.innerHTML = '<p class="text-muted" style="padding:20px 0">No messages yet. Tap <strong>Message</strong> on a job, an applicant, or a worker to start a conversation.</p>';
-    return;
-  }
-  el.innerHTML = list.map(c=>{
+  const reqs = STATE.requests||[];
+  const incoming = reqs.filter(r=>r.direction==='incoming'&&r.status==='pending');
+  const outgoing = reqs.filter(r=>r.direction==='outgoing'&&r.status==='pending');
+  const tags = r => [r.other_trade, r.job_title?'Re: '+r.job_title:''].filter(Boolean).map(esc).join(' · ');
+  let html = '';
+  if (incoming.length) html += '<div class="lead-category">Message requests</div>' + incoming.map(r=>`
+    <div class="card">
+      <h3>${esc(r.other_name||'TradeDeck member')}</h3>
+      <p style="font-size:12px">${tags(r)}</p>
+      <div class="flex gap8 mt8"><button class="btn btn-primary btn-sm" onclick="respondToRequest('${esc(r.conversation_id)}',true)">Accept</button><button class="btn btn-outline btn-sm" onclick="respondToRequest('${esc(r.conversation_id)}',false)">Decline</button></div>
+    </div>`).join('');
+  if (outgoing.length) html += '<div class="lead-category">Waiting for a reply</div>' + outgoing.map(r=>`
+    <div class="card convo" onclick="openConversation('${esc(r.conversation_id)}')">
+      <div class="convo-main"><h3>${esc(r.other_name||'TradeDeck member')}</h3>
+      <p style="font-size:12px">${tags(r)}</p>
+      <p class="convo-snippet">Request sent. You can message once they accept.</p></div>
+    </div>`).join('');
+  if (list.length) html += list.map(c=>{
     const mine = c.last_sender === STATE.user.id;
     const snippet = c.last_body ? (mine?'You: ':'')+c.last_body : 'No messages yet';
     return `
@@ -505,6 +522,15 @@ function renderInbox(){
       <span class="convo-time">${esc(timeAgo(c.last_at))}</span>
     </div>`;
   }).join('');
+  if (!html) html = '<p class="text-muted" style="padding:20px 0">No messages yet. Tap <strong>Message</strong> on a job, an applicant, or a worker to send a request. Chat opens once they accept.</p>';
+  el.innerHTML = html;
+}
+
+async function respondToRequest(cid, accept){
+  const {error} = await sb.rpc('respond_to_request', {p_conversation_id: cid, p_accept: accept});
+  if (error){ alert('Could not update request. '+error.message); return; }
+  await loadInbox();
+  if (STATE.activeConvo === cid) await openConversation(cid);
 }
 
 function showInbox(){
@@ -526,14 +552,41 @@ async function messageUser(otherId, jobId, btn){
   await openConversation(cid);
 }
 
+function isAcceptedConvo(cid){
+  return !!(STATE.convos||[]).find(x=>x.conversation_id===cid);
+}
+
+// Shows the chat, or the request state if the thread isn't accepted yet.
+function setComposerStatus(cid, req, accepted){
+  const form = document.getElementById('msg-composer');
+  const note = document.getElementById('msg-status');
+  if (accepted){ form.style.display=''; note.style.display='none'; note.innerHTML=''; return; }
+  form.style.display='none';
+  note.style.display='';
+  if (!req){
+    note.innerHTML='<p class="text-muted">This conversation is not available.</p>';
+  } else if (req.status==='pending' && req.direction==='incoming'){
+    note.innerHTML=`<p style="margin-bottom:10px">${esc(req.other_name||'This member')} wants to message you.</p>
+      <div class="flex gap8" style="justify-content:center"><button class="btn btn-primary btn-sm" onclick="respondToRequest('${esc(cid)}',true)">Accept</button><button class="btn btn-outline btn-sm" onclick="respondToRequest('${esc(cid)}',false)">Decline</button></div>`;
+  } else if (req.status==='pending'){
+    note.innerHTML='<p class="text-muted">Request sent. You can message once they accept.</p>';
+  } else {
+    note.innerHTML='<p class="text-muted">This request was declined.</p>';
+  }
+}
+
 async function openConversation(cid){
-  let c = (STATE.convos||[]).find(x=>x.conversation_id===cid);
-  if (!c){ await loadInbox(); c = (STATE.convos||[]).find(x=>x.conversation_id===cid); }
+  if (!isAcceptedConvo(cid)) await loadInbox();
+  const c = (STATE.convos||[]).find(x=>x.conversation_id===cid);
+  const req = (STATE.requests||[]).find(x=>x.conversation_id===cid);
+  const who = c || req || {};
   STATE.activeConvo = cid;
   document.getElementById('msg-inbox-view').style.display = 'none';
   document.getElementById('msg-thread-view').style.display = '';
-  document.getElementById('thread-name').textContent = c?.other_name || 'TradeDeck member';
-  document.getElementById('thread-sub').textContent = [c?.other_trade, c?.other_company, c?.job_title?'Re: '+c.job_title:''].filter(Boolean).join(' · ');
+  document.getElementById('thread-name').textContent = who.other_name || 'TradeDeck member';
+  document.getElementById('thread-sub').textContent = [who.other_trade, c?.other_company, who.job_title?'Re: '+who.job_title:''].filter(Boolean).join(' · ');
+  setComposerStatus(cid, req, !!c);
+  if (!c){ STATE.threadMsgs = []; document.getElementById('msg-list').innerHTML = ''; return; }
   document.getElementById('msg-list').innerHTML = '<p class="text-muted">Loading…</p>';
   const {data, error} = await sb.from('messages').select('id,sender_id,body,created_at')
     .eq('conversation_id', cid).order('created_at', {ascending:false}).limit(200);
@@ -566,7 +619,7 @@ async function sendMessage(ev){
   if (ev) ev.preventDefault();
   const cid = STATE.activeConvo, input = document.getElementById('msg-input'), btn = document.getElementById('msg-send');
   const body = (input.value||'').trim();
-  if (!cid || !body) return;
+  if (!cid || !body || !isAcceptedConvo(cid)) return;
   btn.disabled = true;
   const {data, error} = await sb.from('messages').insert({conversation_id: cid, sender_id: STATE.user.id, body})
     .select('id,sender_id,body,created_at').single();

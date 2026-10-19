@@ -492,7 +492,8 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
         <div><h3 id="thread-name" style="font-size:16px"></h3><p class="text-muted" id="thread-sub" style="font-size:12px"></p></div>
       </div>
       <div id="msg-list"></div>
-      <form class="composer" onsubmit="sendMessage(event)">
+      <div id="msg-status" class="text-muted" style="display:none;padding:14px 0;text-align:center;font-size:14px"></div>
+      <form id="msg-composer" class="composer" onsubmit="sendMessage(event)">
         <textarea id="msg-input" maxlength="4000" placeholder="Write a message…" rows="1"></textarea>
         <button class="btn btn-primary" id="msg-send" type="submit">Send</button>
       </form>
