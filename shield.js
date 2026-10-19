@@ -617,8 +617,8 @@ function renderShieldBrief(container, onReady) {
         <div class="shield-point-preview">
           <span class="shield-point-num-sm">${i + 1}</span>
           <div>
-            <strong>${p.label}</strong>
-            <p>${p.description}</p>
+            <strong>${esc(p.label)}</strong>
+            <p>${esc(p.description)}</p>
           </div>
         </div>
       `).join('')}
@@ -936,7 +936,7 @@ async function renderShieldDashboard(containerEl) {
     card.innerHTML = `
       <div class="shield-job-header">
         <span class="shield-job-id">Job #${(sj.job_id || '').slice(-6).toUpperCase()}</span>
-        <span class="shield-status shield-status--${sj.status}">${sj.status}</span>
+        <span class="shield-status shield-status--${esc(sj.status)}">${esc(sj.status)}</span>
       </div>
       <div class="shield-progress-bar-wrap">
         <div class="shield-progress-bar" style="width:${progressPct}%"></div>
@@ -964,9 +964,9 @@ function renderPointCard(point) {
     <div class="shield-point shield-point--${point.status}">
       <div class="shield-point-header">
         <span class="shield-point-num">${statusIcon} Point ${point.point_number}</span>
-        <span class="shield-point-label">${point.label}</span>
+        <span class="shield-point-label">${esc(point.label)}</span>
       </div>
-      <p class="shield-point-desc">${point.description}</p>
+      <p class="shield-point-desc">${esc(point.description)}</p>
       ${photo ? `
         <div class="shield-photo-block">
           <img class="shield-photo-thumb" src="${photo.public_url}" alt="Checkpoint photo" />
@@ -974,7 +974,7 @@ function renderPointCard(point) {
             <strong>AI: ${photo.ai_verdict?.toUpperCase() || '—'}</strong>
             ${photo.ai_confidence ? `<span>(${Math.round(photo.ai_confidence * 100)}%)</span>` : ''}
           </div>
-          ${photo.ai_notes ? `<p class="shield-ai-notes">${photo.ai_notes}</p>` : ''}
+          ${photo.ai_notes ? `<p class="shield-ai-notes">${esc(photo.ai_notes)}</p>` : ''}
         </div>
       ` : `<p class="shield-awaiting">Awaiting contractor photo upload</p>`}
     </div>
@@ -1111,10 +1111,10 @@ async function renderContractorUploadFlow(containerEl, shieldJobId, pointId) {
     ? points.map(p => `
         <div class="shield-point-row" data-point-id="${p.id}" style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:10px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-            <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.85rem;color:var(--white);">${p.point_number}. ${p.label}</span>
+            <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.85rem;color:var(--white);">${p.point_number}. ${esc(p.label)}</span>
             <span class="shield-point-status" style="font-size:0.7rem;padding:2px 8px;border-radius:4px;background:${p.status === 'approved' ? 'rgba(74,222,128,0.15)' : 'rgba(245,158,11,0.12)'};color:${p.status === 'approved' ? '#4ADE80' : 'var(--amber)'};">${p.status || 'pending'}</span>
           </div>
-          <div style="font-size:0.78rem;color:var(--steel);margin-bottom:6px;">${p.description}</div>
+          <div style="font-size:0.78rem;color:var(--steel);margin-bottom:6px;">${esc(p.description)}</div>
           ${p.irc ? `
           <div style="background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.15);border-radius:6px;padding:8px 10px;margin-bottom:8px;">
             <div style="font-size:0.68rem;color:rgba(245,158,11,0.7);font-weight:700;margin-bottom:3px;">📋 CODE REQUIREMENT</div>
@@ -1291,7 +1291,7 @@ async function renderContractorUploadFlow(containerEl, shieldJobId, pointId) {
         statusMsg.style.color = colors[verdict] || 'var(--steel)'
         statusMsg.innerHTML = `
           ${icons[verdict] || '?'} <strong>${verdict.toUpperCase()}</strong> (${Math.round(confidence * 100)}% confidence)<br>
-          <span style="opacity:0.85">${notes}</span>
+          <span style="opacity:0.85">${esc(notes)}</span>
         `
         if (statusBadge) {
           statusBadge.textContent = verdict
@@ -1372,7 +1372,7 @@ async function renderShieldCloseOutModal(shieldJobId) {
           const photo = p.shield_photos?.[0]
           return `
             <div class="shield-closeout-point shield-closeout-point--${p.status}">
-              <span>${p.point_number}. ${p.label}</span>
+              <span>${p.point_number}. ${esc(p.label)}</span>
               <span class="shield-closeout-verdict">
                 ${photo ? photo.ai_verdict?.toUpperCase() : 'NO PHOTO'}
               </span>
@@ -1522,7 +1522,7 @@ function collectCard(stripe, amount, description) {
           <span class="scm-icon">🛡️</span>
           <div class="scm-title-group">
             <strong class="scm-title">TradeDeck Shield</strong>
-            <span class="scm-desc">${description || 'AI milestone monitoring'}</span>
+            <span class="scm-desc">${esc(description || 'AI milestone monitoring')}</span>
           </div>
           <span class="scm-amount">$${amount}</span>
         </div>

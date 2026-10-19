@@ -8,11 +8,19 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let STATE = {
   user:null, profile:null, isAdmin:false,
   jobs:[], kslJobs:[],
-  appliedJobIds:{}, applicantCounts:{},
+  appliedJobIds:{}, applicantCounts:{}, hires:[],
   activeWorkTab:'open', activeCounty:'all', activeTrade:'all', activeAdmTab:'users', admLoaded:false,
   shieldLoaded:false,
   currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0
 };
+
+// ─── HTML ESCAPING ────────────────────────────────────────────────────────────
+// Every value that came from a user or a scraper goes through esc() before it
+// is put into innerHTML. Without it, a job titled <img onerror=...> would run
+// script in every viewer's session and could steal their login.
+function esc(v){
+  return String(v==null?'':v).replace(/[&<>"'`]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c]));
+}
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 let authMode = 'signin';
@@ -68,6 +76,13 @@ async function loadData() {
     sb.from('jobs').select('*').eq('source','ksl').order('created_at',{ascending:false}).limit(200),
   ]);
   STATE.jobs    = jobsRes.data || [];
+  /* Contact info for people you hired / who hired you. my_hire_contacts() is a
+     SECURITY DEFINER RPC that only returns the other party of an ACCEPTED
+     application -- profiles RLS hides everyone else's phone/email. */
+  if (STATE.user) {
+    const hiresRes = await sb.rpc('my_hire_contacts');
+    STATE.hires = hiresRes.data || [];
+  }
   STATE.kslJobs = kslRes.data  || [];
 
   /* Applied state (mine only -- RLS on applications only lets a user
@@ -172,6 +187,33 @@ function renderHome() {
   document.getElementById('home-stats').innerHTML = `
     <div class="flex between"><span class="text-muted">Jobs available</span><strong>${STATE.jobs.length}</strong></div>
   `;
+  renderHires();
+}
+
+function contactLinks(h){
+  const tel = String(h.other_phone||'').replace(/[^\d+]/g,'');
+  return `
+    ${tel?`<a class="btn btn-primary btn-sm" href="tel:${esc(tel)}">Call ${esc(h.other_phone)}</a>
+           <a class="btn btn-outline btn-sm" href="sms:${esc(tel)}">Text</a>`
+         :'<span class="text-muted" style="font-size:12px">No phone on their profile</span>'}
+    ${h.other_email?`<a class="btn btn-outline btn-sm" href="mailto:${esc(h.other_email)}">Email</a>`:''}`;
+}
+
+function renderHires(){
+  const el = document.getElementById('home-hires');
+  if (!el) return;
+  const hires = STATE.hires||[];
+  const noPhone = !STATE.profile?.phone;
+  if (!hires.length){el.innerHTML='';return;}
+  el.innerHTML = `
+    <div class="lead-category">Your Hires</div>
+    ${noPhone?`<div class="card" style="border-color:#facc15"><p style="font-size:13px">Add your phone in <a href="#" onclick="switchTab('profile');return false">Profile</a> so the people you work with can call you.</p></div>`:''}
+    ${hires.map(h=>`
+      <div class="card">
+        <div class="flex between"><h3>${esc(h.job_title)}</h3><span class="badge badge-teal">${h.relation==='you_hired'?'You hired':'Hired you'}</span></div>
+        <p>${esc(h.other_name||'TradeDeck member')}${h.other_company?' · '+esc(h.other_company):''}${h.other_trade?' · '+esc(h.other_trade):''}</p>
+        <div class="flex gap8 mt8" style="flex-wrap:wrap;align-items:center">${contactLinks(h)}</div>
+      </div>`).join('')}`;
 }
 
 const COUNTIES = ['All','Beaver','Box Elder','Cache','Carbon','Daggett','Davis','Duchesne','Emery',
@@ -279,10 +321,10 @@ function renderWork() {
     const jobs = STATE.activeCounty==='all'?byTrade:byTrade.filter(j=>j.county===STATE.activeCounty);
     el.innerHTML = jobs.length ? jobs.map(j=>`
       <div class="card">
-        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-ksl">KSL</span></div>
-        <p>${j.company||''} · ${j.location||''}, ${j.county||''}${j.trade?' · '+j.trade:''}</p>
-        <p style="margin-top:6px">${(j.description||'').slice(0,120)}…</p>
-        <p class="text-muted" style="margin-top:4px;font-size:12px">${j.rate||''}</p>
+        <div class="flex between"><h3>${esc(j.title)}</h3><span class="badge badge-ksl">KSL</span></div>
+        <p>${esc(j.company)} · ${esc(j.location)}, ${esc(j.county)}${j.trade?' · '+esc(j.trade):''}</p>
+        <p style="margin-top:6px">${esc((j.description||'').slice(0,120))}…</p>
+        <p class="text-muted" style="margin-top:4px;font-size:12px">${esc(j.rate)}</p>
       </div>`).join('') : '<p class="text-muted" style="padding:20px 0">No KSL jobs match this filter yet.</p>';
   } else if (STATE.activeWorkTab==='leads') {
     countyEl.style.display = 'none';
@@ -305,10 +347,10 @@ function renderWork() {
       const count = STATE.applicantCounts[j.id]||0;
       return `
       <div class="card">
-        <div class="flex between"><h3>${j.title}</h3><span class="badge badge-teal">${j.trade||'Trade'}</span></div>
-        <p>${j.location||''}, ${j.county||''}</p>
-        <p style="margin-top:4px">${j.rate||j.budget||''}</p>
-        <p class="text-muted" style="margin-top:6px;font-size:12px">${(j.description||'').slice(0,100)}</p>
+        <div class="flex between"><h3>${esc(j.title)}</h3><span class="badge badge-teal">${esc(j.trade||'Trade')}</span></div>
+        <p>${esc(j.location)}, ${esc(j.county)}</p>
+        <p style="margin-top:4px">${esc(j.rate||j.budget)}</p>
+        <p class="text-muted" style="margin-top:6px;font-size:12px">${esc((j.description||'').slice(0,100))}</p>
         <div class="flex between mt8" style="align-items:center">
           <span class="applicant-count">${count} applicant${count!==1?'s':''}</span>
           ${isOwn
@@ -379,14 +421,15 @@ async function renderWorkers(){
   // row; this view is the narrow, safe-to-share set of columns (no email,
   // phone, or raw checkr_status) every other account is allowed to see.
   let q=sb.from('profiles_public').select('id,full_name,trade,tier,jobs_completed,created_at,background_verified').gt('jobs_completed',0);
-  if(search){q=q.or(`full_name.ilike.%${search}%,trade.ilike.%${search}%`);}
+  const term=search.replace(/[,()*%\\"]/g,' ').trim();
+  if(term){q=q.or(`full_name.ilike.%${term}%,trade.ilike.%${term}%`);}
   const {data:workers,error}=await q.order('jobs_completed',{ascending:false}).limit(50);
   if(error||!workers?.length){el.innerHTML='<p class="text-muted" style="padding:20px">No workers found.</p>';return;}
   el.innerHTML=workers.map(w=>`
     <div class="card" style="display:flex;justify-content:space-between;align-items:center">
       <div>
-        <h3>${w.full_name||'Worker'}</h3>
-        <p class="text-muted">${w.trade||'–'} · ${w.jobs_completed||0} jobs · Tier ${w.tier||1}</p>
+        <h3>${esc(w.full_name||'Worker')}</h3>
+        <p class="text-muted">${esc(w.trade||'–')} · ${esc(w.jobs_completed||0)} jobs · Tier ${esc(w.tier||1)}</p>
         ${w.background_verified?'<p style="color:#4ade80;font-size:12px;margin-top:4px">✓ Background verified</p>':''}
       </div>
       <button class="btn btn-sm btn-outline" onclick="contactWorker('${w.id}')">Contact</button>
@@ -454,23 +497,23 @@ function renderProfile(){
   const tiers=['','Verified','Active','Proven','Trusted','TradeDeck Pro'];
   el.innerHTML=`
     <div class="card">
-      <h3>${p.full_name||p.email}</h3>
-      <p class="text-muted">${p.trade||'No trade set'} · Tier: ${tiers[p.tier||1]||'Verified'}</p>
+      <h3>${esc(p.full_name||p.email)}</h3>
+      <p class="text-muted">${esc(p.trade||'No trade set')} · Tier: ${tiers[p.tier||1]||'Verified'}</p>
       ${p.rating>0?`<p class="text-muted" style="margin-top:4px">★ ${p.rating} · ${p.repeat_hire_rate}% repeat hire</p>`:''}
     </div>
     <div class="card">
       <h3>Edit Profile</h3>
       <label>Full Name</label>
-      <input id="edit-name" value="${p.full_name||''}"/>
+      <input id="edit-name" value="${esc(p.full_name)}"/>
       <label>Company</label>
-      <input id="edit-company" value="${p.company||''}"/>
+      <input id="edit-company" value="${esc(p.company)}"/>
       <label>Trade</label>
       <select id="edit-trade">
         ${['Framing','Concrete','Roofing','Electrical','Plumbing','HVAC','Drywall','Flooring','Excavation','Landscaping','General Contractor','Other']
           .map(t=>`<option ${p.trade===t?'selected':''}>${t}</option>`).join('')}
       </select>
       <label>Phone</label>
-      <input id="edit-phone" value="${p.phone||''}" placeholder="435-555-0100"/>
+      <input id="edit-phone" value="${esc(p.phone)}" placeholder="435-555-0100"/>
       <button class="btn btn-primary btn-block" onclick="saveProfile()">Save</button>
     </div>
     <div class="card">
@@ -541,7 +584,7 @@ async function admLoadUsers(){
   const el = document.getElementById('adm-users');
   el.innerHTML = '<p class="text-muted" style="padding:20px 0">Loading…</p>';
   const {data,error} = await sb.from('profiles').select('id,email,full_name,tier,jobs_completed,is_admin').order('created_at',{ascending:false});
-  if (error){el.innerHTML = `<p class="text-muted" style="padding:20px 0">Could not load users. ${error.message}</p>`;return;}
+  if (error){el.innerHTML = `<p class="text-muted" style="padding:20px 0">Could not load users. ${esc(error.message)}</p>`;return;}
   admRenderUsers(data||[]);
 }
 function admRenderUsers(users){
@@ -551,7 +594,7 @@ function admRenderUsers(users){
     <div class="card">
       <div class="adm-row">
         <div>
-          <h3>${u.full_name||u.email}</h3>
+          <h3>${esc(u.full_name||u.email)}</h3>
           <p class="text-muted">Tier ${u.tier!=null?u.tier:'--'} · ${u.jobs_completed||0} jobs done</p>
         </div>
         <span class="adm-badge ${u.is_admin?'adm-badge-admin':'adm-badge-user'}">${u.is_admin?'Admin':'User'}</span>
@@ -569,7 +612,7 @@ async function admLoadJobs(){
   const el = document.getElementById('adm-jobs');
   el.innerHTML = '<p class="text-muted" style="padding:20px 0">Loading…</p>';
   const {data,error} = await sb.from('jobs').select('id,title,trade,owner_id,status').order('created_at',{ascending:false});
-  if (error){el.innerHTML = `<p class="text-muted" style="padding:20px 0">Could not load jobs. ${error.message}</p>`;return;}
+  if (error){el.innerHTML = `<p class="text-muted" style="padding:20px 0">Could not load jobs. ${esc(error.message)}</p>`;return;}
   const jobs = data||[];
   const ids = [...new Set(jobs.map(j=>j.owner_id).filter(Boolean))];
   const profiles = await admFetchProfiles(ids);
@@ -591,8 +634,8 @@ function admRenderJobs(jobs,profiles){
     const posterName = poster ? (poster.full_name||poster.email) : '--';
     return `
     <div class="card">
-      <h3>${j.title}</h3>
-      <p class="text-muted">${j.trade||'--'} · Posted by ${posterName}</p>
+      <h3>${esc(j.title)}</h3>
+      <p class="text-muted">${esc(j.trade||'--')} · Posted by ${esc(posterName)}</p>
       <div class="flex gap8 mt8" style="align-items:center;flex-wrap:wrap">
         <select style="width:auto;margin-bottom:0" onchange="admUpdateJobStatus('${j.id}',this.value)">
           ${statuses.map(s=>`<option value="${s}" ${s===j.status?'selected':''}>${s}</option>`).join('')}
@@ -652,7 +695,7 @@ async function openApplicants(jobId){
     .eq('job_id', jobId)
     .order('created_at',{ascending:true});
   if (error){
-    document.getElementById('applicants-list').innerHTML = `<p class="text-muted">Could not load applicants. ${error.message}</p>`;
+    document.getElementById('applicants-list').innerHTML = `<p class="text-muted">Could not load applicants. ${esc(error.message)}</p>`;
     return;
   }
   const apps = data||[];
@@ -681,10 +724,11 @@ function renderApplicantsList(apps){
     const isRejected = a.status==='rejected';
     return `
     <div class="card" style="margin-bottom:8px">
-      <div class="flex between"><h3>${p.full_name||'Worker'}</h3>${isHired?'<span class="badge badge-teal">Hired</span>':''}</div>
-      <p class="text-muted" style="font-size:13px">${p.trade||''}${p.tier?' · Tier '+p.tier:''}${p.rating>0?' · ★ '+p.rating:''}</p>
-      ${a.bid_amount?`<p style="margin-top:4px">Bid: $${a.bid_amount}</p>`:''}
-      ${a.message?`<p class="text-muted" style="margin-top:4px;font-size:13px">"${a.message}"</p>`:''}
+      <div class="flex between"><h3>${esc(p.full_name||'Worker')}</h3>${isHired?'<span class="badge badge-teal">Hired</span>':''}</div>
+      <p class="text-muted" style="font-size:13px">${esc(p.trade)}${p.tier?' · Tier '+esc(p.tier):''}${p.rating>0?' · ★ '+esc(p.rating):''}</p>
+      ${a.bid_amount?`<p style="margin-top:4px">Bid: $${esc(a.bid_amount)}</p>`:''}
+      ${a.message?`<p class="text-muted" style="margin-top:4px;font-size:13px">"${esc(a.message)}"</p>`:''}
+      ${isHired?(()=>{const h=(STATE.hires||[]).find(x=>x.job_id===STATE.currentApplicantsJobId&&x.other_id===a.applicant_id);return h?`<div class="flex gap8 mt8" style="flex-wrap:wrap;align-items:center">${contactLinks(h)}</div>`:'';})():''}
       ${!hired && !isRejected ? `<button class="btn btn-primary btn-sm mt8" onclick="hireApplicant('${a.id}','${a.applicant_id}')">Hire</button>` : ''}
       ${isRejected?'<p class="text-muted" style="font-size:12px;margin-top:6px">Not selected</p>':''}
     </div>`;
@@ -703,8 +747,8 @@ async function hireApplicant(applicationId, applicantId){
   const {error} = await sb.rpc('accept_application', {p_application_id: applicationId});
   if (error){alert('Could not hire: '+error.message);return;}
   await sb.from('jobs').update({status:'filled'}).eq('id', jobId);
-  await openApplicants(jobId);
   await loadData();render();
+  await openApplicants(jobId);
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
