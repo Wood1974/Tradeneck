@@ -8,7 +8,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let STATE = {
   user:null, profile:null, isAdmin:false,
   jobs:[], kslJobs:[],
-  appliedJobIds:{}, applicantCounts:{}, hires:[],
+  appliedJobIds:{}, applicantCounts:{}, hires:[], convos:[], activeConvo:null, threadMsgs:[],
   activeWorkTab:'open', activeCounty:'all', activeTrade:'all', activeAdmTab:'users', admLoaded:false,
   shieldLoaded:false,
   currentRatingJobId:null, currentRatingRevieweeId:null, currentRating:0
@@ -64,6 +64,7 @@ async function onLogin(user) {
   document.getElementById('main-nav').style.display  = 'flex';
   await loadData();
   render();
+  startMessaging();
   // Open whatever screen the URL asked for (deep link / refresh / back).
   switchTab(screenFromPath(location.pathname), {replace:true});
 }
@@ -105,7 +106,7 @@ async function loadData() {
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const TAB_PATHS = {home:'/home', work:'/find-work', post:'/post-job',
-                   workers:'/workers', profile:'/profile', shield:'/shield', admin:'/admin'};
+                   workers:'/workers', messages:'/messages', profile:'/profile', shield:'/shield', admin:'/admin'};
 const PATH_TABS = Object.fromEntries(Object.entries(TAB_PATHS).map(([k,v])=>[v,k]));
 
 function screenFromPath(path){
@@ -128,6 +129,7 @@ function switchTab(tab, opts) {
   td.page(path);
 
   window.scrollTo(0,0);
+  if (tab==='messages') { if (!STATE.activeConvo) showInbox(); loadInbox(); }
   if (tab==='admin') loadAdmin();
   if (tab==='shield') loadShield();
 }
@@ -212,7 +214,7 @@ function renderHires(){
       <div class="card">
         <div class="flex between"><h3>${esc(h.job_title)}</h3><span class="badge badge-teal">${h.relation==='you_hired'?'You hired':'Hired you'}</span></div>
         <p>${esc(h.other_name||'TradeDeck member')}${h.other_company?' · '+esc(h.other_company):''}${h.other_trade?' · '+esc(h.other_trade):''}</p>
-        <div class="flex gap8 mt8" style="flex-wrap:wrap;align-items:center">${contactLinks(h)}</div>
+        <div class="flex gap8 mt8" style="flex-wrap:wrap;align-items:center"><button class="btn btn-primary btn-sm" onclick="messageUser('${esc(h.other_id)}','${esc(h.job_id)}',this)">Message</button>${contactLinks(h)}</div>
       </div>`).join('')}`;
 }
 
@@ -357,7 +359,7 @@ function renderWork() {
             ? `<button class="btn btn-outline btn-sm" onclick="openApplicants('${j.id}')">View Applicants</button>`
             : `<button class="btn ${applied?'btn-outline':'btn-primary'} btn-sm" ${applied?'disabled':''} onclick="applyToJob('${j.id}',this)">${applied?'Applied':'Apply'}</button>`}
         </div>
-        ${canRate ? `<button class="btn btn-outline btn-sm mt8" onclick="openRating('${j.id}','${j.owner_id}')">Rate Job</button>` : ''}
+        ${canRate ? `<div class="flex gap8 mt8"><button class="btn btn-outline btn-sm" onclick="messageUser('${esc(j.owner_id)}','${esc(j.id)}',this)">Message Poster</button><button class="btn btn-outline btn-sm" onclick="openRating('${j.id}','${j.owner_id}')">Rate Job</button></div>` : ''}
       </div>`;
     }).join('') : '<p class="text-muted" style="padding:20px 0">No open jobs yet. Be the first to post.</p>';
   }
@@ -432,21 +434,170 @@ async function renderWorkers(){
         <p class="text-muted">${esc(w.trade||'–')} · ${esc(w.jobs_completed||0)} jobs · Tier ${esc(w.tier||1)}</p>
         ${w.background_verified?'<p style="color:#4ade80;font-size:12px;margin-top:4px">✓ Background verified</p>':''}
       </div>
-      <button class="btn btn-sm btn-outline" onclick="contactWorker('${w.id}')">Contact</button>
+      ${w.id!==STATE.user.id?`<button class="btn btn-sm btn-primary" onclick="messageUser('${esc(w.id)}',null,this)">Message</button>`:''}
     </div>
   `).join('');
 }
 document.addEventListener('input',e=>{if(e.target.id==='worker-search')renderWorkers();});
-async function contactWorker(wid){
-  const {error}=await sb.from('contact_requests').insert({
-    requester_id:STATE.user.id,
-    worker_id:wid,
-    status:'pending',
-    created_at:new Date().toISOString()
-  });
-  if(error){alert(error.message);return;}
-  alert('Contact request sent!');
+
+// ─── MESSAGING ────────────────────────────────────────────────────────────────
+// Any two members can message, before or after a hire. All access goes through
+// RLS + SECURITY DEFINER RPCs (see tradedeck-api migration 20261019130000):
+//   start_conversation(p_other, p_job_id) -> find-or-create the 1:1 thread
+//   my_conversations()                    -> inbox with unread counts
+//   mark_conversation_read(id)
+// Messages arrive live over Supabase Realtime; RLS decides who receives them.
+let msgChannel = null;
+
+function startMessaging(){
+  loadInbox();
+  if (msgChannel || !sb.channel) return;
+  msgChannel = sb.channel('td-messages')
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'messages'}, payload => onIncomingMessage(payload.new))
+    .subscribe();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadInbox(); });
 }
+
+function timeAgo(ts){
+  const d = new Date(ts), s = (Date.now() - d.getTime())/1000;
+  if (s < 60) return 'now';
+  if (s < 3600) return Math.floor(s/60)+'m';
+  if (s < 86400) return Math.floor(s/3600)+'h';
+  if (s < 604800) return Math.floor(s/86400)+'d';
+  return d.toLocaleDateString();
+}
+
+function updateMsgBadge(){
+  const n = (STATE.convos||[]).reduce((t,c)=>t+(c.unread||0),0);
+  const b = document.getElementById('msg-badge');
+  if (!b) return;
+  b.style.display = n ? '' : 'none';
+  b.textContent = n > 99 ? '99+' : String(n);
+}
+
+async function loadInbox(){
+  if (!STATE.user) return;
+  const {data, error} = await sb.rpc('my_conversations');
+  if (error){ const el=document.getElementById('msg-inbox'); if(el) el.innerHTML=`<p class="text-muted">Could not load messages. ${esc(error.message)}</p>`; return; }
+  STATE.convos = data || [];
+  updateMsgBadge();
+  renderInbox();
+}
+
+function renderInbox(){
+  const el = document.getElementById('msg-inbox');
+  if (!el) return;
+  const list = STATE.convos||[];
+  if (!list.length){
+    el.innerHTML = '<p class="text-muted" style="padding:20px 0">No messages yet. Tap <strong>Message</strong> on a job, an applicant, or a worker to start a conversation.</p>';
+    return;
+  }
+  el.innerHTML = list.map(c=>{
+    const mine = c.last_sender === STATE.user.id;
+    const snippet = c.last_body ? (mine?'You: ':'')+c.last_body : 'No messages yet';
+    return `
+    <div class="card convo${c.unread?' unread':''}" onclick="openConversation('${esc(c.conversation_id)}')">
+      <div class="convo-main">
+        <h3>${esc(c.other_name||'TradeDeck member')}${c.unread?` <span class="badge badge-teal">${c.unread}</span>`:''}</h3>
+        <p style="font-size:12px">${[c.other_trade, c.job_title?'Re: '+c.job_title:''].filter(Boolean).map(esc).join(' · ')}</p>
+        <p class="convo-snippet">${esc(snippet)}</p>
+      </div>
+      <span class="convo-time">${esc(timeAgo(c.last_at))}</span>
+    </div>`;
+  }).join('');
+}
+
+function showInbox(){
+  STATE.activeConvo = null;
+  document.getElementById('msg-inbox-view').style.display = '';
+  document.getElementById('msg-thread-view').style.display = 'none';
+}
+function closeConversation(){ showInbox(); loadInbox(); }
+
+async function messageUser(otherId, jobId, btn){
+  if (!STATE.user){ alert('Sign in to send messages.'); return; }
+  if (otherId === STATE.user.id) return;
+  if (btn){ btn.disabled = true; }
+  const {data:cid, error} = await sb.rpc('start_conversation', {p_other: otherId, p_job_id: jobId || null});
+  if (btn){ btn.disabled = false; }
+  if (error){ alert('Could not start conversation. '+error.message); return; }
+  await loadInbox();
+  switchTab('messages');
+  await openConversation(cid);
+}
+
+async function openConversation(cid){
+  let c = (STATE.convos||[]).find(x=>x.conversation_id===cid);
+  if (!c){ await loadInbox(); c = (STATE.convos||[]).find(x=>x.conversation_id===cid); }
+  STATE.activeConvo = cid;
+  document.getElementById('msg-inbox-view').style.display = 'none';
+  document.getElementById('msg-thread-view').style.display = '';
+  document.getElementById('thread-name').textContent = c?.other_name || 'TradeDeck member';
+  document.getElementById('thread-sub').textContent = [c?.other_trade, c?.other_company, c?.job_title?'Re: '+c.job_title:''].filter(Boolean).join(' · ');
+  document.getElementById('msg-list').innerHTML = '<p class="text-muted">Loading…</p>';
+  const {data, error} = await sb.from('messages').select('id,sender_id,body,created_at')
+    .eq('conversation_id', cid).order('created_at', {ascending:false}).limit(200);
+  if (STATE.activeConvo !== cid) return;
+  if (error){ document.getElementById('msg-list').innerHTML = `<p class="text-muted">Could not load messages. ${esc(error.message)}</p>`; return; }
+  STATE.threadMsgs = (data||[]).reverse();
+  renderThread();
+  markRead(cid);
+  setTimeout(()=>document.getElementById('msg-input')?.focus(), 50);
+}
+
+function bubbleHtml(m){
+  const me = m.sender_id === STATE.user.id;
+  return `<div class="bubble ${me?'me':'them'}">${esc(m.body)}<div class="bubble-time">${esc(timeAgo(m.created_at))}</div></div>`;
+}
+function renderThread(){
+  const el = document.getElementById('msg-list');
+  el.innerHTML = STATE.threadMsgs.length ? STATE.threadMsgs.map(bubbleHtml).join('')
+    : '<p class="text-muted" style="text-align:center;padding:20px 0">Say hello. Messages stay on TradeDeck between the two of you.</p>';
+  el.scrollTop = el.scrollHeight;
+}
+
+async function markRead(cid){
+  await sb.rpc('mark_conversation_read', {p_conversation_id: cid});
+  const c = (STATE.convos||[]).find(x=>x.conversation_id===cid);
+  if (c){ c.unread = 0; updateMsgBadge(); }
+}
+
+async function sendMessage(ev){
+  if (ev) ev.preventDefault();
+  const cid = STATE.activeConvo, input = document.getElementById('msg-input'), btn = document.getElementById('msg-send');
+  const body = (input.value||'').trim();
+  if (!cid || !body) return;
+  btn.disabled = true;
+  const {data, error} = await sb.from('messages').insert({conversation_id: cid, sender_id: STATE.user.id, body})
+    .select('id,sender_id,body,created_at').single();
+  btn.disabled = false;
+  if (error){ alert('Message not sent. '+error.message); return; }
+  input.value = '';
+  addToThread(data);
+  const c = (STATE.convos||[]).find(x=>x.conversation_id===cid);
+  if (c){ c.last_body = data.body; c.last_sender = data.sender_id; c.last_at = data.created_at; }
+}
+
+function addToThread(m){
+  if (STATE.threadMsgs.some(x=>x.id===m.id)) return;
+  STATE.threadMsgs.push(m);
+  renderThread();
+}
+
+function onIncomingMessage(m){
+  if (!m || !STATE.user) return;
+  if (m.conversation_id === STATE.activeConvo && document.getElementById('screen-messages').classList.contains('active')){
+    addToThread(m);
+    if (m.sender_id !== STATE.user.id) markRead(m.conversation_id);
+  }
+  loadInbox();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.target && e.target.id === 'msg-input' && e.key === 'Enter' && !e.shiftKey && window.matchMedia('(pointer:fine)').matches){
+    e.preventDefault(); sendMessage();
+  }
+});
 
 // ─── CHECKR INTEGRATION ────────────────────────────────────────────────────────
 // Live. POST tradedeck-api /checkr/start creates the Checkr candidate + hosted
@@ -729,7 +880,10 @@ function renderApplicantsList(apps){
       ${a.bid_amount?`<p style="margin-top:4px">Bid: $${esc(a.bid_amount)}</p>`:''}
       ${a.message?`<p class="text-muted" style="margin-top:4px;font-size:13px">"${esc(a.message)}"</p>`:''}
       ${isHired?(()=>{const h=(STATE.hires||[]).find(x=>x.job_id===STATE.currentApplicantsJobId&&x.other_id===a.applicant_id);return h?`<div class="flex gap8 mt8" style="flex-wrap:wrap;align-items:center">${contactLinks(h)}</div>`:'';})():''}
-      ${!hired && !isRejected ? `<button class="btn btn-primary btn-sm mt8" onclick="hireApplicant('${a.id}','${a.applicant_id}')">Hire</button>` : ''}
+      <div class="flex gap8 mt8" style="flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="closeOverlay('applicants-overlay');messageUser('${esc(a.applicant_id)}','${esc(STATE.currentApplicantsJobId)}',this)">Message</button>
+        ${!hired && !isRejected ? `<button class="btn btn-primary btn-sm" onclick="hireApplicant('${a.id}','${a.applicant_id}')">Hire</button>` : ''}
+      </div>
       ${isRejected?'<p class="text-muted" style="font-size:12px;margin-top:6px">Not selected</p>':''}
     </div>`;
   }).join('');

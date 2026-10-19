@@ -14,4 +14,5 @@ http://www.tradedeckapp.com/*               https://tradedeckapp.com/:splat   30
 /draws      /index.html   200
 /workers    /index.html   200
 /profile    /index.html   200
+/messages   /index.html   200
 /admin      /index.html   200

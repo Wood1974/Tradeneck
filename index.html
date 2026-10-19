@@ -162,6 +162,23 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
 .adm-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;text-transform:uppercase;flex-shrink:0}
 .adm-badge-admin{background:rgba(11,188,212,.15);color:var(--teal)}
 .adm-badge-user{background:var(--border);color:var(--muted)}
+/* Messages */
+.nav-badge{position:absolute;top:6px;left:calc(50% + 6px);min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center}
+#main-nav button{position:relative}
+.convo{display:flex;justify-content:space-between;gap:10px;cursor:pointer}
+.convo-main{min-width:0;flex:1}
+.convo-snippet{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.convo.unread h3{color:var(--teal)}
+.convo-time{font-size:11px;color:var(--muted);white-space:nowrap}
+.thread-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.thread-back{background:none;border:none;color:var(--teal);font-size:22px;cursor:pointer;padding:0 6px 0 0}
+#msg-list{display:flex;flex-direction:column;gap:6px;max-height:calc(100vh - 290px);overflow-y:auto;padding:4px 0 8px}
+.bubble{max-width:80%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}
+.bubble.me{align-self:flex-end;background:var(--teal);color:#000;border-bottom-right-radius:4px}
+.bubble.them{align-self:flex-start;background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:4px}
+.bubble-time{font-size:10px;opacity:.6;margin-top:2px}
+.composer{display:flex;gap:8px;align-items:flex-end;margin-top:8px}
+.composer textarea{flex:1;min-height:42px;max-height:120px;resize:none;margin-bottom:0}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/posthog-js@1/dist/array.full.js"></script>
 <script>
@@ -464,6 +481,24 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     <div id="workers-grid" style="display:grid;grid-template-columns:1fr;gap:12px;padding:0 16px"></div>
   </div>
 
+  <div id="screen-messages" class="screen">
+    <div id="msg-inbox-view">
+      <div class="screen-header"><h2>Messages</h2></div>
+      <div id="msg-inbox"><p class="text-muted">Loading…</p></div>
+    </div>
+    <div id="msg-thread-view" style="display:none">
+      <div class="thread-head">
+        <button class="thread-back" type="button" aria-label="Back to messages" onclick="closeConversation()">&#8249;</button>
+        <div><h3 id="thread-name" style="font-size:16px"></h3><p class="text-muted" id="thread-sub" style="font-size:12px"></p></div>
+      </div>
+      <div id="msg-list"></div>
+      <form class="composer" onsubmit="sendMessage(event)">
+        <textarea id="msg-input" maxlength="4000" placeholder="Write a message…" rows="1"></textarea>
+        <button class="btn btn-primary" id="msg-send" type="submit">Send</button>
+      </form>
+    </div>
+  </div>
+
   <div id="screen-profile" class="screen">
     <div class="screen-header"><h2>Profile</h2></div>
     <div id="profile-content"></div>
@@ -501,6 +536,9 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
   </button>
   <button onclick="switchTab('workers')" id="nav-workers">
     <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Workers
+  </button>
+  <button onclick="switchTab('messages')" id="nav-messages">
+    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>Messages<span class="nav-badge" id="msg-badge" style="display:none"></span>
   </button>
   <button onclick="switchTab('profile')" id="nav-profile">
     <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile
