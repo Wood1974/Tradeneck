@@ -406,18 +406,32 @@ async function contactWorker(wid){
 }
 
 // ─── CHECKR INTEGRATION ────────────────────────────────────────────────────────
-async function startCheckr(){
-  if(!STATE.user?.id){alert('Sign in required');return;}
-  const btn=event.target;btn.disabled=true;btn.textContent='Starting…';
-  const {data,error}=await fetch('/api/checkr/start',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({user_id:STATE.user.id,email:STATE.user.email,name:STATE.profile.full_name||'User'})
-  }).then(r=>r.json());
-  if(error||!data?.candidate_id){alert('Could not start background check. Try again later.');btn.disabled=false;btn.textContent='Start Background Check';return;}
-  STATE.profile.checkr_candidate_id=data.candidate_id;
-  await sb.from('profiles').update({checkr_candidate_id:data.candidate_id,checkr_status:'pending'}).eq('id',STATE.user.id);
-  renderProfile();
+// NOTE: Checkr is SUSPENDED pending Wasatch-area screener onboarding.
+// All API code, Flask endpoints (/api/checkr/start, /api/checkr/webhook),
+// and Supabase columns (checkr_candidate_id, checkr_status, checkr_cleared_at)
+// are preserved intact and ready to activate.
+//
+// Original Checkr API call (preserved for when we go live):
+// async function startCheckr(){
+//   if(!STATE.user?.id){alert('Sign in required');return;}
+//   const btn=event.target;btn.disabled=true;btn.textContent='Starting…';
+//   const {data,error}=await fetch('/api/checkr/start',{
+//     method:'POST',
+//     headers:{'Content-Type':'application/json'},
+//     body:JSON.stringify({user_id:STATE.user.id,email:STATE.user.email,name:STATE.profile.full_name||'User'})
+//   }).then(r=>r.json());
+//   if(error||!data?.candidate_id){alert('Could not start background check. Try again later.');btn.disabled=false;btn.textContent='Start Background Check';return;}
+//   STATE.profile.checkr_candidate_id=data.candidate_id;
+//   await sb.from('profiles').update({checkr_candidate_id:data.candidate_id,checkr_status:'pending'}).eq('id',STATE.user.id);
+//   renderProfile();
+// }
+function startCheckr(){
+  alert(
+    'Background Verification\n\n' +
+    "We're onboarding verified screeners for the Wasatch area.\n\n" +
+    "You'll receive a text when your background check slot opens.\n\n" +
+    '— TradeDeck Team'
+  );
 }
 
 // ─── PROFILE ──────────────────────────────────────────────────────────────────
