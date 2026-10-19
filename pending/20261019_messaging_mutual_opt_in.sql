@@ -49,3 +49,7 @@ alter policy "Members can send messages" on public.messages
     and is_conversation_member(conversation_id)
     and exists (select 1 from conversations c where c.id = conversation_id and c.status = 'accepted')
   );
+
+-- 3. Inbox refresh on request accept/decline needs conversations in realtime.
+--    Currently only public.messages is published.
+alter publication supabase_realtime add table public.conversations;
