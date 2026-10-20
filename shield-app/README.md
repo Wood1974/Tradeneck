@@ -7,7 +7,9 @@ compile/target SDK 36, JDK 21.
 **Sign-on needs a network once; everything after it works offline.** Before the app will take a photo,
 the person signs in with an account the Shield administrator made, passes an ID check (photo ID plus a live selfie match,
 run by Stripe Identity through the standalone Shield server, `Wood1974/tradedeck-shield`) and signs a short statement with the device key (see *Sign-on* below). After that, capture, sealing,
-closing and verifying make no outbound calls; an end-to-end test runs that flow offline and asserts no requests.
+closing and verifying work with no signal and need no call to a server. When the phone is signed in and has signal it also uploads
+each sealed photo to the Shield server (see *Stored photos* below); with no signal nothing is sent and the photos wait on the phone. An
+end-to-end test runs the offline flow and asserts no requests.
 
 ## Working offline
 
@@ -20,9 +22,10 @@ real phone with the network off; the e2e tests switch the network off in a brows
 
 ## Sign-on: ID check and signed note
 
-1. **Sign in** with a TradeDeck (Supabase) account, or **Create account** (email and a password of at least 8 characters,
-   typed twice). Supabase emails a confirmation link, so a new account cannot sign in until it is opened; the screen then
-   returns to Sign in. It says the same thing whether or not the address already had an account. The token is kept in memory only.
+1. **Sign in** with a Shield account (these are the Shield server's own accounts, not TradeDeck's). To join, use **Create account**:
+   an invite code from the person who runs Shield (each works once), an email and a password of at least 12 characters, typed twice
+   (`POST /shield/auth/signup`; the server side is open as `tradedeck-shield` PR #7 and is not live until that is merged). Sign-up
+   returns to Sign in; the session token is kept in memory only. A forgotten password is reset in the app with **Forgot password?**.
 2. **Consent**, then **ID check**: `POST /identity/start` makes a Stripe Identity session (document + live selfie
    match); the check opens in the browser. Stripe, not Shield, receives and keeps the ID and selfie images.
 3. **Sign the statement** (`src/identity/note.ts`) with the device key. `POST /identity/note` accepts it only after the
@@ -54,7 +57,8 @@ Shield is standalone: it does not use TradeDeck's accounts, database or server. 
 (`tradedeck-shield` on Render), are created by its administrator, and there is no self sign-up. The first administrator is
 made from `SHIELD_BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` (remove them afterwards); later accounts come from
 `POST /shield/admin/accounts`, and a forgotten password is reset in the app with **Forgot password?**, which emails a one-time code (`POST /shield/auth/forgot`, then `/shield/auth/reset`; the server sends it through Resend). An administrator can still reset one with `POST /shield/admin/accounts/<id>/reset-password`.
-The owner's test mode is `IDENTITY_TEST_MODE_EMAILS` plus `STRIPE_TEST_SECRET_KEY` on that server.
+The owner's test mode is `IDENTITY_TEST_MODE_EMAILS` plus `STRIPE_TEST_SECRET_KEY` on that server. (`Tradedeck-api` still carries an older copy of the
+ID-check code with a different setting, `IDENTITY_TEST_MODE_USER_IDS`; the app does not use it.)
 
 Needs before it works end to end: Stripe Identity enabled on the Stripe account (a live `STRIPE_SECRET_KEY` on the server for
 real checks); a receipt key made once with `python scripts/gen_receipt_key.py`, its private half set as `IDENTITY_RECEIPT_KEY` on
@@ -98,7 +102,8 @@ no gallery import. Evidence photos go through `@tradedeck/secure-capture`
 returned, and a hardware signature (iOS Secure Enclave P-256, Android Keystore
 with StrongBox when the device has it and TEE otherwise). Originals and signed
 records stay in app-private storage and can be listed, exported, and checked
-offline. Sync to the server is not in this build.
+offline. Uploading is separate: with a signed-in account and signal, the app sends each sealed photo to the Shield server
+(`src/native/uploader.ts`, oldest first), where only the account that took it can read it.
 
 The Vault still keeps the existing WebCrypto chain so a browser test can seal
 and verify without a device. That key is software. The hardware record is the
@@ -135,7 +140,7 @@ A photo sealed against a construction point is the same forensic `SealRecord` as
 - Does **not** prove who holds the signing key. The key travels inside the file, so anyone can produce a self-consistent packet with their own key. Compare the displayed signer seal ID with one you trust (the Verify tab accepts an expected ID and then fails any other signer).
 - Does not prove: photo bytes (they are not in the close-out packet; the hashes are), that time is accurate (the capture record carries wall, monotonic, and boot identity so the server can label CONSISTENT / UNVERIFIED TIME / DEVICE CLOCK MISMATCH), that the photo came from a physical camera sensor rather than something fed to the OS camera (App Attest and Play Integrity are not called yet), or that the scene was not staged. Android records `isMock` / `isFromMockProvider`. iOS records `isSimulatedBySoftware` / `isProducedByAccessory`. iOS `CLLocation.timestamp` is the OS fix time, not a raw satellite clock. The hashed JPEG is the in-app camera's file bytes (CameraX quality 95 on Android; AVFoundation `fileDataRepresentation` on iOS), not a second encode in JavaScript. Only records whose `captureKind` is `native-camera` verify; any other kind is rejected (`unsupported-capture-kind`).
 - Key custody: the Vault copy is a non-extractable WebCrypto key in IndexedDB. The evidence copy is a hardware key that does not leave the Secure Enclave or Android Keystore. A simulator or a device without a Secure Enclave records `key_security_level: software` and still seals locally; a server should refuse that level. If the outbox already has records, the key cannot be reset.
-- Apple App Attest (iPhone) is half built. At sign-on the phone enrolls: the server hands out a challenge, Apple vouches for a new key (`attestKey`, needs signal), and the server checks the proof (`POST /shield/attest`). After that each seal records an assertion over the record hash, offline, in `app_attest_assertion_b64`. **Nothing checks those assertions yet** (no upload or server-side verification exists), so records still say `attest: none`, the Verify tab still reads UNATTESTED-NATIVE, and the app says only "enrolled" and "proof recorded, not yet checked". Do not treat a sealed photo as device-attested. Play Integrity (Android) is not implemented: `play_integrity_token` is null. Not yet run against a real device attestation.
+- Apple App Attest (iPhone) is half built. At sign-on the phone enrolls: the server hands out a challenge, Apple vouches for a new key (`attestKey`, needs signal), and the server checks the proof (`POST /shield/attest`). After that each seal records an assertion over the record hash, offline, in `app_attest_assertion_b64`. The assertion is sent with the photo when it is uploaded, and the server checks it against the key the account enrolled (the counter must rise) and stores the result with the photo. **The phone does not show that result:** the phone's own records still say `attest: none`, the Verify tab still reads UNATTESTED-NATIVE, and the app says only "enrolled" and "proof recorded, not yet checked". Do not treat a sealed photo as device-attested from the phone alone. Play Integrity (Android) is not implemented: `play_integrity_token` is null. Not yet run against a real device attestation.
 - A photo bundle (`.shield.json`) now embeds the device public key and is authenticated the same way. A bundle without a key is reported `NO-ORIGIN` with `record-unauthenticated`.
 
 ## What is recorded when a photo is sealed

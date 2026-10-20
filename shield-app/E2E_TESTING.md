@@ -24,7 +24,7 @@ appears in the production `dist/`. The same check covers the identity stand-in.
 | a double tap on the one-tap button seals one photo | the in-flight guard applies to it too |
 | a denied camera seals nothing | an error shows and the vault stays empty |
 | a browser cannot capture | no capture button, video, gallery or file path; SEAL in a browser seals nothing and opens no picker |
-| the whole workflow makes no network requests | after sign-on, runs offline (`context.setOffline(true)`) and asserts zero requests |
+| the offline workflow makes no network requests | after sign-on, runs offline (`context.setOffline(true)`) and asserts zero requests (uploading waits for signal, so none are sent) |
 | sign-on warns when offline | the sign-on screen says to do it with signal, warns when the phone goes offline without wiping typed input, and clears the warning when signal returns |
 | a signed-on phone keeps working with the network off | after sign-on the network is switched off: the "Ready to work offline" status shows, a photo seals and rehashes clean, and sign-on is not asked for again |
 | a new person can create an account, then sign in | create-account mode: a short password or mismatched passwords send nothing and keep what was typed; a valid sign-up returns to Sign in with the email kept and a message that does not say whether the address was new; no ID check is reachable until signed in |

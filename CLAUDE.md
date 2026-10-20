@@ -104,12 +104,15 @@ every feature decision:
   **not** catch this, serve over http(s) to test. (Before this was fixed
   once, `js.stripe.com` was missing and escrow funding was broken in
   production.)
-- `shield-app/` — the **standalone Shield mobile app** (Capacitor 6 + Vite +
-  TypeScript, no framework). Separate from the web `shield/` page. 100%
-  offline: SHA-256 + hash chain + ECDSA device signature per photo, IndexedDB
-  vault, bundle verify, and a **Build** tab (construction brief → locking
-  questions → 5 checkpoints with IRC/IBC references → signed close-out
-  packet). Pure logic lives in `shield-app/src/construction/` with vitest
+- `shield-app/` — the **standalone Shield mobile app** (Capacitor 8 + Vite +
+  TypeScript, no framework). It is not the Shield nav tab / `shield.js` above
+  (that is the older web Shield, backed by `tradedeck-api`); the app signs in
+  to its own server, `Wood1974/tradedeck-shield`. Sign-on needs a network once;
+  after that capture, sealing and verifying work offline (SHA-256 + hash chain +
+  ECDSA device signature per photo, IndexedDB vault, bundle verify), and sealed
+  photos upload to the Shield server when there is signal. It has a **Build**
+  tab (construction brief → locking questions → 5 checkpoints with IRC code
+  references, Utah only → signed close-out packet). Pure logic lives in `shield-app/src/construction/` with vitest
   tests; see `shield-app/README.md`. `npm run build` there must stay green.
 - **No backend copy belongs here.** `tradedeck-api` is the real, current
   backend — don't re-add a Flask file to this repo "for reference."
