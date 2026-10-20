@@ -11,6 +11,28 @@ against the code and the live DB, not against history or notes, before
 building on top of a feature** — this file has been wrong before and will
 be again the moment something changes without an update here.
 
+## Working rules (set by the owner)
+
+Standing instructions from the owner. They apply to every session in this repo, so don't wait to be told again.
+
+- **Fix the root cause, once.** No workarounds or "for now" patches. If the real fix is bigger than asked, say so and propose it.
+- **Say what was verified and what wasn't.** Never overstate. If something couldn't be run or checked (a device, a live server, a dashboard), say that plainly.
+- **The owner merges.** Open PRs as drafts and leave them. Don't merge, and don't start TestFlight or store builds or change live settings (Render env vars, DNS, Stripe, Apple) without the owner's go.
+- **Don't watch PRs.** Opening a PR subscribes the session automatically; unsubscribe right away. Check CI only when asked.
+- **Decide before building** anything that changes who can see data, what leaves the phone, or what costs money: ask first, with a recommendation.
+- **Never print or repeat a password, key or token.** If one has been exposed (in chat, a screenshot, a log), say so plainly so it gets rotated.
+- **Say early which steps only the owner can do** (DNS at GoDaddy, the Render shell, the Apple portal, rolling the Stripe key, merging).
+- **Keep status updates short.** Long reports only when asked.
+
+## Shield app (`shield-app/`) decisions already made
+
+- Live native camera only: no gallery, file picking or web camera.
+- Close-out is solo (one person signs it), not multi-party.
+- Administrator access is turned off for good at launch (`lock-admin`). After that, new people join by single-use invite code, made before the lock.
+- Photos are stored on the Shield server disk and are readable only by the account that took them. No administrator route reads them.
+- Honest labels: never say a photo is "attested" unless a server verified Apple's assertion. Say what was actually checked; a valid signature alone does not show the image matches.
+- Construction content uses Utah building codes only.
+
 ## Product context
 
 TradeDeck lets subs and contractors hire and be hired directly, benchmarked
