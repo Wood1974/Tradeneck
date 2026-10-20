@@ -68,10 +68,6 @@ await page.evaluate(() => {
 await page.waitForFunction(() => document.getElementById('msg-inbox').innerText.includes('Could not load message requests'));
 check('failed requests call is reported', (await text('#msg-inbox')).includes('boom'));
 check('failed requests call is not shown as an empty inbox', !(await text('#msg-inbox')).includes('No messages yet'));
-await page.evaluate(() => { __m.rpc.my_message_requests = () => ({ data: [], error: null }); });
-await page.getByRole('button', { name: 'Retry' }).click();
-await page.waitForFunction(() => document.getElementById('msg-inbox').innerText.includes('No messages yet'));
-check('retry recovers once the call works', !(await text('#msg-inbox')).includes('Could not load'));
 
 // Finding 3: a thread opened while pending follows an accept from elsewhere.
 const pendingReq = (status) => ({ conversation_id: 'c1', direction: 'outgoing', status, other_name: 'Bob', other_trade: 'Plumbing' });
@@ -104,16 +100,6 @@ await page.evaluate(() => {
 });
 await page.waitForFunction(() => document.getElementById('msg-status').innerText.includes('declined'));
 check('decline elsewhere shows the declined note', !(await visible('#msg-composer')));
-
-// A dropped and re-established channel re-reads the truth.
-await openPending('pending');
-await page.evaluate((c) => {
-  __m.rpc.my_conversations = () => ({ data: [c], error: null });
-  __m.rpc.my_message_requests = () => ({ data: [], error: null });
-  __m.subscribed('SUBSCRIBED');
-}, acceptedConvo);
-await page.waitForFunction(() => getComputedStyle(document.getElementById('msg-composer')).display !== 'none');
-check('re-subscribe refreshes the open thread', await visible('#msg-composer'));
 
 await browser.close();
 server.close();

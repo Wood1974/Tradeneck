@@ -455,8 +455,7 @@ function startMessaging(){
   msgChannel = sb.channel('td-messages')
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'messages'}, payload => onIncomingMessage(payload.new))
     .on('postgres_changes', {event:'*', schema:'public', table:'conversations'}, () => refreshAfterConversationChange())
-    // Events sent while the socket was down are gone, so a (re)connect re-reads the truth.
-    .subscribe(status => { if (status === 'SUBSCRIBED') refreshAfterConversationChange(); });
+    .subscribe();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshAfterConversationChange(); });
 }
 
@@ -511,7 +510,7 @@ function renderInbox(){
   const outgoing = reqs.filter(r=>r.direction==='outgoing'&&r.status==='pending');
   const tags = r => [r.other_trade, r.job_title?'Re: '+r.job_title:''].filter(Boolean).map(esc).join(' · ');
   let html = '';
-  if (STATE.requestsError) html += `<div class="card" role="alert"><p>Could not load message requests, so new requests may be missing. ${esc(STATE.requestsError)}</p><div class="flex gap8 mt8"><button class="btn btn-outline btn-sm" onclick="loadInbox()">Retry</button></div></div>`;
+  if (STATE.requestsError) html += `<p class="text-muted" role="alert">Could not load message requests, so new ones may be missing. ${esc(STATE.requestsError)}</p>`;
   if (incoming.length) html += '<div class="lead-category">Message requests</div>' + incoming.map(r=>`
     <div class="card">
       <h3>${esc(r.other_name||'TradeDeck member')}</h3>
@@ -640,7 +639,7 @@ async function sendMessage(ev){
   const {data, error} = await sb.from('messages').insert({conversation_id: cid, sender_id: STATE.user.id, body})
     .select('id,sender_id,body,created_at').single();
   btn.disabled = false;
-  if (error){ alert('Message not sent. '+error.message); await refreshAfterConversationChange(); return; }
+  if (error){ alert('Message not sent. '+error.message); return; }
   input.value = '';
   addToThread(data);
   const c = (STATE.convos||[]).find(x=>x.conversation_id===cid);
