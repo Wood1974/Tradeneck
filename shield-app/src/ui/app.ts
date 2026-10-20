@@ -22,6 +22,7 @@ import { attestation, bindIdentity, identityView, isAttested, loadIdentity } fro
 import { identityApi } from "../identity/client";
 import { bindReset, resetEntry, resetOpen, resetView } from "./reset";
 import { EMAIL_ATTRS, passwordField } from "./fields";
+import { uploadLine, uploadPending } from "../native/uploader";
 import { appAttestState, enrollDevice, enrollErrorText, reasonOf, type AppAttestState } from "../native/appattest";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
@@ -72,6 +73,9 @@ export async function start(): Promise<void> {
   warmNativeCamera(facing === "user" ? "front" : "back", activeId ?? undefined);
   // Apple's device check is optional, so the screen is drawn before asking the phone about it and never waits on it.
   void refreshAppAttest();
+  // Photos go up when signal returns, and are retried while the app is open.
+  window.addEventListener("online", () => void syncUploads(true));
+  window.setInterval(() => void syncUploads(false), 60_000);
 }
 
 async function refreshAppAttest(): Promise<void> {
@@ -91,6 +95,14 @@ async function reload(): Promise<void> {
   jobs = await listJobs();
   vault = await listVault();
   activeId = await activeJobId();
+  void syncUploads(true);
+}
+
+/** Copies sealed photos to the server in the background and updates the Vault line in place (a redraw would wipe forms). */
+async function syncUploads(force = false): Promise<void> {
+  await uploadPending(force);
+  const line = document.getElementById("upload-status");
+  if (line) line.textContent = uploadLine();
 }
 
 function activeJob(): Job | undefined {
@@ -313,7 +325,8 @@ attest ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " · token not
     `;
   }
   return `
-    <div class="banner"><strong>VAULT</strong>Originals stay on this device. Rehash checks bytes only.</div>
+    <div class="banner"><strong>VAULT</strong>Photos stay on this phone and, when you are signed in with signal, are copied to the Shield server where only your account can see them. Rehash checks bytes only.</div>
+    <p class="fine" id="upload-status" role="status">${esc(uploadLine())}</p>
     <div class="list">${vault
       .map(
         (v) => `<button class="card" data-open="${esc(v.record.id)}" style="width:100%;text-align:left">
@@ -432,6 +445,7 @@ function bind(): void {
   bindIdentity(root(), render);
   bindReset(root(), render);
   maybeAutoEnroll();
+  void syncUploads(false);
 
   const packSel = document.getElementById("pack-sel") as HTMLSelectElement | null;
   if (packSel) packSel.onchange = () => {
