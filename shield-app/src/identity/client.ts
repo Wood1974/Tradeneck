@@ -14,6 +14,21 @@ export class IdentityError extends Error {
   }
 }
 
+/** One sealed photo as the phone stores it, plus the original JPEG, for POST /shield/captures. */
+export interface CaptureUpload {
+  record: Record<string, unknown>;
+  signature_der_b64: string;
+  public_key_uncompressed_b64: string;
+  photo_b64: string;
+  app_attest_key_id?: string | null;
+  app_attest_assertion_b64?: string | null;
+}
+
+export interface StoredCapture {
+  record_hash: string;
+  attest: { status: string; trusted: boolean };
+}
+
 export interface IdentityApi {
   /** Signs in with an account the Shield administrator created. There is no self sign-up. */
   signIn(email: string, password: string): Promise<void>;
@@ -25,6 +40,10 @@ export interface IdentityApi {
   requestReset(email: string): Promise<void>;
   /** Spends the emailed code and sets a new password. Signs the account out everywhere. */
   confirmReset(email: string, code: string, newPassword: string): Promise<void>;
+  /** Stores one sealed photo on the Shield server for this account. The server checks it first and refuses what fails. */
+  uploadCapture(body: CaptureUpload): Promise<StoredCapture & { already: boolean }>;
+  /** The photos this account already has on the server. */
+  listCaptures(): Promise<StoredCapture[]>;
   /** A one-time challenge to bind an Apple App Attest proof to. */
   attestChallenge(): Promise<{ nonce: string }>;
   /** Hands the server Apple's proof for a key. The server checks it against Apple's root and answers `trusted: true`. */
@@ -34,9 +53,9 @@ export interface IdentityApi {
 // The access token is kept in memory only. Closing the app signs out; nothing secret is written to disk.
 let token: string | null = null;
 
-async function call<T>(url: string, init: RequestInit): Promise<T> {
+async function call<T>(url: string, init: RequestInit, timeoutMs = 20000): Promise<T> {
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 20000);
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...init, signal: ctl.signal });
     const body = (await res.json().catch(() => ({}))) as { error?: string; detail?: unknown } & T;
@@ -83,7 +102,7 @@ async function withSession<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-const authedCall = <T>(path: string, init: RequestInit = {}): Promise<T> => withSession(() => call<T>(`${API_BASE}${path}`, authed(init)));
+const authedCall = <T>(path: string, init: RequestInit = {}, timeoutMs?: number): Promise<T> => withSession(() => call<T>(`${API_BASE}${path}`, authed(init), timeoutMs));
 const authedFormCall = <T>(path: string, fields: Record<string, string>): Promise<T> => withSession(() => call<T>(`${API_BASE}${path}`, authedForm(fields)));
 
 const real: IdentityApi = {
@@ -113,6 +132,10 @@ const real: IdentityApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, code, new_password: newPassword }),
     });
+  },
+  uploadCapture: (body) => authedCall("/shield/captures", { method: "POST", body: JSON.stringify(body) }, 90000),
+  async listCaptures() {
+    return (await authedCall<{ captures: StoredCapture[] }>("/shield/captures")).captures;
   },
   attestChallenge: () => authedFormCall("/shield/attest/challenge", {}),
   attestRegister: (p) => authedFormCall("/shield/attest", { key_id: p.keyId, nonce: p.nonce, attestation: p.attestation }),

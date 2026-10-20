@@ -112,7 +112,7 @@ Vault record stays `none` until those calls exist.
 |---|---|
 | **Capture** | **In-app camera only** (`@tradedeck/secure-capture` on device; no gallery, photo picker, or file import). A browser cannot capture. The only file input is the Verify tab's importer. A floating camera button on every tab takes a photo in one tap. On device the plugin hashes the JPEG, chains it (`record_hash = SHA-256(canonical JSON \|\| "\|" \|\| prev_hash)`), and signs with the hardware key, then the app also stores a Vault copy with the existing software key. Seals run one at a time. |
 | **Jobs** | Lock a generic pack (remodel / draw / unit / loss / shop / custom) — industry-agnostic checkpoints with an optional GPS pin and a fee tier. |
-| **Vault** | Originals stay on device. REHASH recomputes the SHA-256; EXPORT writes a `.shield.json` bundle (record + original). |
+| **Vault** | Photos stay on the device and, when signed in with signal, are also copied to the Shield server, where only the account that took them can see them. REHASH recomputes the SHA-256; EXPORT writes a `.shield.json` bundle (record + original). |
 | **Verify** | Drop a photo bundle (`.shield.json`) → recomputes the hash of the embedded original: `SEALED` / `UNATTESTED-NATIVE` / `TAMPERED` / `NO-ORIGIN`. Drop a close-out record (`.shield-record.json`) → recomputes its hash and checks the device signature with the embedded public key: `PACKET-SEALED` / `PACKET-TAMPERED`, with per-point status. |
 | **Build** | Construction pack. Brief → locking questions → 5 trade-specific checkpoints → IRC/IBC code references → hashed, signed close-out record. See below. |
 
