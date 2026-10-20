@@ -454,9 +454,20 @@ function startMessaging(){
   if (msgChannel || !sb.channel) return;
   msgChannel = sb.channel('td-messages')
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'messages'}, payload => onIncomingMessage(payload.new))
-    .on('postgres_changes', {event:'*', schema:'public', table:'conversations'}, () => loadInbox())
+    .on('postgres_changes', {event:'*', schema:'public', table:'conversations'}, () => refreshAfterConversationChange())
     .subscribe();
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadInbox(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshAfterConversationChange(); });
+}
+
+// Accept/decline can happen in another session while this thread is open. Reload the inbox,
+// then redraw the open thread if whether it is accepted has changed, so the composer follows
+// the database instead of whatever it showed when the thread was opened.
+async function refreshAfterConversationChange(){
+  const cid = STATE.activeConvo, was = cid ? isAcceptedConvo(cid) : false;
+  await loadInbox();
+  if (!cid || STATE.activeConvo !== cid) return;
+  const reqNow = (STATE.requests||[]).find(x=>x.conversation_id===cid);
+  if (isAcceptedConvo(cid) !== was || (!was && STATE.activeStatus !== (reqNow ? reqNow.status : null))) await openConversation(cid);
 }
 
 function timeAgo(ts){
@@ -483,7 +494,9 @@ async function loadInbox(){
   const [convRes, reqRes] = await Promise.all([sb.rpc('my_conversations'), sb.rpc('my_message_requests')]);
   if (convRes.error){ const el=document.getElementById('msg-inbox'); if(el) el.innerHTML=`<p class="text-muted">Could not load messages. ${esc(convRes.error.message)}</p>`; return; }
   STATE.convos = convRes.data || [];
-  STATE.requests = reqRes.data || [];
+  // A failed requests call is not an empty list: keep the last good one and say so.
+  STATE.requestsError = reqRes.error ? (reqRes.error.message || 'unknown error') : null;
+  if (!reqRes.error) STATE.requests = reqRes.data || [];
   updateMsgBadge();
   renderInbox();
 }
@@ -497,6 +510,7 @@ function renderInbox(){
   const outgoing = reqs.filter(r=>r.direction==='outgoing'&&r.status==='pending');
   const tags = r => [r.other_trade, r.job_title?'Re: '+r.job_title:''].filter(Boolean).map(esc).join(' · ');
   let html = '';
+  if (STATE.requestsError) html += `<p class="text-muted" role="alert">Could not load message requests, so new ones may be missing. ${esc(STATE.requestsError)}</p>`;
   if (incoming.length) html += '<div class="lead-category">Message requests</div>' + incoming.map(r=>`
     <div class="card">
       <h3>${esc(r.other_name||'TradeDeck member')}</h3>
@@ -522,7 +536,7 @@ function renderInbox(){
       <span class="convo-time">${esc(timeAgo(c.last_at))}</span>
     </div>`;
   }).join('');
-  if (!html) html = '<p class="text-muted" style="padding:20px 0">No messages yet. Tap <strong>Message</strong> on a job, an applicant, or a worker to send a request. Chat opens once they accept.</p>';
+  if (!html && !STATE.requestsError) html = '<p class="text-muted" style="padding:20px 0">No messages yet. Tap <strong>Message</strong> on a job, an applicant, or a worker to send a request. Chat opens once they accept.</p>';
   el.innerHTML = html;
 }
 
@@ -581,6 +595,7 @@ async function openConversation(cid){
   const req = (STATE.requests||[]).find(x=>x.conversation_id===cid);
   const who = c || req || {};
   STATE.activeConvo = cid;
+  STATE.activeStatus = req ? req.status : null;
   document.getElementById('msg-inbox-view').style.display = 'none';
   document.getElementById('msg-thread-view').style.display = '';
   document.getElementById('thread-name').textContent = who.other_name || 'TradeDeck member';
