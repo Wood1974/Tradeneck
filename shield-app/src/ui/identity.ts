@@ -6,6 +6,7 @@ import { checkReceipt } from "../identity/receipt";
 import { currentAttestation, saveAttestation } from "../identity/store";
 import { resetEntry, resetOpen, resetView } from "./reset";
 import { bindPasswordToggles, EMAIL_ATTRS, passwordField } from "./fields";
+import { bindSignup, signupEntry, signupOpen, signupView } from "./signup";
 
 // Sign-on: account sign-in, then an ID check run by Stripe Identity (photo ID plus a live selfie match),
 // then a statement signed with this device's key. Nothing can be sealed until all three are done.
@@ -64,7 +65,7 @@ function noticeText(): string {
 export function identityView(): string {
   const s = step();
   const body: Record<Step, string> = {
-    signin: resetOpen() ? resetView() : `
+    signin: signupOpen() ? signupView() : resetOpen() ? resetView() : `
       <p class="lede">Shield checks who is taking the photos, once, before it will seal any. Sign in with the account your Shield administrator made for you.</p>
       <label for="id-email">Email</label>
       <input id="id-email" type="email" autocomplete="username" ${EMAIL_ATTRS} value="${esc(email)}" />
@@ -73,8 +74,9 @@ export function identityView(): string {
       <div class="actions">
         <button class="btn" data-act="id-signin"${busy ? " disabled" : ""}>SIGN IN</button>
       </div>
+      ${signupEntry()}
       ${resetEntry()}
-      <p class="fine">There is no sign-up here. Ask your administrator if you need an account.</p>`,
+      <p class="fine">New here? You need an invite code from the person who runs Shield.</p>`,
     consent: `
       <p class="lede">Step 2 of 3: an ID check. Stripe Identity will ask you to photograph a government photo ID and take a live selfie, then check that the face matches the ID.</p>
       <p class="fine">Stripe, not Shield, receives and keeps the ID and selfie images. Shield keeps only the result, your signed statement and the time. No ID or selfie image is stored on this phone or in TradeDeck.</p>
@@ -152,6 +154,16 @@ async function run(rerender: () => void, fn: () => Promise<void>, button: Elemen
 
 export function bindIdentity(root: HTMLElement, rerender: () => void): void {
   bindPasswordToggles(root);
+  bindSignup(root, rerender, {
+    // A new account has no ID check yet, and any session id left on this phone belongs to someone else's account.
+    afterCreate: async (newEmail, password) => {
+      email = newEmail;
+      sessionId = null;
+      idStatus = "none";
+      await putIdSession(null);
+      await identityApi().signIn(newEmail, password);
+    },
+  });
   const emailEl = root.querySelector<HTMLInputElement>("#id-email");
   if (emailEl) emailEl.oninput = () => (email = emailEl.value.trim());
   if (!listening) {

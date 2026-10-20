@@ -30,12 +30,14 @@ export interface StoredCapture {
 }
 
 export interface IdentityApi {
-  /** Signs in with an account the Shield administrator created. There is no self sign-up. */
+  /** Signs in with an existing account. */
   signIn(email: string, password: string): Promise<void>;
   signedIn(): boolean;
   start(): Promise<{ sessionId: string; status: IdStatus; url: string | null }>;
   status(): Promise<{ sessionId: string | null; status: IdStatus; verified: boolean }>;
   submitNote(note: SignedNote): Promise<{ attestationId: string; noteSha256: string; receipt: Receipt }>;
+  /** Makes an account with a single-use invite code from whoever runs Shield. Does not sign in. */
+  signUp(email: string, password: string, inviteCode: string): Promise<void>;
   /** Emails a one-time code to the account's address. The server answers the same whether or not the email has an account. */
   requestReset(email: string): Promise<void>;
   /** Spends the emailed code and sets a new password. Signs the account out everywhere. */
@@ -123,6 +125,13 @@ const real: IdentityApi = {
   start: () => authedCall("/identity/start", { method: "POST", body: JSON.stringify({ consent: true, consentVersion: CONSENT_VERSION }) }),
   status: () => authedCall("/identity/status"),
   submitNote: (note) => authedCall("/identity/note", { method: "POST", body: JSON.stringify(note) }),
+  async signUp(email, password, inviteCode) {
+    await call(`${API_BASE}/shield/auth/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, invite_code: inviteCode }),
+    });
+  },
   async requestReset(email) {
     await call(`${API_BASE}/shield/auth/forgot`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
   },

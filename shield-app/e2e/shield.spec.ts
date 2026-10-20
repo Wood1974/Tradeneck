@@ -46,6 +46,11 @@ async function asNativeApp(page: Page): Promise<void> {
         if (pass !== "correct-horse") throw { code: "bad-credentials" };
         (this as unknown as { _in: boolean })._in = true;
       },
+      async signUp(email: string, _pass: string, invite: string) {
+        w.__idCalls.push("signUp:" + email);
+        if (invite.replace(/[^A-Za-z0-9]/g, "").toUpperCase() !== "ABCDEFGHJKMN") throw { code: "invalid_or_expired_invite" };
+        if (email === "taken@example.test") throw { code: "account_already_exists" };
+      },
       async requestReset(email: string) {
         w.__idCalls.push("requestReset:" + email);
       },
@@ -398,14 +403,55 @@ test("a forgotten password is reset with an emailed code, from the sign-on scree
   expect(calls).toEqual(["requestReset:pro@example.test", "confirmReset:pro@example.test", "confirmReset:pro@example.test"]);
 });
 
-test("sign-on offers no self sign-up, and an ended sign-in sends the person back to sign in", async ({ page }) => {
+test("an invite code makes an account and signs in, and a mistake keeps what was typed", async ({ page }) => {
+  await asNativeApp(page);
+  await page.goto("/");
+  await page.click('[data-act="su-open"]');
+  await page.fill("#su-invite", "WRONG-CODE-0000");
+  await page.fill("#su-email", "new@example.test");
+  await page.fill("#su-pass", "correct-horse");
+  await page.fill("#su-pass2", "correct-horsX");
+  // Checked on the phone first: nothing is sent for a form that cannot be right.
+  await page.click('[data-act="su-create"]');
+  await expect(page.locator("[data-su-status]")).toContainText("do not match");
+  await page.fill("#su-pass2", "correct-horse");
+  await page.click('[data-act="su-create"]');
+  await expect(page.locator("[data-su-status]")).toContainText("wrong, already used, or has expired");
+  // Everything typed is still there to fix, and SHOW reveals the password.
+  await expect(page.locator("#su-email")).toHaveValue("new@example.test");
+  await expect(page.locator("#su-pass")).toHaveValue("correct-horse");
+  await page.click('[data-pw-toggle="su-pass"]');
+  await expect(page.locator("#su-pass")).toHaveAttribute("type", "text");
+  await page.fill("#su-invite", "abcd efgh-jkmn");
+  await page.click('[data-act="su-create"]');
+  // The new account is signed in and goes straight to the ID check.
+  await expect(page.locator('[data-act="id-start"]')).toBeVisible();
+  const calls = await page.evaluate(() => (window as unknown as TestWindow).__idCalls);
+  expect(calls).toEqual(["signUp:new@example.test", "signUp:new@example.test", "signIn"]);
+});
+
+test("an email that already has an account is told so, and can go back to sign in", async ({ page }) => {
+  await asNativeApp(page);
+  await page.goto("/");
+  await page.click('[data-act="su-open"]');
+  await page.fill("#su-invite", "ABCD-EFGH-JKMN");
+  await page.fill("#su-email", "taken@example.test");
+  await page.fill("#su-pass", "correct-horse");
+  await page.fill("#su-pass2", "correct-horse");
+  await page.click('[data-act="su-create"]');
+  await expect(page.locator("[data-su-status]")).toContainText("already has an account");
+  await page.click('[data-act="su-close"]');
+  await expect(page.locator('[data-act="id-signin"]')).toBeVisible();
+});
+
+test("sign-on offers sign-up only with an invite code, and an ended sign-in sends the person back to sign in", async ({ page }) => {
   await asNativeApp(page);
   await page.goto("/");
   await expect(page.locator('[data-act="id-signin"]')).toBeVisible();
   await expect(page.locator('[data-act="id-mode-create"]')).toHaveCount(0);
   await expect(page.locator('[data-act="id-signup"]')).toHaveCount(0);
   await expect(page.locator("#id-pass2")).toHaveCount(0);
-  await expect(page.locator(".fine", { hasText: "Ask your administrator" })).toBeVisible();
+  await expect(page.locator(".fine", { hasText: "invite code from the person who runs Shield" })).toBeVisible();
   // No ID check or sealing is reachable without signing in.
   await expect(page.locator('[data-act="id-start"]')).toHaveCount(0);
   await page.fill("#id-email", "pro@example.test");
