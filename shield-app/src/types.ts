@@ -46,6 +46,8 @@ export interface Checkpoint {
   shotId: string | null;
   description?: string;
   code?: CodeRef | null;
+  /** Further code sections that apply to the same photo, chosen with the point. Absent on points locked before this existed. */
+  moreCodes?: CodeRef[];
 }
 
 export interface ConstructionBriefDraft {
@@ -130,6 +132,8 @@ export interface CloseoutPoint {
   label: string;
   description: string;
   code: CodeRef | null;
+  /** Omitted when empty, so packets made before it existed stay byte-identical. */
+  moreCodes?: CodeRef[];
   record: SealRecord | null;
 }
 

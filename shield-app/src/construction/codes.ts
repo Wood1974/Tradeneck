@@ -89,6 +89,14 @@ export function toCodeRef(c: CodeCheckpoint): CodeRef {
   return { irc: c.irc, ibc: c.ibc, name: c.name, ...(c.topic ? { topic: c.topic } : {}) };
 }
 
+/** The Concrete-trade code rows with these section numbers, in the order given. A number with no row is skipped. */
+export function codeRefsFor(trade: CodeTrade, ircs: string[]): CodeRef[] {
+  return ircs.flatMap((irc) => {
+    const row = CODE_CHECKPOINTS.find((c) => c.trade === trade && c.irc === irc);
+    return row ? [toCodeRef(row)] : [];
+  });
+}
+
 /** Best keyword match for a generated point within the trade's code rows. Null when nothing fits. */
 export function suggestCode(trade: TradeId | "", label: string, description = ""): CodeRef | null {
   const text = `${label} ${description}`.toLowerCase();

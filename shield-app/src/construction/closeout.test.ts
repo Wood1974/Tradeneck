@@ -72,6 +72,23 @@ describe("packets and records made before the fee and job pin were removed", () 
   });
 });
 
+describe("several codes on one point", () => {
+  it("are carried into the signed packet only when the point has them", async () => {
+    const r1 = await signedRecord("shot-1", "c".repeat(64));
+    const plain = await build({ "shot-1": r1 });
+    expect(plain.points[0]).not.toHaveProperty("moreCodes");
+    const j = job();
+    j.checkpoints[0]!.moreCodes = [{ irc: "R403.1", ibc: null, name: "Footing Size & Bearing" }];
+    const p = await buildCloseoutPacket({ job: j, role: "gc", notes: "", recordFor: (id) => ({ "shot-1": r1 })[id] });
+    expect(p.points[0]!.moreCodes).toEqual([{ irc: "R403.1", ibc: null, name: "Footing Size & Bearing" }]);
+    expect((await verifyCloseoutPacket(p)).verdict).toBe("PACKET-SEALED");
+    const edited = clone(p);
+    edited.points[0]!.moreCodes![0]!.irc = "R999";
+    expect((await verifyCloseoutPacket(edited)).verdict).toBe("PACKET-TAMPERED");
+    expect(packetToHtml(p)).toContain("Footing Size &amp; Bearing");
+  });
+});
+
 describe("buildCloseoutPacket", () => {
   it("hashes the body with stableStringify and signs with the device key", async () => {
     const r1 = await signedRecord("shot-1", "a".repeat(64));

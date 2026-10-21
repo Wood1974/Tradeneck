@@ -164,12 +164,14 @@ function pointsView(ctx: ConstructionCtx, job: Job | undefined): string {
       const code = c.code
         ? `${c.code.irc ? "IRC " + esc(c.code.irc) : c.code.ibc ? "IBC " + esc(c.code.ibc) : ""} · ${esc(c.code.name)}`
         : "NO CODE REFERENCE · TAP TO ASSIGN";
+      const also = (c.moreCodes ?? []).map((m) => `${m.irc ? "IRC " + esc(m.irc) : m.ibc ? "IBC " + esc(m.ibc) : ""} · ${esc(m.name)}`);
       return `<div class="card point">
         <div class="row"><h2>Point ${i + 1}</h2>${chip}</div>
         <input data-pt-label="${esc(c.id)}" value="${esc(c.label)}"${c.shotId ? " disabled" : ""} />
         <textarea data-pt-desc="${esc(c.id)}" rows="3">${esc(c.description ?? "")}</textarea>
         <div class="row">
           <button class="code-chip" data-pick-code="${esc(c.id)}">${code}</button>
+          ${also.length ? `<div class="meta">Also applies: ${also.join(" · ")}</div>` : ""}
           <button class="btn small ${rec ? "ghost" : ""}" data-slot="${esc(c.id)}">${rec ? "VIEW" : "SEAL"}</button>
         </div>
         ${rec ? `<div class="meta">${esc(rec.sha256.slice(0, 16))}… · ${esc(rec.createdAt.slice(0, 16).replace("T", " "))}</div>` : ""}
@@ -331,7 +333,7 @@ export function bindConstruction(ctx: ConstructionCtx): void {
       const [irc, name] = el.dataset.assignCode!.split("|");
       const row = CODE_CHECKPOINTS.find((c) => c.name === name && (c.irc ?? "") === irc);
       if (!row || !pickingFor) return;
-      void editPoint(ctx, job, pickingFor, { code: toCodeRef(row) }).then(() => {
+      void editPoint(ctx, job, pickingFor, { code: toCodeRef(row), moreCodes: [] }).then(() => {
         pickingFor = null;
         cview = "points";
         ctx.render();
@@ -427,7 +429,7 @@ async function onAct(ctx: ConstructionCtx, act: string): Promise<void> {
   if (act === "c-cancel-pick") { pickingFor = null; cview = "points"; ctx.render(); return; }
   if (act === "c-clear-code") {
     const job = activeConstructionJob(ctx);
-    if (pickingFor) await editPoint(ctx, job, pickingFor, { code: null });
+    if (pickingFor) await editPoint(ctx, job, pickingFor, { code: null, moreCodes: [] });
     pickingFor = null;
     cview = "points";
     ctx.render();

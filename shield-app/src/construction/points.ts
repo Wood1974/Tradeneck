@@ -1,5 +1,5 @@
 import type { Checkpoint, ConstructionBriefDraft, TradeId } from "../types";
-import { suggestCode } from "./codes";
+import { codeRefsFor, suggestCode } from "./codes";
 import { neededQuestions } from "./questions";
 import { detectTrade, labelForTrade } from "./trades";
 
@@ -28,7 +28,8 @@ export function lockedNarrative(draft: ConstructionBriefDraft): string {
   return lines.filter((x) => x !== null).join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-type Pair = [string, string];
+/** Label, what to photograph, and optionally the code sections that apply (first is the main one). Without sections the code is guessed from the words. */
+type Pair = [string, string] | [string, string, string[]];
 
 function str(v: string | string[] | undefined): string {
   return Array.isArray(v) ? v.join(", ") : (v ?? "");
@@ -84,15 +85,15 @@ function templates(trade: TradeId, draft: ConstructionBriefDraft): Pair[] {
     ],
     concrete: [
       foundationWork
-        ? ["Footing excavation and depth", "Footing trench or form with the bottom on undisturbed soil, depth below grade and the frost line shown with a tape, and width and thickness before steel."]
+        ? ["Footing excavation and depth", "Footing trench or form with the bottom on undisturbed soil, depth below grade and the frost line shown with a tape, and width and thickness before steel.", ["R403.1.4", "R403.1"]]
         : ["Layout / excavation", "Forms, elevations, and excavation matching the brief before steel."],
       ["Steel in place", s("rebar") !== "No" ? "Rebar or mesh, chairs, and overlaps before pour." : "Forms and dowels before pour."],
       ["Pour", "Placement in progress or immediately after screed — no covered defects."],
       foundationWork
-        ? ["Wall, waterproofing and drain", "Stripped wall with dampproofing or waterproofing applied and any anchor bolts set, plus the footing drain, before backfill hides them."]
+        ? ["Wall, waterproofing and drain", "Stripped wall with dampproofing or waterproofing applied and any anchor bolts set, plus the footing drain, before backfill hides them.", ["R406.1", "R405.1", "R404.1.3"]]
         : ["Finish / cure setup", "Finished surface and any specified control joints."],
       foundationWork
-        ? ["Completion", "Backfilled grade sloping away from the foundation, swales or drain outlets visible, forms stripped, and the completed work in context."]
+        ? ["Completion", "Backfilled grade sloping away from the foundation, swales or drain outlets visible, forms stripped, and the completed work in context.", ["R401.3"]]
         : ["Completion", "Stripped forms, grade around work, and the completed element in context."],
     ],
     framing: [
@@ -150,12 +151,17 @@ function templates(trade: TradeId, draft: ConstructionBriefDraft): Pair[] {
 
 export function generatePoints(draft: ConstructionBriefDraft): Checkpoint[] {
   const trade = draft.trade || detectTrade(draft.description);
-  return templates(trade, draft).map(([label, description], i) => ({
-    id: `construction-${i + 1}`,
-    label,
-    description,
-    required: true,
-    shotId: null,
-    code: suggestCode(trade, label, description),
-  }));
+  return templates(trade, draft).map(([label, description, sections], i) => {
+    const chosen = sections ? codeRefsFor("Concrete", sections) : [];
+    const [main, ...more] = chosen;
+    return {
+      id: `construction-${i + 1}`,
+      label,
+      description,
+      required: true,
+      shotId: null,
+      code: main ?? suggestCode(trade, label, description),
+      ...(more.length ? { moreCodes: more } : {}),
+    };
+  });
 }

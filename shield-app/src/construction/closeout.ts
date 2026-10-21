@@ -24,6 +24,7 @@ function pointsFor(job: Job, recordFor: CloseoutInput["recordFor"]): CloseoutPoi
     label: c.label,
     description: c.description ?? "",
     code: c.code ?? null,
+    ...(c.moreCodes?.length ? { moreCodes: c.moreCodes } : {}),
     record: c.shotId ? (recordFor(c.shotId) ?? null) : null,
   }));
 }
@@ -226,7 +227,8 @@ export function packetToHtml(packet: CloseoutPacket): string {
   const pts = packet.points
     .map((p) => {
       const r = p.record;
-      const code = p.code ? `${p.code.irc ? "IRC " + esc(p.code.irc) : ""}${p.code.ibc ? " IBC " + esc(p.code.ibc) : ""} — ${esc(p.code.name)}` : "no code reference";
+      const more = (p.moreCodes ?? []).map((m) => `<br>${m.irc ? "IRC " + esc(m.irc) : ""}${m.ibc ? " IBC " + esc(m.ibc) : ""} — ${esc(m.name)}`).join("");
+      const code = (p.code ? `${p.code.irc ? "IRC " + esc(p.code.irc) : ""}${p.code.ibc ? " IBC " + esc(p.code.ibc) : ""} — ${esc(p.code.name)}` : "no code reference") + more;
       const rec = r
         ? `<pre>sha256 ${esc(r.sha256)}
 chain  ${esc(r.chainHead)}

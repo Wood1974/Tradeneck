@@ -82,6 +82,15 @@ describe("foundation scope", () => {
       expect(pts.map((p) => p.code?.irc)).toEqual(["R403.1.4", "R403.1.3", "R402.2", "R406.1", "R401.3"]);
     }
   });
+  it("lists every foundation section that applies to a point, main one first", () => {
+    const pts = foundation("Footings");
+    const all = (i: number) => [pts[i]!.code?.irc, ...(pts[i]!.moreCodes ?? []).map((c) => c.irc)];
+    expect(all(0)).toEqual(["R403.1.4", "R403.1"]);
+    expect(all(3)).toEqual(["R406.1", "R405.1", "R404.1.3"]);
+    expect(all(4)).toEqual(["R401.3"]);
+    expect(pts[1]!.moreCodes).toBeUndefined();
+    expect(pts[2]!.moreCodes).toBeUndefined();
+  });
   it("leaves slab and flatwork jobs with the original points", () => {
     for (const scope of ["Slab on grade", "Flatwork (drive / patio)", "Repair / underpin", ""]) {
       expect(foundation(scope)[0]!.label).toBe("Layout / excavation");

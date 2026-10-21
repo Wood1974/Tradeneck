@@ -377,7 +377,8 @@ function packetResultView(r: NonNullable<typeof packetOut>): string {
   const ok = r.verdict === "PACKET-SEALED";
   const points = p.points
     .map((pt) => {
-      const code = pt.code ? (pt.code.irc ? `IRC ${pt.code.irc}` : pt.code.ibc ? `IBC ${pt.code.ibc}` : pt.code.name) : "no code";
+      const label = (c: { irc: string | null; ibc: string | null; name: string }) => (c.irc ? `IRC ${c.irc}` : c.ibc ? `IBC ${c.ibc}` : c.name);
+      const code = pt.code ? [pt.code, ...(pt.moreCodes ?? [])].map(label).join(" + ") : "no code";
       const rec = pt.record;
       const chip = rec
         ? rec.captureKind === "native-camera"
