@@ -49,28 +49,66 @@ export async function appAttestState(): Promise<AppAttestState> {
 
 export type EnrollResult = { ok: true; keyId: string } | { ok: false; reason: string };
 
+/** The parts of enrolling, in order, so the screen can say which one it is waiting on. */
+export type EnrollStep = "challenge" | "apple" | "proof" | "saving";
+
+const STEP_TEXT: Record<EnrollStep, string> = {
+  challenge: "Asking the Shield server for a challenge",
+  apple: "Asking Apple to vouch for this phone (can take up to 30 seconds)",
+  proof: "Sending Apple's proof to the Shield server",
+  saving: "Saving the key on this phone",
+};
+export const enrollStepText = (step: EnrollStep): string => STEP_TEXT[step];
+
+/** However the steps behave, enrolling ends with an outcome on screen within this long. */
+export const ENROLL_LIMIT_MS = 90000;
+
 export function reasonOf(err: unknown): string {
   if (err instanceof IdentityError) return err.code;
   return String((err as { message?: string })?.message ?? err).slice(0, 200);
 }
 
 /** Needs a signed-in account (the token is kept in memory, so after a restart this asks for a sign-in first). */
-export async function enrollDevice(): Promise<EnrollResult> {
+export async function enrollDevice(onStep: (step: EnrollStep) => void = () => {}): Promise<EnrollResult> {
   if (!onIphone()) return { ok: false, reason: "not-ios" };
   const api = identityApi();
   if (!api.signedIn()) return { ok: false, reason: "not-signed-in" };
+  let step: EnrollStep = "challenge";
+  // Set once the overall limit has passed: from then on nothing more is registered or saved, so a failure on
+  // screen always means nothing was kept.
+  let abandoned = false;
+  const at = (next: EnrollStep) => {
+    step = next;
+    onStep(next);
+  };
+  const run = async (): Promise<EnrollResult> => {
+    try {
+      at("challenge");
+      const { nonce } = await api.attestChallenge();
+      const sc = await plugin();
+      at("apple");
+      // The phone gives Apple 30 seconds; this only guards a call that never comes back at all.
+      const proof = await withTimeout(sc.appAttestEnroll({ nonce }), 45000);
+      if (abandoned) return { ok: false, reason: `timed-out:${step}` };
+      at("proof");
+      const accepted = await api.attestRegister({ keyId: proof.key_id, nonce, attestation: proof.attestation_b64 });
+      if (!accepted.trusted) return { ok: false, reason: "server-rejected" };
+      if (abandoned) return { ok: false, reason: `timed-out:${step}` };
+      // Only now does the phone use this key. A rejected proof leaves nothing behind to retry against.
+      at("saving");
+      await withTimeout(sc.appAttestConfirm({ keyId: proof.key_id }), 10000);
+      return { ok: true, keyId: proof.key_id };
+    } catch (err) {
+      // A step's own time limit reads the same on screen as the overall one: which step, and that nothing was kept.
+      if (err instanceof Error && err.message === "timed out") return { ok: false, reason: `timed-out:${step}` };
+      return { ok: false, reason: reasonOf(err) };
+    }
+  };
   try {
-    const { nonce } = await api.attestChallenge();
-    const sc = await plugin();
-    // The phone gives Apple 30 seconds; this only guards a call that never comes back at all.
-    const proof = await withTimeout(sc.appAttestEnroll({ nonce }), 45000);
-    const accepted = await api.attestRegister({ keyId: proof.key_id, nonce, attestation: proof.attestation_b64 });
-    if (!accepted.trusted) return { ok: false, reason: "server-rejected" };
-    // Only now does the phone use this key. A rejected proof leaves nothing behind to retry against.
-    await withTimeout(sc.appAttestConfirm({ keyId: proof.key_id }), 10000);
-    return { ok: true, keyId: proof.key_id };
-  } catch (err) {
-    return { ok: false, reason: reasonOf(err) };
+    return await withTimeout(run(), ENROLL_LIMIT_MS);
+  } catch {
+    abandoned = true;
+    return { ok: false, reason: `timed-out:${step}` };
   }
 }
 
@@ -84,9 +122,20 @@ const FIXED: Record<string, string> = {
   app_id_hash_mismatch: "The server's app ID does not match this app, so it refused Apple's proof (app_id_hash_mismatch).",
 };
 
+const TIMED_OUT: Record<string, string> = {
+  challenge: "The Shield server did not answer in time. Nothing was saved on this phone.",
+  apple: "Apple's device check did not answer in time. Nothing was saved on this phone.",
+  proof: "The Shield server did not answer in time when sent Apple's proof. Nothing was saved on this phone.",
+  saving: "The phone did not finish saving the key in time. Check whether it shows as enrolled.",
+};
+
 /** Plain words for the screen; the raw code stays visible so a failure can be reported exactly. */
 export function enrollErrorText(reason: string): string {
   if (FIXED[reason]) return FIXED[reason];
+  if (reason.startsWith("timed-out:")) {
+    const step = reason.slice("timed-out:".length);
+    return `${TIMED_OUT[step] ?? "Enrolling did not finish in time."} Reason: ${reason}`;
+  }
   if (reason.startsWith("attest-failed:")) return `Apple's device check failed. Reason: ${reason.slice("attest-failed:".length).trim()}`;
   return `The device check could not be set up. Reason: ${reason}`;
 }

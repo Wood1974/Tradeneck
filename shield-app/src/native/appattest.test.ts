@@ -22,7 +22,7 @@ vi.mock("../identity/client", async (original) => ({
   identityApi: () => api,
 }));
 
-import { appAttestState, enrollDevice, enrollErrorText } from "./appattest";
+import { appAttestState, ENROLL_LIMIT_MS, enrollDevice, enrollErrorText, enrollStepText, type EnrollStep } from "./appattest";
 
 const g = globalThis as unknown as { Capacitor?: unknown };
 const order: string[] = [];
@@ -107,6 +107,69 @@ describe("enrolling this phone with Apple", () => {
     const res = await enrollDevice();
     expect(res).toEqual({ ok: false, reason: "network" });
     expect(enrollErrorText("network")).toContain("Could not reach the Shield server");
+  });
+});
+
+describe("enrolling always ends in a visible outcome", () => {
+  it("reports each step as it starts, in order, with words for each", async () => {
+    const seen: EnrollStep[] = [];
+    expect(await enrollDevice((s) => seen.push(s))).toEqual({ ok: true, keyId: "key-1" });
+    expect(seen).toEqual(["challenge", "apple", "proof", "saving"]);
+    for (const s of seen) expect(enrollStepText(s).length).toBeGreaterThan(10);
+  });
+
+  it("names the step when Apple never answers, and keeps nothing", async () => {
+    vi.useFakeTimers();
+    try {
+      appAttestEnroll.mockReturnValueOnce(new Promise(() => undefined));
+      const pending = enrollDevice();
+      await vi.advanceTimersByTimeAsync(45100);
+      const res = await pending;
+      expect(res).toEqual({ ok: false, reason: "timed-out:apple" });
+      expect(api.attestRegister).not.toHaveBeenCalled();
+      expect(appAttestConfirm).not.toHaveBeenCalled();
+      expect(enrollErrorText("timed-out:apple")).toBe(
+        "Apple's device check did not answer in time. Nothing was saved on this phone. Reason: timed-out:apple",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ends after the overall limit even if the server call never comes back", async () => {
+    vi.useFakeTimers();
+    try {
+      api.attestChallenge.mockReturnValueOnce(new Promise(() => undefined));
+      const pending = enrollDevice();
+      await vi.advanceTimersByTimeAsync(ENROLL_LIMIT_MS + 100);
+      expect(await pending).toEqual({ ok: false, reason: "timed-out:challenge" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("registers and saves nothing for an answer that arrives after the limit", async () => {
+    vi.useFakeTimers();
+    try {
+      let late: (v: { key_id: string; attestation_b64: string }) => void = () => undefined;
+      // The step's own limit is 45 s and the overall one is 90 s, so a late answer needs a slow server call first.
+      api.attestChallenge.mockImplementationOnce(() => new Promise((r) => setTimeout(() => r({ nonce: "n" }), 60000)));
+      appAttestEnroll.mockReturnValueOnce(new Promise((r) => (late = r)));
+      const pending = enrollDevice();
+      await vi.advanceTimersByTimeAsync(ENROLL_LIMIT_MS + 100);
+      expect(await pending).toEqual({ ok: false, reason: "timed-out:apple" });
+      late({ key_id: "k", attestation_b64: "QQ==" });
+      await vi.advanceTimersByTimeAsync(10);
+      expect(api.attestRegister).not.toHaveBeenCalled();
+      expect(appAttestConfirm).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not claim 'nothing was saved' for a timeout while saving", () => {
+    expect(enrollErrorText("timed-out:saving")).not.toContain("Nothing was saved");
+    expect(enrollErrorText("timed-out:proof")).toContain("Reason: timed-out:proof");
   });
 });
 

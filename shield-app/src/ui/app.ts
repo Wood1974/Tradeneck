@@ -23,7 +23,7 @@ import { identityApi } from "../identity/client";
 import { bindReset, resetEntry, resetOpen, resetView } from "./reset";
 import { EMAIL_ATTRS, passwordField } from "./fields";
 import { uploadLine, uploadPending } from "../native/uploader";
-import { appAttestState, enrollDevice, enrollErrorText, reasonOf, type AppAttestState } from "../native/appattest";
+import { appAttestState, enrollDevice, enrollErrorText, enrollStepText, reasonOf, type AppAttestState } from "../native/appattest";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
 type Tab = "capture" | "jobs" | "vault" | "verify" | "construction";
@@ -219,12 +219,27 @@ async function runEnroll(creds: { email: string; pass: string } | null): Promise
   } else {
     render();
   }
+  // Say which part is being waited on, with a running count of seconds. A stall then shows where it is, and a
+  // frozen count shows the screen itself has stopped.
+  const started = Date.now();
+  let doing = creds ? "Signing in" : "Starting";
+  const showProgress = () => {
+    const line = document.querySelector("[data-enroll-status]");
+    if (line) line.textContent = `${doing}… ${Math.round((Date.now() - started) / 1000)} s`;
+  };
+  const ticker = setInterval(showProgress, 1000);
+  showProgress();
   try {
     if (creds) await identityApi().signIn(creds.email, creds.pass);
-    const result = await enrollDevice();
+    const result = await enrollDevice((step) => {
+      doing = enrollStepText(step);
+      showProgress();
+    });
     enrollMessage = result.ok ? "" : enrollErrorText(result.reason);
   } catch (err) {
     enrollMessage = enrollErrorText(reasonOf(err));
+  } finally {
+    clearInterval(ticker);
   }
   enrollBusy = false;
   const line = document.querySelector("[data-enroll-status]");
