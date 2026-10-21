@@ -66,31 +66,6 @@ async function readGps(): Promise<SealRecord["gps"]> {
   }
 }
 
-function pinScore(gps: SealRecord["gps"], jobPin: { lat: number; lng: number; radiusM: number } | null): SealRecord["pinScore"] {
-  if (!jobPin) return null;
-  if (!gps) {
-    return { meters: null, inside: null, mockFlag: isNativeOriginAvailable() ? "native-pending" : "unknown" };
-  }
-  const meters = haversineM(gps.lat, gps.lng, jobPin.lat, jobPin.lng);
-  // A fix less precise than the pin radius cannot place the device inside it.
-  return {
-    meters,
-    inside: gps.acc > jobPin.radiusM ? null : meters <= jobPin.radiusM,
-    mockFlag: isNativeOriginAvailable() ? "native-pending" : "unknown",
-  };
-}
-
-function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const R = 6371000;
-  const toR = (d: number) => (d * Math.PI) / 180;
-  const dLat = toR(bLat - aLat);
-  const dLng = toR(bLng - aLng);
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toR(aLat)) * Math.cos(toR(bLat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
-}
-
 function bytesFromBase64(raw: string): ArrayBuffer {
   const cleaned = raw.replace(/^data:[^;]+;base64,/, "");
   const bin = atob(cleaned);
@@ -147,7 +122,8 @@ async function sealLocked(bytes: ArrayBuffer, mime: string, checkpointId: string
     bytes: bytes.byteLength,
     mime,
     gps,
-    pinScore: pinScore(gps, job?.pin ?? null),
+    // No typed job location exists, so there is nothing to score against.
+    pinScore: null,
     deviceSealId: device,
     attest,
     // Omitted (not undefined) when there is no note, so records made before the ID check still canonicalize.

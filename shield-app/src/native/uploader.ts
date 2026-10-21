@@ -28,6 +28,43 @@ const refusedHashes = new Set<string>();
 
 export const uploadState = (): UploadState => state;
 
+// What the server said about each photo, keyed by the photo's SHA-256. Only the server's answer goes in here: the
+// phone cannot check Apple's proof itself, so it shows nothing for a photo the server has not looked at.
+const serverChecks = new Map<string, { status: string; trusted: boolean }>();
+
+export interface DeviceCheckLine {
+  text: string;
+  tone: "ok" | "warn" | "";
+}
+
+/** The Apple device check result for one photo, worded as exactly what is known. iPhone photos only. */
+export function appleCheckFor(platform: string, photoSha256: string): DeviceCheckLine | null {
+  if (platform !== "ios") return null;
+  const seen = serverChecks.get(photoSha256);
+  if (!seen) return { text: "Apple device check: not checked yet. The Shield server checks it when the photo uploads.", tone: "" };
+  if (seen.trusted) return { text: "Apple device check: verified by the Shield server", tone: "ok" };
+  const why = seen.status === "none" ? "no Apple proof came with this photo" : seen.status;
+  return { text: `Apple device check: not verified by the server (${why})`, tone: "warn" };
+}
+
+/** Photos kept in the phone's protected storage that the Vault list does not show. The list is separate storage the system can clear. */
+export function missingFromVault(vaultCount: number): number {
+  return Math.max(0, state.total - vaultCount);
+}
+
+/** What the phone knows about its connection, from the last real attempt to reach the server plus the system's own flag. */
+export function connectionLine(): string {
+  if (!isNativeOriginAvailable()) return "";
+  const systemOffline = typeof navigator !== "undefined" && navigator.onLine === false;
+  if (systemOffline || state.note === "offline") {
+    return "No signal. Photos, sealing, closing a job and verifying records still work. Photos upload when signal returns.";
+  }
+  if (state.note === "sign-in") return "Signal. Sign in to copy photos to the Shield server.";
+  if (state.note === "quota") return "Signal, but this account is out of server space. Photos stay on this phone.";
+  if (state.note === "error") return "Signal, but the last copy to the server failed. It tries again.";
+  return "Signal. Photos copy to the Shield server while you are signed in.";
+}
+
 const codeOf = (err: unknown): string => (typeof (err as { code?: unknown })?.code === "string" ? (err as { code: string }).code : "network");
 
 /** The line the Vault shows. Plain about what is and is not on the server. */
@@ -78,7 +115,9 @@ export async function uploadPending(force = false): Promise<void> {
       state = { ...state, note: "sign-in" };
       return;
     }
-    const onServer = new Set((await api.listCaptures()).map((c) => c.record_hash));
+    const stored = await api.listCaptures();
+    for (const c of stored) if (c.photo_sha256 && c.attest) serverChecks.set(c.photo_sha256, c.attest);
+    const onServer = new Set(stored.map((c) => c.record_hash));
     state = { ...state, stored: items.filter((i) => onServer.has(i.record.record_hash)).length };
     for (const item of items) {
       const hash = item.record.record_hash;
@@ -93,7 +132,9 @@ export async function uploadPending(force = false): Promise<void> {
         app_attest_assertion_b64: item.app_attest_assertion_b64 ?? null,
       };
       try {
-        await api.uploadCapture(body);
+        const reply = await api.uploadCapture(body);
+        const photoSha = String(item.record.photo_sha256 ?? "");
+        if (photoSha && reply?.attest) serverChecks.set(photoSha, reply.attest);
         onServer.add(hash);
         state = { ...state, stored: state.stored + 1 };
       } catch (err) {

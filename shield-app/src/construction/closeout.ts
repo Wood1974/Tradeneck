@@ -51,8 +51,6 @@ export async function buildCloseoutPacket(input: CloseoutInput): Promise<Closeou
       title: job.brief?.title ?? "",
       trade: job.brief?.trade ?? job.pack,
       budgetBand: job.brief?.budgetBand || null,
-      feeUsd: job.feeUsd,
-      pin: job.pin,
     },
     brief: job.brief
       ? { role: job.brief.role, lockedText: job.brief.lockedText, answers: job.brief.answers }

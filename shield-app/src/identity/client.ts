@@ -26,6 +26,8 @@ export interface CaptureUpload {
 
 export interface StoredCapture {
   record_hash: string;
+  /** SHA-256 of the stored photo; the phone matches it to the vault record's `sha256`. */
+  photo_sha256?: string;
   attest: { status: string; trusted: boolean };
 }
 

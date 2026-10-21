@@ -368,7 +368,8 @@ test("an unverified phone cannot seal: sign-on comes first, step by step", async
   await expect(page.locator(".statement")).toContainText("I took each one myself");
   await page.click('[data-act="id-sign"]');
   await expect(page.locator('[data-act="native"]')).toBeVisible();
-  await expect(page.locator(".ready")).toContainText("Ready to work offline");
+  await expect(page.locator(".ready")).toContainText("Signal.");
+  await expect(page.locator(".ready")).not.toContainText("No signal");
   await expect(page.locator(".chip", { hasText: "SIGNED NOTE ON FILE" })).toBeVisible();
 
   // The signed note survives a restart, and the first photo it allows is bound to it.
@@ -494,7 +495,7 @@ test("a signed-on phone keeps working with the network off from the start of a s
   await openApp(page);
   await page.waitForLoadState("networkidle");
   await context.setOffline(true);
-  await expect(page.locator(".ready")).toContainText("Ready to work offline");
+  await expect(page.locator(".ready")).toContainText("No signal. Photos, sealing, closing a job and verifying records still work.");
   await page.click('[data-act="native"]');
   await expect(page.locator(".thumb")).toBeVisible();
   await page.click('[data-act="rehash"]');

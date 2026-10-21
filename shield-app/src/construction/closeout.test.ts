@@ -22,7 +22,7 @@ function job(shots: string[] = ["shot-1"]): Job {
   const checkpoints = generatePoints({ role: "gc", title: "Slab", trade: "concrete", budgetBand: "under15", description: "pour slab", include: "", exclude: "", answers: {} });
   shots.forEach((s, i) => (checkpoints[i]!.shotId = s));
   return {
-    id: "job-1", pack: "construction", customCount: 0, budgetUsd: 4000, feeUsd: 79, feeTier: "standard", lockedAt: "2026-10-04T00:00:00.000Z", pin: null,
+    id: "job-1", pack: "construction", customCount: 0, budgetUsd: 4000, lockedAt: "2026-10-04T00:00:00.000Z",
     checkpoints,
     brief: { role: "gc", title: "Slab", trade: "concrete", budgetBand: "under15", description: "pour slab", include: "", exclude: "", answers: {}, lockedText: "GC brief", lockedAt: "2026-10-04T00:00:00.000Z" },
   };
@@ -49,6 +49,28 @@ async function resign(p: CloseoutPacket): Promise<CloseoutPacket> {
 }
 
 const clone = (p: CloseoutPacket) => JSON.parse(JSON.stringify(p)) as CloseoutPacket;
+
+describe("packets and records made before the fee and job pin were removed", () => {
+  it("still verify, and new packets carry neither field", async () => {
+    const r1 = await signedRecord("shot-1", "a".repeat(64));
+    const fresh = await build({ "shot-1": r1 });
+    expect(fresh.job).not.toHaveProperty("feeUsd");
+    expect(fresh.job).not.toHaveProperty("pin");
+    const legacy = clone(fresh);
+    legacy.job.feeUsd = 79;
+    legacy.job.pin = { lat: 40.76, lng: -111.89, radiusM: 200 };
+    expect((await verifyCloseoutPacket(await resign(legacy))).verdict).toBe("PACKET-SEALED");
+  });
+  it("accepts an old record that carries a pin score", async () => {
+    const old = await signedRecord("shot-1", "b".repeat(64));
+    expect(old.pinScore).toBeNull();
+    const withScore = { ...old, pinScore: { meters: 12, inside: true, mockFlag: "unknown" as const } };
+    const { signature: _s, chainHead: _c, ...unsigned } = withScore;
+    const chainHead = await chainStep(unsigned.prevChain, await sha256Text(stableStringify(unsigned)));
+    const rec: SealRecord = { ...unsigned, chainHead, signature: await signPayload({ ...unsigned, chainHead }) };
+    expect((await verifyCloseoutPacket(await build({ "shot-1": rec }))).verdict).toBe("PACKET-SEALED");
+  });
+});
 
 describe("buildCloseoutPacket", () => {
   it("hashes the body with stableStringify and signs with the device key", async () => {

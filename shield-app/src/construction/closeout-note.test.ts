@@ -34,7 +34,7 @@ function job(): Job {
   const checkpoints = generatePoints({ role: "gc", title: "Slab", trade: "concrete", budgetBand: "under15", description: "pour slab", include: "", exclude: "", answers: {} });
   checkpoints[0]!.shotId = "shot-1";
   return {
-    id: "job-1", pack: "construction", customCount: 0, budgetUsd: 4000, feeUsd: 79, feeTier: "standard", lockedAt: "2026-10-04T00:00:00.000Z", pin: null, checkpoints,
+    id: "job-1", pack: "construction", customCount: 0, budgetUsd: 4000, lockedAt: "2026-10-04T00:00:00.000Z", checkpoints,
     brief: { role: "gc", title: "Slab", trade: "concrete", budgetBand: "under15", description: "pour slab", include: "", exclude: "", answers: {}, lockedText: "GC brief", lockedAt: "2026-10-04T00:00:00.000Z" },
   };
 }

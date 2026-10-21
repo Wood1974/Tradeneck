@@ -37,6 +37,8 @@ function str(v: string | string[] | undefined): string {
 function templates(trade: TradeId, draft: ConstructionBriefDraft): Pair[] {
   const a = draft.answers || {};
   const s = (k: string) => str(a[k]);
+  // Footings and foundation walls hide drains and coatings under backfill, so those scopes get points for them.
+  const foundationWork = /footing|foundation wall/i.test(s("scope"));
   const all: Record<TradeId, Pair[]> = {
     roofing: [
       ["Existing condition", "Photo of the full roof elevation(s) in the contract before tear-off, including problem areas called out in the brief."],
@@ -81,11 +83,17 @@ function templates(trade: TradeId, draft: ConstructionBriefDraft): Pair[] {
       ["Completion", "Finished location, debris removed, thermostat or controller working if in scope."],
     ],
     concrete: [
-      ["Layout / excavation", "Forms, elevations, and excavation matching the brief before steel."],
+      foundationWork
+        ? ["Footing excavation and depth", "Footing trench or form with the bottom on undisturbed soil, depth below grade and the frost line shown with a tape, and width and thickness before steel."]
+        : ["Layout / excavation", "Forms, elevations, and excavation matching the brief before steel."],
       ["Steel in place", s("rebar") !== "No" ? "Rebar or mesh, chairs, and overlaps before pour." : "Forms and dowels before pour."],
       ["Pour", "Placement in progress or immediately after screed — no covered defects."],
-      ["Finish / cure setup", "Finished surface and any specified control joints."],
-      ["Completion", "Stripped forms, grade around work, and the completed element in context."],
+      foundationWork
+        ? ["Wall, waterproofing and drain", "Stripped wall with dampproofing or waterproofing applied and any anchor bolts set, plus the footing drain, before backfill hides them."]
+        : ["Finish / cure setup", "Finished surface and any specified control joints."],
+      foundationWork
+        ? ["Completion", "Backfilled grade sloping away from the foundation, swales or drain outlets visible, forms stripped, and the completed work in context."]
+        : ["Completion", "Stripped forms, grade around work, and the completed element in context."],
     ],
     framing: [
       ["Existing / layout", "Area before bearing changes; layout marks for new walls or openings."],

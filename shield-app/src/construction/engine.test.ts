@@ -73,6 +73,23 @@ describe("generatePoints", () => {
   });
 });
 
+describe("foundation scope", () => {
+  const foundation = (scope: string) => generatePoints(draft({ trade: "concrete", answers: { scope } }));
+  it("keeps five points and attaches a foundation code to the ones that change", () => {
+    for (const scope of ["Footings", "Foundation wall / stem"]) {
+      const pts = foundation(scope);
+      expect(pts).toHaveLength(5);
+      expect(pts.map((p) => p.code?.irc)).toEqual(["R403.1.4", "R403.1.3", "R402.2", "R406.1", "R401.3"]);
+    }
+  });
+  it("leaves slab and flatwork jobs with the original points", () => {
+    for (const scope of ["Slab on grade", "Flatwork (drive / patio)", "Repair / underpin", ""]) {
+      expect(foundation(scope)[0]!.label).toBe("Layout / excavation");
+      expect(foundation(scope)[3]!.label).toBe("Finish / cure setup");
+    }
+  });
+});
+
 describe("lockedNarrative", () => {
   it("includes answers and exclusions", () => {
     const text = lockedNarrative(draft({ trade: "roofing", title: "Reroof", description: "tear off", exclude: "gutters", answers: { material: "Metal" } }));
@@ -83,8 +100,8 @@ describe("lockedNarrative", () => {
 });
 
 describe("codes", () => {
-  it("carries all 16 migration rows", () => {
-    expect(CODE_CHECKPOINTS).toHaveLength(16);
+  it("carries the 16 migration rows and the 6 foundation rows", () => {
+    expect(CODE_CHECKPOINTS).toHaveLength(22);
     expect(CODE_CHECKPOINTS.filter((c) => c.trade === "Framing")).toHaveLength(4);
   });
   it("suggests reinforcement for steel in place", () => {
@@ -113,9 +130,19 @@ describe("codes", () => {
   });
   it("does not use sections found to be wrong for these topics", () => {
     const cited = new Set(CODE_CHECKPOINTS.map((c) => c.irc));
-    for (const wrong of ["R603.7.1", "R902.1", "R905.2.8", "E3401.1", "E3404.2", "P2603.2", "R403.1", "R403.1.1", "General"]) {
+    for (const wrong of ["R603.7.1", "R902.1", "R905.2.8", "E3401.1", "E3404.2", "P2603.2", "R403.1.1", "General"]) {
       expect(cited.has(wrong)).toBe(false);
     }
+  });
+  it("cites the foundation sections that were read from the code text", () => {
+    const concrete = CODE_CHECKPOINTS.filter((c) => c.trade === "Concrete").map((c) => c.irc);
+    for (const irc of ["R402.2", "R403.1", "R403.1.3", "R403.1.4", "R404.1.3", "R405.1", "R406.1", "R401.3"]) expect(concrete).toContain(irc);
+  });
+  it("puts the Utah foundation exceptions in the rows they amend", () => {
+    const text = (irc: string) => CODE_CHECKPOINTS.find((c) => c.irc === irc)!.description;
+    expect(text("R404.1.3")).toContain("IBC 1807.1.5 and 1807.1.6");
+    expect(text("R405.1")).toContain("geotechnical report");
+    expect(text("R403.1.6")).toContain("R403.1.6.1 items 2 and 3");
   });
   it("returns null when nothing matches", () => {
     expect(suggestCode("paint", "Prime / first coat")).toBeNull();

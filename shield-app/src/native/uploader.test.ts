@@ -110,4 +110,53 @@ describe("copying sealed photos to the server", () => {
     await u.uploadPending(true);
     expect(u.uploadLine()).toBe("");
   });
+
+  it("words the connection from what really happened, not from a fixed claim", async () => {
+    const u = await load();
+    expect(u.connectionLine()).toBe("Signal. Photos copy to the Shield server while you are signed in.");
+    api.signedIn.mockReturnValue(false);
+    await u.uploadPending(true);
+    expect(u.connectionLine()).toBe("Signal. Sign in to copy photos to the Shield server.");
+    api.signedIn.mockReturnValue(true);
+    api.uploadCapture.mockRejectedValue({ code: "network" });
+    await u.uploadPending(true);
+    expect(u.connectionLine()).toContain("No signal.");
+    expect(u.connectionLine()).toContain("still work");
+  });
+
+  it("says no signal when the system reports it, even before an attempt", async () => {
+    const u = await load();
+    vi.stubGlobal("navigator", { onLine: false });
+    expect(u.connectionLine()).toContain("No signal.");
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the server's Apple result per photo, and says nothing is known before upload", async () => {
+    api.listCaptures.mockResolvedValue([
+      { record_hash: "h1", photo_sha256: "p1", attest: { status: "verified", trusted: true } },
+      { record_hash: "h2", photo_sha256: "p2", attest: { status: "none", trusted: false } },
+    ]);
+    const u = await load();
+    expect(u.appleCheckFor("ios", "p1")?.text).toContain("not checked yet");
+    await u.uploadPending(true);
+    expect(u.appleCheckFor("ios", "p1")).toEqual({ text: "Apple device check: verified by the Shield server", tone: "ok" });
+    expect(u.appleCheckFor("ios", "p2")?.text).toBe("Apple device check: not verified by the server (no Apple proof came with this photo)");
+    expect(u.appleCheckFor("android", "p1")).toBeNull();
+  });
+
+  it("learns the Apple result from the upload reply too", async () => {
+    api.uploadCapture.mockResolvedValue({ already: false, attest: { status: "bad_assertion", trusted: false } });
+    const u = await load();
+    await u.uploadPending(true);
+    expect(u.appleCheckFor("ios", "p2")?.tone).toBe("warn");
+    expect(u.appleCheckFor("ios", "p2")?.text).toContain("bad_assertion");
+  });
+
+  it("counts photos the phone holds that the Vault list does not show", async () => {
+    const u = await load();
+    await u.uploadPending(true);
+    expect(u.missingFromVault(3)).toBe(0);
+    expect(u.missingFromVault(1)).toBe(2);
+    expect(u.missingFromVault(9)).toBe(0);
+  });
 });

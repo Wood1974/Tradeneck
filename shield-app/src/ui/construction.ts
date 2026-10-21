@@ -5,7 +5,6 @@ import { generatePoints, lockedNarrative } from "../construction/points";
 import { neededQuestions, type Question } from "../construction/questions";
 import { BRIEF_READY_SCORE, scoreBrief } from "../construction/score";
 import { detectTrade, labelForTrade, TRADES } from "../construction/trades";
-import { feeForBudget } from "../pricing";
 import { getCloseout, getMeta, putCloseout, putJob, setMeta } from "../store/db";
 import type { BudgetBand, BriefRole, CloseoutPacket, ConstructionBrief, ConstructionBriefDraft, Job, TradeId, VaultItem } from "../types";
 
@@ -87,7 +86,7 @@ function briefView(job: Job | undefined): string {
   const meterColor = scored.score >= BRIEF_READY_SCORE ? "var(--ok)" : scored.score >= 40 ? "var(--warn)" : "var(--bad)";
 
   const locked = job?.brief
-    ? `<div class="banner"><strong>LOCKED BRIEF</strong>${esc(job.brief.title || "Untitled")} · ${esc(labelForTrade(job.brief.trade))} · $${job.feeUsd} ${job.feeTier}
+    ? `<div class="banner"><strong>LOCKED BRIEF</strong>${esc(job.brief.title || "Untitled")} · ${esc(labelForTrade(job.brief.trade))}
         <div class="meta">Locked ${esc(job.brief.lockedAt.slice(0, 16).replace("T", " "))}. Re-locking below keeps sealed photos on their point numbers.</div>
         <div><button data-act="c-goto-points">Open the 5 points</button></div></div>`
     : `<div class="banner"><strong>PROTECT THE WORK</strong>Describe the job. Thin write-ups get locking questions. Locking generates 5 photo checkpoints with code references.</div>`;
@@ -387,7 +386,6 @@ async function lockBrief(ctx: ConstructionCtx): Promise<void> {
   const full = { ...draft, trade };
   const brief: ConstructionBrief = { ...full, lockedText: lockedNarrative(full), lockedAt: new Date().toISOString() };
   const points = generatePoints(full);
-  const fee = feeForBudget(BUDGET_USD[draft.budgetBand]);
   const existing = activeConstructionJob(ctx);
   if (existing?.checkpoints.some((c) => c.shotId)) {
     briefStatus = "Photos are already sealed to this job's points. Start a new brief for different points.";
@@ -398,8 +396,6 @@ async function lockBrief(ctx: ConstructionCtx): Promise<void> {
     ? {
         ...existing,
         brief,
-        feeUsd: fee.feeUsd,
-        feeTier: fee.feeTier,
         budgetUsd: BUDGET_USD[draft.budgetBand],
         checkpoints: points.map((p, i) => ({ ...p, shotId: existing.checkpoints[i]?.shotId ?? null })),
       }
@@ -408,10 +404,7 @@ async function lockBrief(ctx: ConstructionCtx): Promise<void> {
         pack: "construction",
         customCount: 5,
         budgetUsd: BUDGET_USD[draft.budgetBand],
-        feeUsd: fee.feeUsd,
-        feeTier: fee.feeTier,
         lockedAt: brief.lockedAt,
-        pin: null,
         checkpoints: points,
         brief,
         closedAt: null,

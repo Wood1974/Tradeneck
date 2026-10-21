@@ -10,8 +10,6 @@ export type PlatformKind = "ios" | "android" | "web";
 
 export type Verdict = "SEALED" | "UNATTESTED-NATIVE" | "TAMPERED" | "NO-ORIGIN";
 
-export type FeeTier = "standard" | "extended" | "major";
-
 export type TradeId =
   | "roofing"
   | "kitchen"
@@ -72,14 +70,7 @@ export interface Job {
   pack: PackKind;
   customCount: number;
   budgetUsd: number;
-  feeUsd: number;
-  feeTier: FeeTier;
   lockedAt: string;
-  pin: {
-    lat: number;
-    lng: number;
-    radiusM: number;
-  } | null;
   checkpoints: Checkpoint[];
   brief?: ConstructionBrief | null;
   closedAt?: string | null;
@@ -103,6 +94,7 @@ export interface SealRecord {
     acc: number;
     source: "os";
   } | null;
+  /** Retired: there is no typed job location any more. New records always carry null; the key stays because it is part of the signed form. */
   pinScore: {
     meters: number | null;
     inside: boolean | null;
@@ -150,8 +142,9 @@ export interface CloseoutBody {
     title: string;
     trade: string;
     budgetBand: string | null;
-    feeUsd: number;
-    pin: Job["pin"];
+    /** Retired fields, present only on packets made before they were removed. */
+    feeUsd?: number;
+    pin?: { lat: number; lng: number; radiusM: number } | null;
   };
   brief: {
     role: string;
