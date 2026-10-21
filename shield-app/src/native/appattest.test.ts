@@ -6,6 +6,9 @@ const appAttestEnroll = vi.fn();
 const appAttestConfirm = vi.fn();
 vi.mock("@tradedeck/secure-capture", () => ({
   SecureCapture: {
+    // Like Capacitor's real plugin object, which answers every property: anything that awaits or returns it from
+    // an async function waits forever. The device check must never do that.
+    then: () => undefined,
     appAttestStatus: (...a: unknown[]) => appAttestStatus(...a),
     appAttestEnroll: (...a: unknown[]) => appAttestEnroll(...a),
     appAttestConfirm: (...a: unknown[]) => appAttestConfirm(...a),

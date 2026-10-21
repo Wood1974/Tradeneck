@@ -17,9 +17,14 @@ export type AppAttestState =
   | { state: "not-enrolled" }
   | { state: "enrolled"; keyId: string };
 
+/**
+ * Capacitor's plugin object answers every property, `then` included, so it looks like a promise that never settles.
+ * Handing it out of an async function (or awaiting it) therefore waits forever. Wrap it in a plain object instead,
+ * and take the plugin out of that object where it is used.
+ */
 async function plugin() {
   const { SecureCapture } = await import("@tradedeck/secure-capture");
-  return SecureCapture;
+  return { sc: SecureCapture };
 }
 
 const onIphone = (): boolean => import.meta.env.MODE !== "e2e" && isNativeOriginAvailable() && detectPlatform() === "ios";
@@ -38,7 +43,7 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
 export async function appAttestState(): Promise<AppAttestState> {
   if (!onIphone()) return { state: "not-ios" };
   try {
-    const s = await withTimeout(plugin().then((sc) => sc.appAttestStatus()), 4000);
+    const s = await withTimeout(plugin().then(({ sc }) => sc.appAttestStatus()), 4000);
     if (!s.supported) return { state: "unsupported" };
     return s.enrolled && s.key_id ? { state: "enrolled", keyId: s.key_id } : { state: "not-enrolled" };
   } catch {
@@ -85,7 +90,7 @@ export async function enrollDevice(onStep: (step: EnrollStep) => void = () => {}
     try {
       at("challenge");
       const { nonce } = await api.attestChallenge();
-      const sc = await plugin();
+      const { sc } = await plugin();
       at("apple");
       // The phone gives Apple 30 seconds; this only guards a call that never comes back at all.
       const proof = await withTimeout(sc.appAttestEnroll({ nonce }), 45000);
