@@ -1,3 +1,4 @@
+import { waitForTicket } from "../native/tickets";
 import { detectPlatform, isNativeOriginAvailable } from "../platform";
 import { attestPhotoHash } from "../native/attest";
 import {
@@ -172,6 +173,8 @@ export async function captureNative(checkpointId: string | null, direction: "bac
   try {
     const { SecureCapture } = await import("@tradedeck/secure-capture");
     const ticketId = (await activeJobId()) ?? "device";
+    // A start-of-job ticket already being fetched gets a moment to finish; the shutter never starts a network call itself.
+    await waitForTicket(ticketId);
     sealed = await SecureCapture.captureAndSeal({
       checkpointId: checkpointId ?? "unbound",
       ticketId,

@@ -21,7 +21,8 @@ import { attestation, bindIdentity, identityView, isAttested, loadIdentity } fro
 import { identityApi } from "../identity/client";
 import { bindReset, resetEntry, resetOpen, resetView } from "./reset";
 import { EMAIL_ATTRS, passwordField } from "./fields";
-import { appleCheckFor, connectionLine, missingFromVault, uploadLine, uploadPending } from "../native/uploader";
+import { ensureServerTicket } from "../native/tickets";
+import { appleCheckFor, connectionLine, hasClockWarning, missingFromVault, serverResultLines, uploadLine, uploadPending } from "../native/uploader";
 import { appAttestState, enrollDevice, enrollErrorText, enrollStepText, reasonOf, type AppAttestState } from "../native/appattest";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
@@ -102,6 +103,8 @@ async function reload(): Promise<void> {
 
 /** Copies sealed photos to the server in the background and updates the Vault line in place (a redraw would wipe forms). */
 async function syncUploads(force = false): Promise<void> {
+  // Also runs after a job is locked, signed in, or signal returns: the right moments to start a job's ticket before its first photo.
+  void activeJobId().then((id) => ensureServerTicket(id ?? "device"));
   await uploadPending(force);
   const line = document.getElementById("upload-status");
   if (line) line.textContent = uploadLine();
@@ -335,7 +338,7 @@ function vaultView(): string {
 ${esc(rec.createdAt)}
 job ${esc(rec.jobId ?? "—")} · ${esc(rec.checkpointId ?? "unbound")}
 ${rec.gps ? `location ${esc(rec.gps.source)} · ±${esc(Math.round(rec.gps.acc))} m` : "no location recorded"}
-device claim ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " (not checked on this phone)"}${appleLine(rec.platform, rec.sha256) ? `\n${esc(appleLine(rec.platform, rec.sha256)!.text)}` : ""}</pre>
+device claim ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " (not checked on this phone)"}${appleLine(rec.platform, rec.sha256) ? `\n${esc(appleLine(rec.platform, rec.sha256)!.text)}` : ""}${serverResultLines(rec.sha256).map((l) => `\n${esc(l.text)}`).join("")}</pre>
         <div class="actions">
           <button class="btn small" data-act="rehash">REHASH</button>
           <button class="btn ghost small" data-act="export">EXPORT</button>
@@ -355,6 +358,7 @@ device claim ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " (not c
           <div class="row"><h2>${esc(v.record.captureKind)}</h2><span class="chip">${esc(v.record.platform)}</span></div>
           <div class="meta">${esc(v.record.sha256.slice(0, 16))}… · ${esc(v.record.createdAt)}</div>
           ${appleLine(v.record.platform, v.record.sha256) ? `<div class="meta">${esc(appleLine(v.record.platform, v.record.sha256)!.text)}</div>` : ""}
+          ${hasClockWarning(v.record.sha256) ? `<div class="meta"><span class="chip warn">CLOCKS DISAGREE · OPEN FOR DETAIL</span></div>` : ""}
         </button>`,
       )
       .join("")}${vault.length ? "" : `<p class="meta">Empty.</p>`}</div>

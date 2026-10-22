@@ -24,11 +24,50 @@ export interface CaptureUpload {
   app_attest_assertion_b64?: string | null;
 }
 
+/** The server's consistency check of the phone's own clocks. Absent from servers that predate it. */
+export interface TimeResult {
+  label: "CONSISTENT" | "UNVERIFIED TIME" | "DEVICE CLOCK MISMATCH" | "NOT CHECKED" | string;
+  notes: string[];
+}
+
+/** Whether a server-signed ticket anchors the start of this photo's chain. Absent from servers that predate it. */
+export interface TicketResult {
+  origin: "server" | "local";
+  after?: string;
+  before?: string;
+}
+
+/** The daily outside time-stamp covering this photo. Absent from servers that predate it. */
+export interface OutsideTimeResult {
+  status: "stamped" | "waiting" | "off";
+  gen_time?: string;
+  tsa?: string;
+  chain_checked?: boolean;
+}
+
 export interface StoredCapture {
   record_hash: string;
   /** SHA-256 of the stored photo; the phone matches it to the vault record's `sha256`. */
   photo_sha256?: string;
   attest: { status: string; trusted: boolean };
+  time?: TimeResult;
+  ticket?: TicketResult;
+  outside_time?: OutsideTimeResult;
+}
+
+/** A ticket the server signed for this account and ticket id (the job id, or "device"). */
+export interface IssuedTicket {
+  ticket: Record<string, unknown>;
+  ticket_hash: string;
+  server_signature_der_b64: string;
+}
+
+export interface TicketCountersign {
+  ticket: Record<string, unknown>;
+  server_signature_der_b64: string;
+  ticket_clock: Record<string, unknown>;
+  signature_der_b64: string;
+  public_key_uncompressed_b64: string;
 }
 
 export interface IdentityApi {
@@ -48,6 +87,10 @@ export interface IdentityApi {
   uploadCapture(body: CaptureUpload): Promise<StoredCapture & { already: boolean }>;
   /** The photos this account already has on the server. */
   listCaptures(): Promise<StoredCapture[]>;
+  /** Asks the server to sign a start-of-job ticket. Closed (503, or 404 on an older server) until the server has a ticket key. */
+  issueTicket(ticketId: string): Promise<IssuedTicket>;
+  /** Hands the server the phone's countersignature over the ticket and the phone's clocks. */
+  countersignTicket(body: TicketCountersign): Promise<{ ticket_hash: string; started: boolean; already: boolean }>;
   /** A one-time challenge to bind an Apple App Attest proof to. */
   attestChallenge(): Promise<{ nonce: string }>;
   /** Hands the server Apple's proof for a key. The server checks it against Apple's root and answers `trusted: true`. */
@@ -148,6 +191,8 @@ const real: IdentityApi = {
   async listCaptures() {
     return (await authedCall<{ captures: StoredCapture[] }>("/shield/captures")).captures;
   },
+  issueTicket: (ticketId) => authedCall("/shield/tickets", { method: "POST", body: JSON.stringify({ ticket_id: ticketId }) }),
+  countersignTicket: (body) => authedCall("/shield/tickets/countersign", { method: "POST", body: JSON.stringify(body) }),
   attestChallenge: () => authedFormCall("/shield/attest/challenge", {}),
   attestRegister: (p) => authedFormCall("/shield/attest", { key_id: p.keyId, nonce: p.nonce, attestation: p.attestation }),
 };
