@@ -1,4 +1,4 @@
-import { identityApi, type CaptureUpload } from "../identity/client";
+import { identityApi, type CaptureUpload, type StoredCapture } from "../identity/client";
 import { isNativeOriginAvailable } from "../platform";
 
 // Copies each sealed photo to the Shield server for the account that is signed in. Sealing never waits on this: a photo
@@ -27,6 +27,84 @@ let lastStart = 0;
 const refusedHashes = new Set<string>();
 
 export const uploadState = (): UploadState => state;
+
+// What the server said about each photo, keyed by the photo's SHA-256. Only the server's answer goes in here: the
+// phone cannot check Apple's proof itself, so it shows nothing for a photo the server has not looked at.
+const serverFacts = new Map<string, Pick<StoredCapture, "attest" | "time" | "ticket" | "outside_time">>();
+
+function remember(photoSha256: string | undefined, c: Partial<StoredCapture> | undefined): void {
+  if (photoSha256 && c?.attest) serverFacts.set(photoSha256, { attest: c.attest, time: c.time, ticket: c.ticket, outside_time: c.outside_time });
+}
+
+export interface DeviceCheckLine {
+  text: string;
+  tone: "ok" | "warn" | "";
+}
+
+/** The Apple device check result for one photo, worded as exactly what is known. iPhone photos only. */
+export function appleCheckFor(platform: string, photoSha256: string): DeviceCheckLine | null {
+  if (platform !== "ios") return null;
+  const seen = serverFacts.get(photoSha256)?.attest;
+  if (!seen) return { text: "Apple device check: not checked yet. The Shield server checks it when the photo uploads.", tone: "" };
+  if (seen.trusted) return { text: "Apple device check: verified by the Shield server", tone: "ok" };
+  const why = seen.status === "none" ? "no Apple proof came with this photo" : seen.status;
+  return { text: `Apple device check: not verified by the server (${why})`, tone: "warn" };
+}
+
+const utc = (iso: string): string => iso.slice(0, 16).replace("T", " ") + " UTC";
+
+/**
+ * What the server says about a photo's clocks, how its chain started, and its outside time-stamp. Facts only, in the server's
+ * own terms. A field the server did not send (an older server) produces no line at all, never a guess.
+ */
+export function serverResultLines(photoSha256: string): DeviceCheckLine[] {
+  const seen = serverFacts.get(photoSha256);
+  const lines: DeviceCheckLine[] = [];
+  if (seen?.time) {
+    const note = seen.time.notes[0] ? ` (${seen.time.notes[0]})` : "";
+    if (seen.time.label === "CONSISTENT") lines.push({ text: "Clock check: the phone's clocks agree with each other (this is not a timestamp)", tone: "ok" });
+    else if (seen.time.label === "DEVICE CLOCK MISMATCH") lines.push({ text: `Clock check: the phone's clocks disagree${note}`, tone: "warn" });
+    else if (seen.time.label === "UNVERIFIED TIME") lines.push({ text: `Clock check: cannot be judged${note}`, tone: "" });
+    else lines.push({ text: "Clock check: nothing to compare yet", tone: "" });
+  }
+  if (seen?.ticket) {
+    lines.push(seen.ticket.origin === "server" && seen.ticket.after && seen.ticket.before
+      ? { text: `Job start: anchored by a server ticket, started ${utc(seen.ticket.after) === utc(seen.ticket.before) ? `at ${utc(seen.ticket.after)}` : `between ${utc(seen.ticket.after)} and ${utc(seen.ticket.before)}`}`, tone: "ok" }
+      : { text: "Job start: not anchored by the server", tone: "" });
+  }
+  const outside = seen?.outside_time;
+  if (outside?.status === "stamped" && outside.gen_time) {
+    let host = outside.tsa ?? "a time-stamp authority";
+    try { host = new URL(host).host; } catch { /* keep the text as the server gave it */ }
+    lines.push({ text: `Outside timestamp: ${host} says this existed by ${utc(outside.gen_time)}${outside.chain_checked === false ? " (its certificate chain was not checked)" : ""}`, tone: outside.chain_checked === false ? "" : "ok" });
+  } else if (outside?.status === "waiting") {
+    lines.push({ text: "Outside timestamp: waiting for the next daily run", tone: "" });
+  }
+  return lines;
+}
+
+/** True when the server flagged this photo's clocks as disagreeing. Used for the one warning mark on the list. */
+export function hasClockWarning(photoSha256: string): boolean {
+  return serverFacts.get(photoSha256)?.time?.label === "DEVICE CLOCK MISMATCH";
+}
+
+/** Photos kept in the phone's protected storage that the Vault list does not show. The list is separate storage the system can clear. */
+export function missingFromVault(vaultCount: number): number {
+  return Math.max(0, state.total - vaultCount);
+}
+
+/** What the phone knows about its connection, from the last real attempt to reach the server plus the system's own flag. */
+export function connectionLine(): string {
+  if (!isNativeOriginAvailable()) return "";
+  const systemOffline = typeof navigator !== "undefined" && navigator.onLine === false;
+  if (systemOffline || state.note === "offline") {
+    return "No signal. Photos, sealing, closing a job and verifying records still work. Photos upload when signal returns.";
+  }
+  if (state.note === "sign-in") return "Signal. Sign in to copy photos to the Shield server.";
+  if (state.note === "quota") return "Signal, but this account is out of server space. Photos stay on this phone.";
+  if (state.note === "error") return "Signal, but the last copy to the server failed. It tries again.";
+  return "Signal. Photos copy to the Shield server while you are signed in.";
+}
 
 const codeOf = (err: unknown): string => (typeof (err as { code?: unknown })?.code === "string" ? (err as { code: string }).code : "network");
 
@@ -78,7 +156,9 @@ export async function uploadPending(force = false): Promise<void> {
       state = { ...state, note: "sign-in" };
       return;
     }
-    const onServer = new Set((await api.listCaptures()).map((c) => c.record_hash));
+    const stored = await api.listCaptures();
+    for (const c of stored) remember(c.photo_sha256, c);
+    const onServer = new Set(stored.map((c) => c.record_hash));
     state = { ...state, stored: items.filter((i) => onServer.has(i.record.record_hash)).length };
     for (const item of items) {
       const hash = item.record.record_hash;
@@ -93,7 +173,9 @@ export async function uploadPending(force = false): Promise<void> {
         app_attest_assertion_b64: item.app_attest_assertion_b64 ?? null,
       };
       try {
-        await api.uploadCapture(body);
+        const reply = await api.uploadCapture(body);
+        const photoSha = String(item.record.photo_sha256 ?? "");
+        remember(photoSha, reply);
         onServer.add(hash);
         state = { ...state, stored: state.stored + 1 };
       } catch (err) {

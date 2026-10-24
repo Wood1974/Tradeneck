@@ -5,7 +5,6 @@ import { exportReport } from "./exportReport";
 import { b64FromBytes, devicePublicKeyRaw, deviceSealId } from "../crypto/seal";
 import { makeCheckpoints, PACK_ORDER } from "../packs";
 import { isNativeOriginAvailable } from "../platform";
-import { feeForBudget, PRICING_EFFECTIVE } from "../pricing";
 import {
   activeJobId,
   getVaultBytes,
@@ -22,8 +21,9 @@ import { attestation, bindIdentity, identityView, isAttested, loadIdentity } fro
 import { identityApi } from "../identity/client";
 import { bindReset, resetEntry, resetOpen, resetView } from "./reset";
 import { EMAIL_ATTRS, passwordField } from "./fields";
-import { uploadLine, uploadPending } from "../native/uploader";
-import { appAttestState, enrollDevice, enrollErrorText, reasonOf, type AppAttestState } from "../native/appattest";
+import { ensureServerTicket } from "../native/tickets";
+import { appleCheckFor, connectionLine, hasClockWarning, missingFromVault, serverResultLines, uploadLine, uploadPending } from "../native/uploader";
+import { appAttestState, enrollDevice, enrollErrorText, enrollStepText, reasonOf, type AppAttestState } from "../native/appattest";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
 type Tab = "capture" | "jobs" | "vault" | "verify" | "construction";
@@ -41,10 +41,9 @@ let status = "";
 let selectedPack: PackKind = "remodel";
 let customCount = 8;
 let budget = 15000;
-let pinLat = "";
-let pinLng = "";
-let pinR = "200";
 let verifyOut = "";
+// Whether the system agreed to keep the Vault list; null until asked or where the question is not supported.
+let storagePersisted: boolean | null = null;
 let packetOut: (PacketVerification & { packet: CloseoutPacket }) | null = null;
 // Apple App Attest enrollment (iPhone only). Enrolled means the server accepted Apple's proof for this phone's key.
 let appAttest: AppAttestState = { state: "not-ios" };
@@ -63,7 +62,10 @@ const ctx: ConstructionCtx = {
 
 export async function start(): Promise<void> {
   // Ask the browser not to evict the vault under storage pressure; a no-op where unsupported.
-  void navigator.storage?.persist?.();
+  void navigator.storage?.persist?.().then((granted) => {
+    storagePersisted = granted;
+    if (granted === false && tab === "vault") render();
+  });
   sealId = await deviceSealId();
   await initConstruction();
   await loadIdentity();
@@ -75,6 +77,7 @@ export async function start(): Promise<void> {
   void refreshAppAttest();
   // Photos go up when signal returns, and are retried while the app is open.
   window.addEventListener("online", () => void syncUploads(true));
+  window.addEventListener("offline", refreshNetLine);
   window.setInterval(() => void syncUploads(false), 60_000);
 }
 
@@ -100,9 +103,18 @@ async function reload(): Promise<void> {
 
 /** Copies sealed photos to the server in the background and updates the Vault line in place (a redraw would wipe forms). */
 async function syncUploads(force = false): Promise<void> {
+  // Also runs after a job is locked, signed in, or signal returns: the right moments to start a job's ticket before its first photo.
+  void activeJobId().then((id) => ensureServerTicket(id ?? "device"));
   await uploadPending(force);
   const line = document.getElementById("upload-status");
   if (line) line.textContent = uploadLine();
+  refreshNetLine();
+}
+
+/** Updates the connection line in place; a redraw would wipe whatever is half-typed into a form. */
+function refreshNetLine(): void {
+  const net = document.getElementById("net-status");
+  if (net) net.textContent = connectionLine();
 }
 
 function activeJob(): Job | undefined {
@@ -161,7 +173,7 @@ function captureView(native: boolean, job: Job | undefined): string {
     ? `<div class="icon-aperture"><span></span></div>
       <h1>Native camera</h1>
       <p class="lede">Live camera only, front or back. Shield has no gallery or photo-file import. Each photo is hashed and signed with this device's hardware key.</p>
-      <p class="fine ready">Ready to work offline: photos, sealing, closing a job and verifying records need no signal.</p>
+      <p class="fine ready" id="net-status" role="status">${esc(connectionLine())}</p>
       <div class="actions">
         <button class="btn" data-act="native">SEAL FRAME</button>
         <button class="btn ghost small" data-act="cam-flip">${flipLabel}</button>
@@ -172,7 +184,7 @@ function captureView(native: boolean, job: Job | undefined): string {
   return `
     <div class="banner">
       <strong>${job ? "LOCKED LIST" : "NO LOCKED LIST"}</strong>
-      ${job ? `${job.brief ? esc(job.brief.title || "CONSTRUCTION") : job.pack.toUpperCase()} · $${job.feeUsd} ${job.feeTier}${job.pin ? " · pin set" : ""}` : "Lock a pack to attach pin score and fee."}
+      ${job ? `${job.brief ? esc(job.brief.title || "CONSTRUCTION") : job.pack.toUpperCase()}` : "Lock a pack to group photos under a list."}
       <div><button data-act="goto-jobs">${job ? "Change pack" : "Lock a pack"}</button> <button data-act="goto-construction">Construction brief</button></div>
     </div>
     <section class="finder">
@@ -219,12 +231,27 @@ async function runEnroll(creds: { email: string; pass: string } | null): Promise
   } else {
     render();
   }
+  // Say which part is being waited on, with a running count of seconds. A stall then shows where it is, and a
+  // frozen count shows the screen itself has stopped.
+  const started = Date.now();
+  let doing = creds ? "Signing in" : "Starting";
+  const showProgress = () => {
+    const line = document.querySelector("[data-enroll-status]");
+    if (line) line.textContent = `${doing}… ${Math.round((Date.now() - started) / 1000)} s`;
+  };
+  const ticker = setInterval(showProgress, 1000);
+  showProgress();
   try {
     if (creds) await identityApi().signIn(creds.email, creds.pass);
-    const result = await enrollDevice();
+    const result = await enrollDevice((step) => {
+      doing = enrollStepText(step);
+      showProgress();
+    });
     enrollMessage = result.ok ? "" : enrollErrorText(result.reason);
   } catch (err) {
     enrollMessage = enrollErrorText(reasonOf(err));
+  } finally {
+    clearInterval(ticker);
   }
   enrollBusy = false;
   const line = document.querySelector("[data-enroll-status]");
@@ -269,11 +296,10 @@ function slots(job: Job): string {
 }
 
 function jobsView(job: Job | undefined): string {
-  const fee = feeForBudget(budget);
   return `
     <div class="banner">
       <strong>LOCK FIRST</strong>
-      Fee is set from budget before any shot. Verdict does not change the fee.
+      Lock a pack before the first shot so each photo lands on a numbered point.
     </div>
     <div class="form">
       <label>PACK</label>
@@ -281,26 +307,23 @@ function jobsView(job: Job | undefined): string {
       ${selectedPack === "custom" ? `<label>CUSTOM COUNT 5–20</label><input id="custom-n" type="number" min="5" max="20" value="${customCount}" />` : ""}
       <label>JOB BUDGET USD</label>
       <input id="budget" type="number" min="0" step="1" value="${budget}" />
-      <div class="meta">${fee.feeTier} · $${fee.feeUsd} · effective ${PRICING_EFFECTIVE}</div>
-      <label>LOCKED PIN (optional)</label>
-      <input id="pin-lat" placeholder="lat" inputmode="decimal" value="${esc(pinLat)}" />
-      <input id="pin-lng" placeholder="lng" inputmode="decimal" value="${esc(pinLng)}" />
-      <input id="pin-r" placeholder="radius m" inputmode="decimal" value="${esc(pinR)}" />
       <button class="btn" data-act="lock">LOCK PACK</button>
     </div>
     <div class="list">${jobs
       .map(
         (j) => `<div class="card">
           <div class="row">
-            <h2>${j.brief ? esc(j.brief.title || "construction") : esc(j.pack)} · $${esc(j.feeUsd)}</h2>
+            <h2>${j.brief ? esc(j.brief.title || "construction") : esc(j.pack)}</h2>
             <button class="btn small ghost" data-activate="${esc(j.id)}">${j.id === activeId ? "ACTIVE" : "USE"}</button>
           </div>
-          <div class="meta">${j.checkpoints.filter((c) => c.shotId).length}/${j.checkpoints.length} sealed · ${j.pin ? "pin on" : "no pin"}</div>
+          <div class="meta">${j.checkpoints.filter((c) => c.shotId).length}/${j.checkpoints.length} sealed</div>
         </div>`,
       )
       .join("")}${jobs.length ? "" : `<p class="meta">No locked lists.</p>`}</div>
   `;
 }
+
+const appleLine = appleCheckFor;
 
 function vaultView(): string {
   const open = vault.find((v) => v.record.id === openVaultId);
@@ -315,7 +338,7 @@ function vaultView(): string {
 ${esc(rec.createdAt)}
 job ${esc(rec.jobId ?? "—")} · ${esc(rec.checkpointId ?? "unbound")}
 ${rec.gps ? `location ${esc(rec.gps.source)} · ±${esc(Math.round(rec.gps.acc))} m` : "no location recorded"}
-attest ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " · token not validated"}</pre>
+device claim ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " (not checked on this phone)"}${appleLine(rec.platform, rec.sha256) ? `\n${esc(appleLine(rec.platform, rec.sha256)!.text)}` : ""}${serverResultLines(rec.sha256).map((l) => `\n${esc(l.text)}`).join("")}</pre>
         <div class="actions">
           <button class="btn small" data-act="rehash">REHASH</button>
           <button class="btn ghost small" data-act="export">EXPORT</button>
@@ -327,11 +350,15 @@ attest ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " · token not
   return `
     <div class="banner"><strong>VAULT</strong>Photos stay on this phone and, when you are signed in with signal, are copied to the Shield server where only your account can see them. Rehash checks bytes only.</div>
     <p class="fine" id="upload-status" role="status">${esc(uploadLine())}</p>
+    ${missingFromVault(vault.length) > 0 ? `<p class="fine bad">${missingFromVault(vault.length)} photo${missingFromVault(vault.length) === 1 ? " is" : "s are"} kept in this phone's protected storage but missing from this list. They are not lost and still upload. Do not delete the app: unsent photos are deleted with it.</p>` : ""}
+    <p class="fine">Closing the app does not delete photos. Deleting the app deletes photos that have not reached the server.${storagePersisted === false ? " The system did not promise to keep this list; the protected copy is stored separately." : ""}</p>
     <div class="list">${vault
       .map(
         (v) => `<button class="card" data-open="${esc(v.record.id)}" style="width:100%;text-align:left">
           <div class="row"><h2>${esc(v.record.captureKind)}</h2><span class="chip">${esc(v.record.platform)}</span></div>
           <div class="meta">${esc(v.record.sha256.slice(0, 16))}… · ${esc(v.record.createdAt)}</div>
+          ${appleLine(v.record.platform, v.record.sha256) ? `<div class="meta">${esc(appleLine(v.record.platform, v.record.sha256)!.text)}</div>` : ""}
+          ${hasClockWarning(v.record.sha256) ? `<div class="meta"><span class="chip warn">CLOCKS DISAGREE · OPEN FOR DETAIL</span></div>` : ""}
         </button>`,
       )
       .join("")}${vault.length ? "" : `<p class="meta">Empty.</p>`}</div>
@@ -354,7 +381,8 @@ function packetResultView(r: NonNullable<typeof packetOut>): string {
   const ok = r.verdict === "PACKET-SEALED";
   const points = p.points
     .map((pt) => {
-      const code = pt.code ? (pt.code.irc ? `IRC ${pt.code.irc}` : pt.code.ibc ? `IBC ${pt.code.ibc}` : pt.code.name) : "no code";
+      const label = (c: { irc: string | null; ibc: string | null; name: string }) => (c.irc ? `IRC ${c.irc}` : c.ibc ? `IBC ${c.ibc}` : c.name);
+      const code = pt.code ? [pt.code, ...(pt.moreCodes ?? [])].map(label).join(" + ") : "no code";
       const rec = pt.record;
       const chip = rec
         ? rec.captureKind === "native-camera"
@@ -389,10 +417,8 @@ function specView(): string {
       <h2>Spec</h2>
       <div class="meta">
         Proven (when verified): SHA-256 of the bytes received · signed, chained records are tamper-evident<br>
-        Corroborated: pin score (only when GPS accuracy fits the radius)<br>
+        Location: the phone's own GPS fix with its accuracy, as reported by the phone; nobody types a location<br>
         Not proven from the file alone: that the ID check passed (ask the service) · web origin · EXIF · unstaged scene · GPS anti-spoof · device clock<br>
-        Fee does not move with verdict<br>
-        standard $79 · extended $129 · major $199 · ${PRICING_EFFECTIVE}
       </div>
     </div>
     <p class="foot-note">Records are tamper-evident. A packet shows nothing changed after signing. A signed photographer note ties the signing key to an ID check run by Stripe Identity; confirm that with the service, not from the file. It does not show the scene was honest.</p>
@@ -460,19 +486,6 @@ function bind(): void {
   if (customEl) customEl.oninput = () => {
     customCount = Number(customEl.value);
   };
-  const lat = document.getElementById("pin-lat") as HTMLInputElement | null;
-  const lng = document.getElementById("pin-lng") as HTMLInputElement | null;
-  const rad = document.getElementById("pin-r") as HTMLInputElement | null;
-  if (lat) lat.oninput = () => {
-    pinLat = lat.value;
-  };
-  if (lng) lng.oninput = () => {
-    pinLng = lng.value;
-  };
-  if (rad) rad.oninput = () => {
-    pinR = rad.value;
-  };
-
   const bundle = document.getElementById("file-bundle") as HTMLInputElement;
   bundle.onchange = async () => {
     const file = bundle.files?.[0];
@@ -718,33 +731,19 @@ async function onAct(act: string): Promise<void> {
     return;
   }
   if (act === "lock") {
-    const fee = feeForBudget(budget);
-    const lat = Number(pinLat);
-    const lng = Number(pinLng);
-    const radiusM = Number(pinR);
-    const hasPin = pinLat.trim() !== "" || pinLng.trim() !== "";
-    if (hasPin && !(Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && pinLat.trim() !== "" && pinLng.trim() !== "")) {
-      status = "Pin needs a latitude between -90 and 90 and a longitude between -180 and 180.";
-      render();
-      return;
-    }
-    const pin = hasPin ? { lat, lng, radiusM: Number.isFinite(radiusM) && radiusM >= 10 && radiusM <= 5000 ? radiusM : 200 } : null;
     const job: Job = {
       id: crypto.randomUUID(),
       pack: selectedPack,
       customCount,
       budgetUsd: budget,
-      feeUsd: fee.feeUsd,
-      feeTier: fee.feeTier,
       lockedAt: new Date().toISOString(),
-      pin,
       checkpoints: makeCheckpoints(selectedPack, customCount),
     };
     await putJob(job);
     await setActiveJobId(job.id);
     await reload();
     tab = "capture";
-    status = `locked ${job.pack} · $${job.feeUsd}`;
+    status = `locked ${job.pack}`;
     render();
     warmNativeCamera(facing === "user" ? "front" : "back", job.id);
     return;

@@ -110,4 +110,99 @@ describe("copying sealed photos to the server", () => {
     await u.uploadPending(true);
     expect(u.uploadLine()).toBe("");
   });
+
+  it("words the connection from what really happened, not from a fixed claim", async () => {
+    const u = await load();
+    expect(u.connectionLine()).toBe("Signal. Photos copy to the Shield server while you are signed in.");
+    api.signedIn.mockReturnValue(false);
+    await u.uploadPending(true);
+    expect(u.connectionLine()).toBe("Signal. Sign in to copy photos to the Shield server.");
+    api.signedIn.mockReturnValue(true);
+    api.uploadCapture.mockRejectedValue({ code: "network" });
+    await u.uploadPending(true);
+    expect(u.connectionLine()).toContain("No signal.");
+    expect(u.connectionLine()).toContain("still work");
+  });
+
+  it("says no signal when the system reports it, even before an attempt", async () => {
+    const u = await load();
+    vi.stubGlobal("navigator", { onLine: false });
+    expect(u.connectionLine()).toContain("No signal.");
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the server's Apple result per photo, and says nothing is known before upload", async () => {
+    api.listCaptures.mockResolvedValue([
+      { record_hash: "h1", photo_sha256: "p1", attest: { status: "verified", trusted: true } },
+      { record_hash: "h2", photo_sha256: "p2", attest: { status: "none", trusted: false } },
+    ]);
+    const u = await load();
+    expect(u.appleCheckFor("ios", "p1")?.text).toContain("not checked yet");
+    await u.uploadPending(true);
+    expect(u.appleCheckFor("ios", "p1")).toEqual({ text: "Apple device check: verified by the Shield server", tone: "ok" });
+    expect(u.appleCheckFor("ios", "p2")?.text).toBe("Apple device check: not verified by the server (no Apple proof came with this photo)");
+    expect(u.appleCheckFor("android", "p1")).toBeNull();
+  });
+
+  it("learns the Apple result from the upload reply too", async () => {
+    api.uploadCapture.mockResolvedValue({ already: false, attest: { status: "bad_assertion", trusted: false } });
+    const u = await load();
+    await u.uploadPending(true);
+    expect(u.appleCheckFor("ios", "p2")?.tone).toBe("warn");
+    expect(u.appleCheckFor("ios", "p2")?.text).toContain("bad_assertion");
+  });
+
+  it("counts photos the phone holds that the Vault list does not show", async () => {
+    const u = await load();
+    await u.uploadPending(true);
+    expect(u.missingFromVault(3)).toBe(0);
+    expect(u.missingFromVault(1)).toBe(2);
+    expect(u.missingFromVault(9)).toBe(0);
+  });
+
+  it("shows the server's clock, job-start and outside-time results in its own terms", async () => {
+    api.listCaptures.mockResolvedValue([
+      { record_hash: "h1", photo_sha256: "p1", attest: { status: "none", trusted: false },
+        time: { label: "CONSISTENT", notes: [] },
+        ticket: { origin: "server", after: "2026-10-21T10:00:00+00:00", before: "2026-10-21T10:00:05+00:00" },
+        outside_time: { status: "stamped", gen_time: "2026-10-22T00:00:09+00:00", tsa: "http://timestamp.digicert.com", chain_checked: false } },
+      { record_hash: "h2", photo_sha256: "p2", attest: { status: "none", trusted: false },
+        time: { label: "DEVICE CLOCK MISMATCH", notes: ["GPS time and the phone's clock differ by 3600 s"] },
+        ticket: { origin: "local" }, outside_time: { status: "waiting" } },
+      { record_hash: "h3", photo_sha256: "p3", attest: { status: "none", trusted: false },
+        time: { label: "UNVERIFIED TIME", notes: ["the phone restarted since the earlier reading"] }, outside_time: { status: "off" } },
+    ]);
+    const u = await load();
+    expect(u.serverResultLines("p1")).toEqual([]); // nothing is known before the photo has reached the server
+    await u.uploadPending(true);
+    expect(u.serverResultLines("p1")).toEqual([
+      { text: "Clock check: the phone's clocks agree with each other (this is not a timestamp)", tone: "ok" },
+      { text: "Job start: anchored by a server ticket, started at 2026-10-21 10:00 UTC", tone: "ok" },
+      { text: "Outside timestamp: timestamp.digicert.com says this existed by 2026-10-22 00:00 UTC (its certificate chain was not checked)", tone: "" },
+    ]);
+    expect(u.serverResultLines("p2")).toEqual([
+      { text: "Clock check: the phone's clocks disagree (GPS time and the phone's clock differ by 3600 s)", tone: "warn" },
+      { text: "Job start: not anchored by the server", tone: "" },
+      { text: "Outside timestamp: waiting for the next daily run", tone: "" },
+    ]);
+    expect(u.serverResultLines("p3")).toEqual([{ text: "Clock check: cannot be judged (the phone restarted since the earlier reading)", tone: "" }]);
+    expect(u.hasClockWarning("p1")).toBe(false);
+    expect(u.hasClockWarning("p2")).toBe(true);
+    expect(u.hasClockWarning("nope")).toBe(false);
+  });
+
+  it("an older server that sends none of these fields produces no lines at all", async () => {
+    api.listCaptures.mockResolvedValue([{ record_hash: "h1", photo_sha256: "p1", attest: { status: "verified", trusted: true } }]);
+    const u = await load();
+    await u.uploadPending(true);
+    expect(u.serverResultLines("p1")).toEqual([]);
+    expect(u.hasClockWarning("p1")).toBe(false);
+  });
+
+  it("learns the results from the upload reply as well", async () => {
+    api.uploadCapture.mockResolvedValue({ already: false, attest: { status: "none", trusted: false }, time: { label: "NOT CHECKED", notes: ["nothing to compare it with"] } });
+    const u = await load();
+    await u.uploadPending(true);
+    expect(u.serverResultLines("p2")).toEqual([{ text: "Clock check: nothing to compare yet", tone: "" }]);
+  });
 });

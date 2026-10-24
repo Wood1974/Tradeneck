@@ -22,6 +22,7 @@ Standing instructions from the owner. They apply to every session in this repo, 
 - **Decide before building** anything that changes who can see data, what leaves the phone, or what costs money: ask first, with a recommendation.
 - **Never print or repeat a password, key or token.** If one has been exposed (in chat, a screenshot, a log), say so plainly so it gets rotated.
 - **Say early which steps only the owner can do** (DNS at GoDaddy, the Render shell, the Apple portal, rolling the Stripe key, merging).
+- **Render: read freely, change only with permission.** Reading is allowed without asking: services, deploy history, logs, metrics, and the *names* of environment variables (never print a value). Anything that changes Render (environment variables, deploys or restarts, creating, suspending or deleting a service, disk or database) needs the owner's go each time, and says first exactly what it will change.
 - **Keep status updates short.** Long reports only when asked.
 
 ## Shield app (`shield-app/`) decisions already made
@@ -104,12 +105,15 @@ every feature decision:
   **not** catch this, serve over http(s) to test. (Before this was fixed
   once, `js.stripe.com` was missing and escrow funding was broken in
   production.)
-- `shield-app/` — the **standalone Shield mobile app** (Capacitor 6 + Vite +
-  TypeScript, no framework). Separate from the web `shield/` page. 100%
-  offline: SHA-256 + hash chain + ECDSA device signature per photo, IndexedDB
-  vault, bundle verify, and a **Build** tab (construction brief → locking
-  questions → 5 checkpoints with IRC/IBC references → signed close-out
-  packet). Pure logic lives in `shield-app/src/construction/` with vitest
+- `shield-app/` — the **standalone Shield mobile app** (Capacitor 8 + Vite +
+  TypeScript, no framework). It is not the Shield nav tab / `shield.js` above
+  (that is the older web Shield, backed by `tradedeck-api`); the app signs in
+  to its own server, `Wood1974/tradedeck-shield`. Sign-on needs a network once;
+  after that capture, sealing and verifying work offline (SHA-256 + hash chain +
+  ECDSA device signature per photo, IndexedDB vault, bundle verify), and sealed
+  photos upload to the Shield server when there is signal. It has a **Build**
+  tab (construction brief → locking questions → 5 checkpoints with IRC code
+  references, Utah only → signed close-out packet). Pure logic lives in `shield-app/src/construction/` with vitest
   tests; see `shield-app/README.md`. `npm run build` there must stay green.
 - **No backend copy belongs here.** `tradedeck-api` is the real, current
   backend — don't re-add a Flask file to this repo "for reference."

@@ -5,7 +5,6 @@ import { generatePoints, lockedNarrative } from "../construction/points";
 import { neededQuestions, type Question } from "../construction/questions";
 import { BRIEF_READY_SCORE, scoreBrief } from "../construction/score";
 import { detectTrade, labelForTrade, TRADES } from "../construction/trades";
-import { feeForBudget } from "../pricing";
 import { getCloseout, getMeta, putCloseout, putJob, setMeta } from "../store/db";
 import type { BudgetBand, BriefRole, CloseoutPacket, ConstructionBrief, ConstructionBriefDraft, Job, TradeId, VaultItem } from "../types";
 
@@ -87,7 +86,7 @@ function briefView(job: Job | undefined): string {
   const meterColor = scored.score >= BRIEF_READY_SCORE ? "var(--ok)" : scored.score >= 40 ? "var(--warn)" : "var(--bad)";
 
   const locked = job?.brief
-    ? `<div class="banner"><strong>LOCKED BRIEF</strong>${esc(job.brief.title || "Untitled")} · ${esc(labelForTrade(job.brief.trade))} · $${job.feeUsd} ${job.feeTier}
+    ? `<div class="banner"><strong>LOCKED BRIEF</strong>${esc(job.brief.title || "Untitled")} · ${esc(labelForTrade(job.brief.trade))}
         <div class="meta">Locked ${esc(job.brief.lockedAt.slice(0, 16).replace("T", " "))}. Re-locking below keeps sealed photos on their point numbers.</div>
         <div><button data-act="c-goto-points">Open the 5 points</button></div></div>`
     : `<div class="banner"><strong>PROTECT THE WORK</strong>Describe the job. Thin write-ups get locking questions. Locking generates 5 photo checkpoints with code references.</div>`;
@@ -165,12 +164,14 @@ function pointsView(ctx: ConstructionCtx, job: Job | undefined): string {
       const code = c.code
         ? `${c.code.irc ? "IRC " + esc(c.code.irc) : c.code.ibc ? "IBC " + esc(c.code.ibc) : ""} · ${esc(c.code.name)}`
         : "NO CODE REFERENCE · TAP TO ASSIGN";
+      const also = (c.moreCodes ?? []).map((m) => `${m.irc ? "IRC " + esc(m.irc) : m.ibc ? "IBC " + esc(m.ibc) : ""} · ${esc(m.name)}`);
       return `<div class="card point">
         <div class="row"><h2>Point ${i + 1}</h2>${chip}</div>
         <input data-pt-label="${esc(c.id)}" value="${esc(c.label)}"${c.shotId ? " disabled" : ""} />
         <textarea data-pt-desc="${esc(c.id)}" rows="3">${esc(c.description ?? "")}</textarea>
         <div class="row">
           <button class="code-chip" data-pick-code="${esc(c.id)}">${code}</button>
+          ${also.length ? `<div class="meta">Also applies: ${also.join(" · ")}</div>` : ""}
           <button class="btn small ${rec ? "ghost" : ""}" data-slot="${esc(c.id)}">${rec ? "VIEW" : "SEAL"}</button>
         </div>
         ${rec ? `<div class="meta">${esc(rec.sha256.slice(0, 16))}… · ${esc(rec.createdAt.slice(0, 16).replace("T", " "))}</div>` : ""}
@@ -332,7 +333,7 @@ export function bindConstruction(ctx: ConstructionCtx): void {
       const [irc, name] = el.dataset.assignCode!.split("|");
       const row = CODE_CHECKPOINTS.find((c) => c.name === name && (c.irc ?? "") === irc);
       if (!row || !pickingFor) return;
-      void editPoint(ctx, job, pickingFor, { code: toCodeRef(row) }).then(() => {
+      void editPoint(ctx, job, pickingFor, { code: toCodeRef(row), moreCodes: [] }).then(() => {
         pickingFor = null;
         cview = "points";
         ctx.render();
@@ -387,7 +388,6 @@ async function lockBrief(ctx: ConstructionCtx): Promise<void> {
   const full = { ...draft, trade };
   const brief: ConstructionBrief = { ...full, lockedText: lockedNarrative(full), lockedAt: new Date().toISOString() };
   const points = generatePoints(full);
-  const fee = feeForBudget(BUDGET_USD[draft.budgetBand]);
   const existing = activeConstructionJob(ctx);
   if (existing?.checkpoints.some((c) => c.shotId)) {
     briefStatus = "Photos are already sealed to this job's points. Start a new brief for different points.";
@@ -398,8 +398,6 @@ async function lockBrief(ctx: ConstructionCtx): Promise<void> {
     ? {
         ...existing,
         brief,
-        feeUsd: fee.feeUsd,
-        feeTier: fee.feeTier,
         budgetUsd: BUDGET_USD[draft.budgetBand],
         checkpoints: points.map((p, i) => ({ ...p, shotId: existing.checkpoints[i]?.shotId ?? null })),
       }
@@ -408,10 +406,7 @@ async function lockBrief(ctx: ConstructionCtx): Promise<void> {
         pack: "construction",
         customCount: 5,
         budgetUsd: BUDGET_USD[draft.budgetBand],
-        feeUsd: fee.feeUsd,
-        feeTier: fee.feeTier,
         lockedAt: brief.lockedAt,
-        pin: null,
         checkpoints: points,
         brief,
         closedAt: null,
@@ -434,7 +429,7 @@ async function onAct(ctx: ConstructionCtx, act: string): Promise<void> {
   if (act === "c-cancel-pick") { pickingFor = null; cview = "points"; ctx.render(); return; }
   if (act === "c-clear-code") {
     const job = activeConstructionJob(ctx);
-    if (pickingFor) await editPoint(ctx, job, pickingFor, { code: null });
+    if (pickingFor) await editPoint(ctx, job, pickingFor, { code: null, moreCodes: [] });
     pickingFor = null;
     cview = "points";
     ctx.render();
