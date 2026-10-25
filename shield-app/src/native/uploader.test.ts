@@ -54,7 +54,7 @@ describe("copying sealed photos to the server", () => {
     expect(api.uploadCapture).not.toHaveBeenCalled();
     expect(plugin.readOriginal).not.toHaveBeenCalled();
     expect(u.uploadState().note).toBe("sign-in");
-    expect(u.uploadLine()).toContain("Sign in to copy them to the Shield server");
+    expect(u.uploadLine()).toContain("Sign in on the Account tab to copy them to the Shield server");
   });
 
   it("stops at a lost connection and leaves the rest waiting", async () => {
@@ -116,7 +116,7 @@ describe("copying sealed photos to the server", () => {
     expect(u.connectionLine()).toBe("Signal. Photos copy to the Shield server while you are signed in.");
     api.signedIn.mockReturnValue(false);
     await u.uploadPending(true);
-    expect(u.connectionLine()).toBe("Signal. Sign in to copy photos to the Shield server.");
+    expect(u.connectionLine()).toBe("Signal. Sign in on the Account tab to copy photos to the Shield server.");
     api.signedIn.mockReturnValue(true);
     api.uploadCapture.mockRejectedValue({ code: "network" });
     await u.uploadPending(true);

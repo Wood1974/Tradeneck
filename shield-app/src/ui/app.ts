@@ -1,5 +1,6 @@
 import { esc } from "../esc";
-import { bindPhonesPanel, phonesPanelHtml } from "./devices-panel";
+import { accountView, bindAccount } from "./account";
+import { bindPhonesPanel } from "./devices-panel";
 import { bindSharePanel, resetShare, sharePanelHtml } from "./share-panel";
 import { captureNative, warmNativeCamera, type CaptureOk } from "../capture/capture";
 import { verifyExport, type ExportPackage } from "../capture/record";
@@ -28,7 +29,7 @@ import { appleCheckFor, connectionLine, hasClockWarning, missingFromVault, serve
 import { appAttestState, enrollDevice, enrollErrorText, enrollStepText, reasonOf, type AppAttestState } from "../native/appattest";
 import { bindConstruction, constructionView, initConstruction, restoreLastPacket, type ConstructionCtx } from "./construction";
 
-type Tab = "capture" | "jobs" | "vault" | "verify" | "construction";
+type Tab = "capture" | "jobs" | "vault" | "verify" | "construction" | "account";
 
 const root = () => document.getElementById("app")!;
 
@@ -148,6 +149,7 @@ export function render(): void {
       <button class="${tab === "vault" ? "on" : ""}" data-tab="vault">Vault</button>
       <button class="${tab === "verify" ? "on" : ""}" data-tab="verify">Verify</button>
       <button class="${tab === "construction" ? "on" : ""}" data-tab="construction">Build</button>
+      ${native && isAttested() ? `<button class="${tab === "account" ? "on" : ""}" data-tab="account">Account</button>` : ""}
     </nav>
     ${toast ? `<div class="toast" role="status"><span>${esc(toast.text)}</span><button data-act="toast-view">VIEW</button></div>` : ""}
     ${native && isAttested() ? `<button class="fab" data-act="quick-capture" aria-label="Take a photo" title="Take a photo"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>` : ""}
@@ -163,6 +165,7 @@ function view(native: boolean, job: Job | undefined): string {
   if (tab === "vault") return vaultView();
   if (tab === "verify") return verifyView();
   if (tab === "construction") return constructionView(ctx);
+  if (tab === "account" && native) return accountView();
   return captureView(native, job);
 }
 
@@ -176,6 +179,7 @@ function captureView(native: boolean, job: Job | undefined): string {
       <h1>Native camera</h1>
       <p class="lede">Live camera only, front or back. Shield has no gallery or photo-file import. Each photo is hashed and signed with this device's hardware key.</p>
       <p class="fine ready" id="net-status" role="status">${esc(connectionLine())}</p>
+      ${isAttested() && !identityApi().signedIn() ? `<p class="fine bad" role="status">Signed out. Sign in on the Account tab before taking photos. <button class="btn ghost small" data-act="goto-account">ACCOUNT</button></p>` : ""}
       <div class="actions">
         <button class="btn" data-act="native">SEAL FRAME</button>
         <button class="btn ghost small" data-act="cam-flip">${flipLabel}</button>
@@ -365,7 +369,6 @@ device claim ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " (not c
         </button>`,
       )
       .join("")}${vault.length ? "" : `<p class="meta">Empty.</p>`}</div>
-    ${phonesPanelHtml()}
   `;
 }
 
@@ -473,7 +476,8 @@ function bind(): void {
   });
   const openPhoto = openVaultId ? vault.find((v) => v.record.id === openVaultId) : undefined;
   if (openPhoto) bindSharePanel(root(), openPhoto.record.sha256, render);
-  else if (tab === "vault") bindPhonesPanel(root(), render);
+  if (tab === "account" && identityApi().signedIn()) bindPhonesPanel(root(), render);
+  if (tab === "account") bindAccount(root(), render);
   if (tab === "construction") bindConstruction(ctx);
   bindIdentity(root(), render);
   bindReset(root(), render);
@@ -556,6 +560,7 @@ const CAPTURE_ERRORS: Record<string, string> = {
   "plugin-missing": "The camera plugin is not installed in this build.",
   "seal-failed": "The camera took a photo, but Shield could not seal it.",
   "not-verified": "Sign on first: Shield seals photos only after an ID check and a signed statement.",
+  "not-signed-in": "Sign in on the Account tab before taking photos. A sign-in ends when the app restarts or you sign out.",
 };
 
 const captureErrorText = (code: string, detail?: string): string => {
@@ -671,6 +676,12 @@ async function onAct(act: string): Promise<void> {
   }
   if (act === "goto-jobs") {
     tab = "jobs";
+    specOpen = false;
+    render();
+    return;
+  }
+  if (act === "goto-account") {
+    tab = "account";
     specOpen = false;
     render();
     return;

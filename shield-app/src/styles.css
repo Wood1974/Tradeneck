@@ -84,7 +84,7 @@ h1 { font-size: 22px; font-weight: 600; margin: 0 0 8px; }
 
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; max-width: 430px; margin: 0 auto;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
   background: #0d0f0d; border-top: 1px solid var(--line);
   padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
   font-family: ui-sans-serif, system-ui, sans-serif;

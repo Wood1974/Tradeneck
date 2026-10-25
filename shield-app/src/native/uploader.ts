@@ -105,7 +105,7 @@ export function connectionLine(): string {
   if (systemOffline || state.note === "offline") {
     return "No signal. Photos, sealing, closing a job and verifying records still work. Photos upload when signal returns.";
   }
-  if (state.note === "sign-in") return "Signal. Sign in to copy photos to the Shield server.";
+  if (state.note === "sign-in") return "Signal. Sign in on the Account tab to copy photos to the Shield server.";
   if (state.note === "quota") return "Signal, but this account is out of server space. Photos stay on this phone.";
   if (state.note === "error") return "Signal, but the last copy to the server failed. It tries again.";
   return "Signal. Photos copy to the Shield server while you are signed in.";
@@ -116,7 +116,7 @@ const codeOf = (err: unknown): string => (typeof (err as { code?: unknown })?.co
 /** The line the Vault shows. Plain about what is and is not on the server. */
 export function uploadLine(s: UploadState = state): string {
   if (!isNativeOriginAvailable() || s.total === 0) return "";
-  if (s.note === "sign-in") return `${s.total} photo${s.total === 1 ? "" : "s"} on this phone. Sign in to copy them to the Shield server.`;
+  if (s.note === "sign-in") return `${s.total} photo${s.total === 1 ? "" : "s"} on this phone. Sign in on the Account tab to copy them to the Shield server.`;
   const waiting = s.total - s.stored - s.refused.length;
   const parts = [`Server copy: ${s.stored} of ${s.total} stored.`];
   if (s.refused.length) parts.push(`${s.refused.length} refused by the server (${s.refused[0]!.reason}); they stay on this phone.`);

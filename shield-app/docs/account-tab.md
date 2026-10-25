@@ -1,0 +1,8 @@
+# Account tab: sign in, sign out, and sealing needs a sign-in
+
+- **Account tab** (after the ID check and signed statement): SIGN IN when signed out; when signed in, the upload status, COPY TO SERVER NOW, SIGN OUT and YOUR PHONES (see `enrolled-phones.md`).
+- **A sign-in lasts one session.** The token is kept in memory only, so every app restart ends it, and SIGN OUT ends it on purpose. The owner's reason: after the ID check, a login is not shared between people.
+- **Sealing needs a sign-in.** `captureNative` (`src/capture/capture.ts`) refuses with `not-signed-in` when nobody is signed in, before the camera opens. The shutter, the one-tap camera button and each checkpoint's SEAL all go through it. The Capture screen says "Signed out" with a button to the Account tab.
+- **What that costs.** Starting work after an app restart needs signal once, to sign in. Once signed in, sealing keeps working with no signal for the rest of the session. The server's sign-in token lasts 12 hours and the app does not track it; if an upload meets an expired token the app drops it, and sealing is blocked until the next sign-in.
+- **What it does not do.** It ties a session to a login, not to a person: the signed note and device key belong to the phone, and whoever knows the password, or uses the phone while it is signed in, is that account. SIGN OUT removes the sign-in from this phone only; the server has no per-token logout, so the token itself ends at its 12-hour expiry.
+- **What stays.** Signing out deletes nothing: the Vault, the signed statement and photos not yet copied stay on the phone and upload after the next sign-in.

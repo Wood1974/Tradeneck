@@ -102,6 +102,8 @@ export interface IdentityApi {
   /** Signs in with an existing account. */
   signIn(email: string, password: string): Promise<void>;
   signedIn(): boolean;
+  /** Drops this phone's sign-in. Photos, the vault and the signed note stay. The server has no per-token logout; a token ends at its own expiry. */
+  signOut(): void;
   start(): Promise<{ sessionId: string; status: IdStatus; url: string | null }>;
   status(): Promise<{ sessionId: string | null; status: IdStatus; verified: boolean }>;
   submitNote(note: SignedNote): Promise<{ attestationId: string; noteSha256: string; receipt: Receipt }>;
@@ -222,6 +224,9 @@ const authedFormCall = <T>(path: string, fields: Record<string, string>): Promis
 
 const real: IdentityApi = {
   signedIn: () => token !== null,
+  signOut() {
+    token = null;
+  },
   async signIn(email, password) {
     const r = await call<{ access_token?: string }>(`${API_BASE}/shield/auth/login`, {
       method: "POST",
