@@ -1,4 +1,5 @@
 import { esc } from "../esc";
+import { bindPhonesPanel, phonesPanelHtml } from "./devices-panel";
 import { bindSharePanel, resetShare, sharePanelHtml } from "./share-panel";
 import { captureNative, warmNativeCamera, type CaptureOk } from "../capture/capture";
 import { verifyExport, type ExportPackage } from "../capture/record";
@@ -364,6 +365,7 @@ device claim ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " (not c
         </button>`,
       )
       .join("")}${vault.length ? "" : `<p class="meta">Empty.</p>`}</div>
+    ${phonesPanelHtml()}
   `;
 }
 
@@ -471,6 +473,7 @@ function bind(): void {
   });
   const openPhoto = openVaultId ? vault.find((v) => v.record.id === openVaultId) : undefined;
   if (openPhoto) bindSharePanel(root(), openPhoto.record.sha256, render);
+  else if (tab === "vault") bindPhonesPanel(root(), render);
   if (tab === "construction") bindConstruction(ctx);
   bindIdentity(root(), render);
   bindReset(root(), render);

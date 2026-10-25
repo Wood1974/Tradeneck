@@ -73,6 +73,16 @@ export interface ShareInfo {
   timing?: boolean;
 }
 
+/** One phone key (Apple App Attest) this account has enrolled. `id` is Apple's key id: a hash of the public key, not a device name. */
+export interface PhoneKey {
+  id: string;
+  environment: string;
+  enrolled_at: string | null;
+  /** How many of this account's stored photos this key signed for. */
+  photos: number;
+  revoked_at: string | null;
+}
+
 /** A ticket the server signed for this account and ticket id (the job id, or "device"). */
 export interface IssuedTicket {
   ticket: Record<string, unknown>;
@@ -111,6 +121,10 @@ export interface IdentityApi {
   listShares(recordHash: string): Promise<ShareInfo[]>;
   /** Withdraws a code so it stops working. */
   revokeShare(shareId: string): Promise<void>;
+  /** The phones (App Attest keys) this account has enrolled. Only this account's own. */
+  listPhones(): Promise<PhoneKey[]>;
+  /** Withdraws a phone's key: its later photos stop showing as Apple-checked, and the key cannot be enrolled again. */
+  revokePhone(id: string): Promise<void>;
   /** Asks the server to sign a start-of-job ticket. Closed (503, or 404 on an older server) until the server has a ticket key. */
   issueTicket(ticketId: string): Promise<IssuedTicket>;
   /** Hands the server the phone's countersignature over the ticket and the phone's clocks. */
@@ -252,6 +266,12 @@ const real: IdentityApi = {
   async revokeShare(shareId) {
     // POST, not DELETE: the phone's web view may only send GET and POST across origins.
     await authedCall(`/shield/shares/${encodeURIComponent(shareId)}/revoke`, { method: "POST", body: "{}" });
+  },
+  async listPhones() {
+    return (await authedCall<{ devices: PhoneKey[] }>("/shield/devices")).devices;
+  },
+  async revokePhone(id) {
+    await authedCall("/shield/devices/revoke", { method: "POST", body: JSON.stringify({ id }) });
   },
   issueTicket: (ticketId) => authedCall("/shield/tickets", { method: "POST", body: JSON.stringify({ ticket_id: ticketId }) }),
   countersignTicket: (body) => authedCall("/shield/tickets/countersign", { method: "POST", body: JSON.stringify(body) }),
