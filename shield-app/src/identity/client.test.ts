@@ -127,25 +127,59 @@ describe("Apple device check routes", () => {
   });
 });
 
-describe("the account's enrolled phones", () => {
-  const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+describe("storing a photo", () => {
+  const upload = { record: { record_hash: "h" }, signature_der_b64: "sig", public_key_uncompressed_b64: "pk", photo_b64: btoa("\xff\xd8\xff\xe0abc"), app_attest_key_id: "k", app_attest_assertion_b64: null };
 
-  it("lists them with the bearer token, and withdraws one by POST (the web view may only send GET and POST)", async () => {
-    const { identityApi, API_BASE } = await load();
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(json(200, { access_token: "tok" }))
-      .mockResolvedValueOnce(json(200, { devices: [{ id: "k", environment: "production", enrolled_at: "2026-10-01T10:00:00Z", photos: 2, revoked_at: null }] }))
-      .mockResolvedValueOnce(json(200, { ok: true }));
+  async function signedIn(fetchMock: ReturnType<typeof vi.fn>) {
+    const { identityApi } = await load();
     vi.stubGlobal("fetch", fetchMock);
     await identityApi().signIn("a@b.test", "correct-horse-battery");
-    expect(await identityApi().listPhones()).toEqual([{ id: "k", environment: "production", enrolled_at: "2026-10-01T10:00:00Z", photos: 2, revoked_at: null }]);
-    await identityApi().revokePhone("a/b+c=");
-    const [listUrl, listInit] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
-    expect(listUrl).toBe(`${API_BASE}/shield/devices`);
-    expect((listInit.headers as Record<string, string>).Authorization).toBe("Bearer tok");
-    const [url, init] = fetchMock.mock.calls[2] as unknown as [string, RequestInit];
-    expect(url).toBe(`${API_BASE}/shield/devices/revoke`);
+    return { api: identityApi(), api_base: (await import("./client")).API_BASE };
+  }
+
+  const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+  it("sends the photo as raw bytes in a form, with the rest as JSON, and no Content-Type of its own", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(json(200, { access_token: "tok" })).mockResolvedValueOnce(json(200, { already: false }));
+    const { api, api_base } = await signedIn(fetchMock);
+    await api.uploadCapture(upload);
+    const [url, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(url).toBe(`${api_base}/shield/captures/upload`);
     expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body as string)).toEqual({ id: "a/b+c=" });
+    expect(init.headers).toEqual({ Authorization: "Bearer tok" });
+    const form = init.body as FormData;
+    expect(JSON.parse(form.get("meta") as string)).toEqual({ record: { record_hash: "h" }, signature_der_b64: "sig", public_key_uncompressed_b64: "pk", app_attest_key_id: "k", app_attest_assertion_b64: null });
+    const file = form.get("photo") as File;
+    expect(Array.from(new Uint8Array(await file.arrayBuffer()))).toEqual([0xff, 0xd8, 0xff, 0xe0, 0x61, 0x62, 0x63]);
+  });
+
+  it("falls back to the JSON route on a server that has no multipart route", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(json(200, { access_token: "tok" })).mockResolvedValueOnce(json(404, { detail: "Not Found" })).mockResolvedValueOnce(json(200, { already: false }));
+    const { api, api_base } = await signedIn(fetchMock);
+    await expect(api.uploadCapture(upload)).resolves.toMatchObject({ already: false });
+    const [url, init] = fetchMock.mock.calls[2] as unknown as [string, RequestInit];
+    expect(url).toBe(`${api_base}/shield/captures`);
+    expect(JSON.parse(init.body as string).photo_b64).toBe(upload.photo_b64);
+  });
+
+  it("does not fall back on the server's real refusals", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(json(200, { access_token: "tok" })).mockResolvedValueOnce(json(422, { detail: "photo_hash_mismatch" }));
+    const { api } = await signedIn(fetchMock);
+    await expect(api.uploadCapture(upload)).rejects.toMatchObject({ code: "photo_hash_mismatch" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("calls base64 that cannot be decoded an invalid photo, without sending anything", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(json(200, { access_token: "tok" }));
+    const { api } = await signedIn(fetchMock);
+    await expect(api.uploadCapture({ ...upload, photo_b64: "***" })).rejects.toMatchObject({ code: "photo_invalid" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the sign-in when the server says it has ended", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(json(200, { access_token: "tok" })).mockResolvedValueOnce(json(401, { detail: "invalid_access_token" }));
+    const { api } = await signedIn(fetchMock);
+    await expect(api.uploadCapture(upload)).rejects.toMatchObject({ code: "session-expired" });
+    expect(api.signedIn()).toBe(false);
   });
 });

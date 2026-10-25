@@ -111,7 +111,7 @@ export interface IdentityApi {
   requestReset(email: string): Promise<void>;
   /** Spends the emailed code and sets a new password. Signs the account out everywhere. */
   confirmReset(email: string, code: string, newPassword: string): Promise<void>;
-  /** Stores one sealed photo on the Shield server for this account. The server checks it first and refuses what fails. */
+  /** Stores one sealed photo on the Shield server for this account. The server checks it first and refuses what fails. Sent as a multipart form, or as JSON to a server that predates that. */
   uploadCapture(body: CaptureUpload): Promise<StoredCapture & { already: boolean }>;
   /** The photos this account already has on the server. */
   listCaptures(): Promise<StoredCapture[]>;
@@ -174,6 +174,36 @@ const authedForm = (fields: Record<string, string>): RequestInit => {
   };
 };
 
+// A photo goes as raw bytes in a multipart form, a third smaller than base64 in JSON. The browser sets the form's boundary itself.
+const authedUpload = (body: CaptureUpload): RequestInit => {
+  if (!token) throw new IdentityError("not-signed-in");
+  const { photo_b64, ...meta } = body;
+  let binary: string;
+  try {
+    binary = atob(photo_b64);
+  } catch {
+    throw new IdentityError("photo_invalid");
+  }
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const form = new FormData();
+  form.append("meta", JSON.stringify(meta));
+  form.append("photo", new Blob([bytes], { type: "image/jpeg" }), "photo.jpg");
+  return { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form };
+};
+
+// What a server that predates the multipart route answers for it.
+const NO_SUCH_ROUTE = new Set(["Not Found", "http-404", "Method Not Allowed", "http-405"]);
+
+async function uploadCapture(body: CaptureUpload): Promise<StoredCapture & { already: boolean }> {
+  try {
+    return await withSession(() => call(`${API_BASE}/shield/captures/upload`, authedUpload(body), 90000));
+  } catch (err) {
+    if (!(err instanceof IdentityError) || !NO_SUCH_ROUTE.has(err.code)) throw err;
+  }
+  return authedCall("/shield/captures", { method: "POST", body: JSON.stringify(body) }, 90000);
+}
+
 /** Runs an authenticated call. If the server says the sign-in has ended, drop the token so sign-on starts again. */
 async function withSession<T>(run: () => Promise<T>): Promise<T> {
   try {
@@ -225,7 +255,7 @@ const real: IdentityApi = {
       body: JSON.stringify({ email, code, new_password: newPassword }),
     });
   },
-  uploadCapture: (body) => authedCall("/shield/captures", { method: "POST", body: JSON.stringify(body) }, 90000),
+  uploadCapture,
   async listCaptures() {
     return (await authedCall<{ captures: StoredCapture[] }>("/shield/captures")).captures;
   },
