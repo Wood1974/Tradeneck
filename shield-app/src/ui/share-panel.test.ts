@@ -56,16 +56,20 @@ describe("the Share section of a photo", () => {
   });
 
   it("opens with what a code lets someone do, the lengths on offer and the codes already made", async () => {
-    vi.mocked(share.sharesFor).mockResolvedValue([info(), info({ id: "s2", active: false, expires_at: "2026-10-01T00:00:00+00:00" })]);
+    vi.mocked(share.sharesFor).mockResolvedValue([info({ timing: true }), info({ id: "s2", active: false, timing: false, expires_at: "2026-10-01T00:00:00+00:00" })]);
     await press("open");
     const html = sharePanelHtml(SHA);
     expect(html).toContain("MAKE A CODE");
     expect(html).toContain("whether the file matches");
-    expect(html).toContain("They do not see your name, email or other photos");
+    expect(html).toContain("two timing facts");
+    expect(html).toContain("They do not see your name, email, location, other photos, or the details behind the clock check");
+    expect(html).toContain("Codes made before this version show only the first three");
     expect(html).toContain("Nothing is sent from this phone");
     for (const d of [7, 30, 90]) expect(html).toContain(`${d} days`);
     expect(html).toContain("works until 2026-11-24");
+    expect(html).toContain("shows timing evidence");
     expect(html).toContain("expired 2026-10-01");
+    expect(html).toContain("basic answer only");
     expect(html.match(/data-share="withdraw"/g)).toHaveLength(1); // only a working code can be withdrawn
   });
 

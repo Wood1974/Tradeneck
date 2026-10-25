@@ -46,11 +46,12 @@ export const withdrawShare = (shareId: string): Promise<void> => identityApi().r
 
 const day = (iso: string | null): string => (iso ? iso.slice(0, 10) : "—");
 
-/** One line for the list of codes: works until, expired on, or withdrawn. */
+/** One line for the list of codes: works until, expired on, or withdrawn, and whether it carries timing evidence. */
 export function describeShare(info: ShareInfo): string {
-  if (info.revoked) return `withdrawn · made ${day(info.created_at)}`;
-  if (!info.active) return `expired ${day(info.expires_at)} · made ${day(info.created_at)}`;
-  return `works until ${day(info.expires_at)} · made ${day(info.created_at)}`;
+  const shows = info.timing === true ? " · shows timing evidence" : info.timing === false ? " · basic answer only" : "";
+  if (info.revoked) return `withdrawn · made ${day(info.created_at)}${shows}`;
+  if (!info.active) return `expired ${day(info.expires_at)} · made ${day(info.created_at)}${shows}`;
+  return `works until ${day(info.expires_at)} · made ${day(info.created_at)}${shows}`;
 }
 
 /** What goes on the clipboard: the code, the page, and the expiry. Nothing about the account or the job. */

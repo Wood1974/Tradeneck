@@ -69,6 +69,8 @@ export interface ShareInfo {
   expires_at: string | null;
   revoked: boolean;
   active: boolean;
+  /** True when the code also shows timing evidence (made after the server added it). Absent from an older server. */
+  timing?: boolean;
 }
 
 /** A ticket the server signed for this account and ticket id (the job id, or "device"). */

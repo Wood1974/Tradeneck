@@ -36,7 +36,7 @@ export function sharePanelHtml(photoSha256: string): string {
   return `
     <div class="card" id="share-panel">
       <div class="row"><h2>Share</h2><button class="btn ghost small" data-share="close">CLOSE</button></div>
-      <p class="fine">A code lets whoever holds it check a photo file against the copy stored on the Shield server. They learn whether the file matches, when it was uploaded, and whether the photographer passed the ID check. They do not see your name, email or other photos. The code works only for this photo, stops on the date shown, and you can withdraw it at any time. Nothing is sent from this phone: you choose who gets it.</p>
+      <p class="fine">A code lets whoever holds it check a photo file against the copy stored on the Shield server. They learn whether the file matches, when it was uploaded, whether the photographer passed the ID check, and two timing facts: whether the phone’s own clocks agreed with each other, and whether an independent time-stamp covers the photo. They do not see your name, email, location, other photos, or the details behind the clock check. Codes made before this version show only the first three. The code works only for this photo, stops on the date shown, and you can withdraw it at any time. Nothing is sent from this phone: you choose who gets it.</p>
       <label class="meta" for="share-days">LASTS</label>
       <select id="share-days" ${state.busy ? "disabled" : ""}>${SHARE_DAYS.map((d) => `<option value="${d}" ${d === state.days ? "selected" : ""}>${d} days</option>`).join("")}</select>
       <div class="actions"><button class="btn small" data-share="make" ${state.busy ? "disabled" : ""}>${state.busy ? "WORKING…" : "MAKE A CODE"}</button></div>
