@@ -77,6 +77,13 @@ describe("words", () => {
     expect(describeShare({ ...base, revoked: true, active: false })).toBe("withdrawn · made 2026-10-25");
     expect(describeShare({ id: "s", created_at: null, expires_at: null, revoked: false, active: true })).toBe("works until — · made —");
   });
+  it("says which codes carry timing evidence, and says nothing when an older server does not know", () => {
+    const base = { id: "s", created_at: "2026-10-25T10:00:00+00:00", expires_at: "2026-11-24T10:00:00+00:00", revoked: false, active: true };
+    expect(describeShare({ ...base, timing: true })).toBe("works until 2026-11-24 · made 2026-10-25 · shows timing evidence");
+    expect(describeShare({ ...base, timing: false })).toBe("works until 2026-11-24 · made 2026-10-25 · basic answer only");
+    expect(describeShare({ ...base, timing: true, revoked: true, active: false })).toBe("withdrawn · made 2026-10-25 · shows timing evidence");
+    expect(describeShare(base)).toBe("works until 2026-11-24 · made 2026-10-25");
+  });
   it("puts only the page, the code and the expiry on the clipboard", () => {
     const text = shareText({ id: "secret-id", code: "ABCD-EFGH", expires_at: "2026-11-24T10:00:00+00:00" });
     expect(text).toContain(shareCheckUrl());
