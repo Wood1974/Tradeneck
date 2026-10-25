@@ -30,10 +30,15 @@ export const uploadState = (): UploadState => state;
 
 // What the server said about each photo, keyed by the photo's SHA-256. Only the server's answer goes in here: the
 // phone cannot check Apple's proof itself, so it shows nothing for a photo the server has not looked at.
-const serverFacts = new Map<string, Pick<StoredCapture, "attest" | "time" | "ticket" | "outside_time">>();
+const serverFacts = new Map<string, Pick<StoredCapture, "record_hash" | "attest" | "time" | "ticket" | "outside_time">>();
 
 function remember(photoSha256: string | undefined, c: Partial<StoredCapture> | undefined): void {
-  if (photoSha256 && c?.attest) serverFacts.set(photoSha256, { attest: c.attest, time: c.time, ticket: c.ticket, outside_time: c.outside_time });
+  if (photoSha256 && c?.attest) serverFacts.set(photoSha256, { record_hash: c.record_hash as string, attest: c.attest, time: c.time, ticket: c.ticket, outside_time: c.outside_time });
+}
+
+/** The server's record hash for a photo it has stored, or undefined while the photo has not reached it. Share codes are made against this. */
+export function recordHashFor(photoSha256: string): string | undefined {
+  return serverFacts.get(photoSha256)?.record_hash;
 }
 
 export interface DeviceCheckLine {

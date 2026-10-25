@@ -1,4 +1,5 @@
 import { esc } from "../esc";
+import { bindSharePanel, resetShare, sharePanelHtml } from "./share-panel";
 import { captureNative, warmNativeCamera, type CaptureOk } from "../capture/capture";
 import { verifyExport, type ExportPackage } from "../capture/record";
 import { exportReport } from "./exportReport";
@@ -345,6 +346,7 @@ device claim ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " (not c
         </div>
         ${status ? `<p class="foot-note">${esc(status)}</p>` : ""}
       </div>
+      ${sharePanelHtml(rec.sha256)}
     `;
   }
   return `
@@ -467,6 +469,8 @@ function bind(): void {
   root().querySelectorAll("[data-slot]").forEach((el) => {
     el.addEventListener("click", () => void guarded(() => onSlot((el as HTMLElement).dataset.slot!)));
   });
+  const openPhoto = openVaultId ? vault.find((v) => v.record.id === openVaultId) : undefined;
+  if (openPhoto) bindSharePanel(root(), openPhoto.record.sha256, render);
   if (tab === "construction") bindConstruction(ctx);
   bindIdentity(root(), render);
   bindReset(root(), render);
@@ -586,6 +590,7 @@ async function openVault(id: string | null): Promise<void> {
   if (openImgUrl) URL.revokeObjectURL(openImgUrl);
   openImgUrl = null;
   openVaultId = id;
+  resetShare();
   if (!id) return;
   const rec = vault.find((v) => v.record.id === id)?.record;
   const bytes = rec ? await getVaultBytes(id) : undefined;

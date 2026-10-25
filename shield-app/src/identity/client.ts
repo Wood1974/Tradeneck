@@ -55,6 +55,22 @@ export interface StoredCapture {
   outside_time?: OutsideTimeResult;
 }
 
+/** A share code the server just made. The code is shown once; the server keeps only a hash of it. */
+export interface ShareMade {
+  id: string;
+  code: string;
+  expires_at: string;
+}
+
+/** One share code's state, without the code itself. */
+export interface ShareInfo {
+  id: string;
+  created_at: string | null;
+  expires_at: string | null;
+  revoked: boolean;
+  active: boolean;
+}
+
 /** A ticket the server signed for this account and ticket id (the job id, or "device"). */
 export interface IssuedTicket {
   ticket: Record<string, unknown>;
@@ -87,6 +103,12 @@ export interface IdentityApi {
   uploadCapture(body: CaptureUpload): Promise<StoredCapture & { already: boolean }>;
   /** The photos this account already has on the server. */
   listCaptures(): Promise<StoredCapture[]>;
+  /** Makes a share code for one uploaded photo (by the server's record hash). Anyone holding the code and the original file can ask the server whether the file matches. */
+  createShare(recordHash: string, days: number): Promise<ShareMade>;
+  /** The codes made for one photo and whether each still works. The codes themselves are never listed. */
+  listShares(recordHash: string): Promise<ShareInfo[]>;
+  /** Withdraws a code so it stops working. */
+  revokeShare(shareId: string): Promise<void>;
   /** Asks the server to sign a start-of-job ticket. Closed (503, or 404 on an older server) until the server has a ticket key. */
   issueTicket(ticketId: string): Promise<IssuedTicket>;
   /** Hands the server the phone's countersignature over the ticket and the phone's clocks. */
@@ -190,6 +212,14 @@ const real: IdentityApi = {
   uploadCapture: (body) => authedCall("/shield/captures", { method: "POST", body: JSON.stringify(body) }, 90000),
   async listCaptures() {
     return (await authedCall<{ captures: StoredCapture[] }>("/shield/captures")).captures;
+  },
+  createShare: (recordHash, days) => authedCall(`/shield/captures/${encodeURIComponent(recordHash)}/share`, { method: "POST", body: JSON.stringify({ days }) }),
+  async listShares(recordHash) {
+    return (await authedCall<{ shares: ShareInfo[] }>(`/shield/captures/${encodeURIComponent(recordHash)}/shares`)).shares;
+  },
+  async revokeShare(shareId) {
+    // POST, not DELETE: the phone's web view may only send GET and POST across origins.
+    await authedCall(`/shield/shares/${encodeURIComponent(shareId)}/revoke`, { method: "POST", body: "{}" });
   },
   issueTicket: (ticketId) => authedCall("/shield/tickets", { method: "POST", body: JSON.stringify({ ticket_id: ticketId }) }),
   countersignTicket: (body) => authedCall("/shield/tickets/countersign", { method: "POST", body: JSON.stringify(body) }),

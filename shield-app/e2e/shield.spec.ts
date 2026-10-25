@@ -530,3 +530,12 @@ test("an ID check left unfinished can be started over, and consent is asked for 
   await expect(page.locator('[data-act="id-check"]')).toBeVisible();
   expect((await page.evaluate(() => (window as unknown as TestWindow).__idCalls)).filter((c: string) => c === "start")).toHaveLength(2);
 });
+
+test("a photo the server does not have yet offers no Share button", async ({ page }) => {
+  await asNativeApp(page);
+  await openApp(page);
+  await page.click('[data-act="native"]');
+  await expect(page.locator(".thumb")).toBeVisible();
+  await expect(page.getByText("Share is available once this photo has reached the server.")).toBeVisible();
+  await expect(page.locator('[data-share="open"]')).toHaveCount(0);
+});
