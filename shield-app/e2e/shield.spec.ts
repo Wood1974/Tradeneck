@@ -41,6 +41,9 @@ async function asNativeApp(page: Page): Promise<void> {
       signedIn() {
         return (this as unknown as { _in?: boolean })._in === true;
       },
+      signOut() {
+        (this as unknown as { _in: boolean })._in = false;
+      },
       async signIn(_email: string, pass: string) {
         w.__idCalls.push("signIn");
         if (pass !== "correct-horse") throw { code: "bad-credentials" };
@@ -372,9 +375,18 @@ test("an unverified phone cannot seal: sign-on comes first, step by step", async
   await expect(page.locator(".ready")).not.toContainText("No signal");
   await expect(page.locator(".chip", { hasText: "SIGNED NOTE ON FILE" })).toBeVisible();
 
-  // The signed note survives a restart, and the first photo it allows is bound to it.
+  // The signed note survives a restart, the sign-in does not: the first photo waits for a new sign-in, then is bound to the note.
   await page.reload();
   await expect(page.locator('[data-act="native"]')).toBeVisible();
+  await page.click('[data-act="native"]');
+  await expect(page.locator(".foot-note", { hasText: "Sign in on the Account tab before taking photos" })).toBeVisible();
+  await expect(page.locator(".thumb")).toHaveCount(0);
+  await page.click('[data-tab="account"]');
+  await page.fill("#acct-email", "pro@example.test");
+  await page.fill("#acct-pass", "correct-horse");
+  await page.click('[data-act="acct-signin"]');
+  await expect(page.locator("#ac-h")).toHaveText("Signed in");
+  await page.click('[data-tab="capture"]');
   await page.click('[data-act="native"]');
   await expect(page.locator(".thumb")).toBeVisible();
   await page.click('[data-act="export"]');
@@ -538,4 +550,43 @@ test("a photo the server does not have yet offers no Share button", async ({ pag
   await expect(page.locator(".thumb")).toBeVisible();
   await expect(page.getByText("Share is available once this photo has reached the server.")).toBeVisible();
   await expect(page.locator('[data-share="open"]')).toHaveCount(0);
+});
+
+test("signing out stops sealing until signing in again, and every tab still fits a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await asNativeApp(page);
+  await openApp(page);
+  // Six tabs fit across the screen, each wide enough to tap.
+  const boxes = await page.locator(".tabs button").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()));
+  expect(boxes).toHaveLength(6);
+  for (const b of boxes) {
+    expect(b.width).toBeGreaterThanOrEqual(44);
+    expect(b.right).toBeLessThanOrEqual(390.5);
+  }
+
+  await page.click('[data-tab="account"]');
+  await expect(page.locator("#ac-h")).toHaveText("Signed in");
+  await page.click('[data-act="acct-signout"]');
+  await expect(page.locator("#ac-h")).toHaveText("Sign in");
+  // Signed out: the Capture screen says so, and a tap on SEAL FRAME takes no photo.
+  await page.click('[data-tab="capture"]');
+  await expect(page.getByText("Signed out. Sign in on the Account tab before taking photos.").first()).toBeVisible();
+  await page.click('[data-act="native"]');
+  await expect(page.locator(".foot-note", { hasText: "Sign in on the Account tab before taking photos" })).toBeVisible();
+  await expect(page.locator(".thumb")).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as TestWindow).__shieldCalls)).toEqual([]);
+
+  // A wrong password is said in words and keeps what was typed; the right one signs in and sealing works.
+  await page.click('[data-act="goto-account"]');
+  await page.fill("#acct-email", "pro@example.test");
+  await page.fill("#acct-pass", "wrong");
+  await page.click('[data-act="acct-signin"]');
+  await expect(page.locator("[data-acct-status]")).toHaveText("That email or password was not accepted.");
+  await expect(page.locator("#acct-email")).toHaveValue("pro@example.test");
+  await page.fill("#acct-pass", "correct-horse");
+  await page.click('[data-act="acct-signin"]');
+  await expect(page.locator("#ac-h")).toHaveText("Signed in");
+  await page.click('[data-tab="capture"]');
+  await page.click('[data-act="native"]');
+  await expect(page.locator(".thumb")).toBeVisible();
 });

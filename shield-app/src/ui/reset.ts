@@ -153,7 +153,7 @@ export function bindReset(root: ParentNode, rerender: () => void): void {
   const keepEmail = root.querySelector<HTMLInputElement>("#rs-email");
   if (keepEmail) keepEmail.oninput = () => (email = keepEmail.value.trim());
 
-  on("rs-open", () => openReset(value(root, "#id-email") || value(root, "#aa-email")));
+  on("rs-open", () => openReset(value(root, "#id-email") || value(root, "#aa-email") || value(root, "#acct-email")));
   on("rs-close", () => closeReset());
   on("rs-have", () => {
     email = value(root, "#rs-email").trim() || email;

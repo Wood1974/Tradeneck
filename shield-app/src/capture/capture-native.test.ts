@@ -7,17 +7,39 @@ vi.mock("../identity/store", () => ({
   currentAttestation: async () => ({ attestationId: "att-1", noteSha256: "b".repeat(64) }),
 }));
 
+// Sealing needs a signed-in session; each test says whether there is one.
+let signedIn = true;
+vi.mock("../identity/client", () => ({ identityApi: () => ({ signedIn: () => signedIn }) }));
+
 import { captureNative } from "./capture";
 import { sha256Bytes } from "../crypto/seal";
 
 const g = globalThis as unknown as { Capacitor?: unknown };
 
 beforeEach(() => {
+  signedIn = true;
   captureAndSeal.mockReset();
   g.Capacitor = { isNativePlatform: () => true, getPlatform: () => "ios" };
 });
 afterEach(() => {
   delete g.Capacitor;
+});
+
+describe("sealing needs a signed-in session", () => {
+  it("takes no photo and seals nothing while signed out", async () => {
+    signedIn = false;
+    expect(await captureNative(null)).toEqual({ error: "not-signed-in" });
+    expect(await captureNative("cp-1", "front")).toEqual({ error: "not-signed-in" });
+    expect(captureAndSeal).not.toHaveBeenCalled();
+  });
+  it("works again after signing in, with no other change", async () => {
+    signedIn = false;
+    expect(await captureNative(null)).toEqual({ error: "not-signed-in" });
+    signedIn = true;
+    captureAndSeal.mockRejectedValueOnce(new Error("camera-cancelled"));
+    expect(await captureNative(null)).toEqual({ error: "camera-cancelled" });
+    expect(captureAndSeal).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("a native capture that fails says why", () => {

@@ -31,3 +31,22 @@ describe("the account's enrolled phones", () => {
     expect(JSON.parse(init.body as string)).toEqual({ id: "a/b+c=" });
   });
 });
+
+describe("signing out", () => {
+  it("drops the token, so the next call is refused before anything is sent", async () => {
+    const { identityApi } = await load();
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "tok" }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    await identityApi().signIn("a@b.test", "correct-horse-battery");
+    expect(identityApi().signedIn()).toBe(true);
+    identityApi().signOut();
+    expect(identityApi().signedIn()).toBe(false);
+    await expect(identityApi().listPhones()).rejects.toMatchObject({ code: "not-signed-in" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it("is harmless when nobody is signed in", async () => {
+    const { identityApi } = await load();
+    identityApi().signOut();
+    expect(identityApi().signedIn()).toBe(false);
+  });
+});

@@ -10,6 +10,7 @@ import {
 } from "../crypto/seal";
 import { activeJobId, chainHead, commitSeal, getJob } from "../store/db";
 import type { NativeSealResult } from "@tradedeck/secure-capture";
+import { identityApi } from "../identity/client";
 import { currentAttestation } from "../identity/store";
 import type { SealRecord, VaultItem } from "../types";
 
@@ -21,7 +22,8 @@ export type CaptureError =
   | "empty-bytes"
   | "plugin-missing"
   | "seal-failed"
-  | "not-verified";
+  | "not-verified"
+  | "not-signed-in";
 
 /** A failed capture. `detail` is the underlying reason, shown so a failure on a real phone can be diagnosed. */
 export interface CaptureFailureResult {
@@ -153,6 +155,8 @@ export async function captureNative(checkpointId: string | null, direction: "bac
   // No photo is taken, and nothing is sealed, until this device holds a signed note backed by a passed ID check.
   // This sits above both the e2e stand-in and the native plugin so neither path can skip it.
   if (!(await currentAttestation())) return { error: "not-verified" };
+  // One login is not shared: a photo is sealed only in a session where someone has signed in, and each app restart or SIGN OUT ends it.
+  if (!identityApi().signedIn()) return { error: "not-signed-in" };
   if (import.meta.env.MODE === "e2e") {
     // Test builds only (`vite build --mode e2e`): stands in for the OS camera, which a browser test cannot drive.
     // This branch is removed from production bundles; `npm run check:bundle` fails the build if it ships.
