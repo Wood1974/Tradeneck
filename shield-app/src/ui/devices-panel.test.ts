@@ -61,10 +61,51 @@ describe("Your phones", () => {
     expect(html).toContain("Withdrawn.");
   });
 
-  it("says so in words when the server cannot be reached, and keeps the list on screen state clean", async () => {
+  it("when the list cannot be loaded it says why and claims nothing about the account's phones", async () => {
     vi.mocked(devices.listPhones).mockRejectedValue(new IdentityError("network"));
     await press("open");
-    expect(phonesPanelHtml()).toContain("No connection");
+    const html = phonesPanelHtml();
+    expect(html).toContain("No connection");
+    expect(html).not.toContain("No phones enrolled");
+    expect(html).not.toContain("does not list it");
+    expect(html).toContain('data-phones="retry"');
+  });
+
+  it("signed out is the same: the sign-in message, never 'no phones enrolled'", async () => {
+    vi.mocked(devices.listPhones).mockRejectedValue(new IdentityError("not-signed-in"));
+    await press("open");
+    const html = phonesPanelHtml();
+    expect(html).toContain("Sign in again");
+    expect(html).not.toContain("No phones enrolled");
+  });
+
+  it("TRY AGAIN loads the list once the problem is gone", async () => {
+    vi.mocked(devices.listPhones).mockRejectedValueOnce(new IdentityError("network"));
+    await press("open");
+    await press("retry");
+    const html = phonesPanelHtml();
+    expect(html).toContain("this phone");
+    expect(html).not.toContain('data-phones="retry"');
+  });
+
+  it("an answer with no phones in it says so", async () => {
+    vi.mocked(appAttestState).mockResolvedValue({ state: "not-enrolled" });
+    vi.mocked(devices.listPhones).mockResolvedValue([]);
+    await press("open");
+    const html = phonesPanelHtml();
+    expect(html).toContain("No phones enrolled for this account.");
+    expect(html).not.toContain("does not list it");
+  });
+
+  it("when this phone has an Apple key the server does not list, it says the two disagree", async () => {
+    vi.mocked(devices.listPhones).mockResolvedValue([phone({ id: "k-old" })]);
+    await press("open");
+    expect(phonesPanelHtml()).toContain("This phone has an Apple key, but the Shield server does not list it under this account");
+  });
+
+  it("no disagreement is reported when the server lists this phone's key", async () => {
+    await press("open");
+    expect(phonesPanelHtml()).not.toContain("does not list it");
   });
 
   it("closing forgets the list", async () => {
