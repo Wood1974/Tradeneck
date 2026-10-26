@@ -1,4 +1,5 @@
 import { esc } from "../esc";
+import { verdictLine, verdictNote } from "../verify/labels";
 import { accountView, bindAccount } from "./account";
 import { bindPhonesPanel } from "./devices-panel";
 import { bindSharePanel, resetShare, sharePanelHtml } from "./share-panel";
@@ -539,7 +540,7 @@ function bind(): void {
       }
       try {
         const result = await verifyBundle(parseBundle(text));
-        verifyOut = `${result.verdict}\n${result.reasons.join("\n")}\n${result.computedSha ?? ""}`;
+        verifyOut = [verdictLine(result), verdictNote(result), result.reasons.join("\n"), result.computedSha ?? ""].filter(Boolean).join("\n");
       } catch {
         verifyOut = "NO-ORIGIN\nbundle-unreadable";
       }
@@ -782,7 +783,7 @@ async function onAct(act: string): Promise<void> {
       return;
     }
     const result = await verifyItemOriginal(item.record, b64FromBytes(bytes));
-    status = `${result.verdict} · ${result.reasons.join(", ")}`;
+    status = [`${verdictLine(result)} · ${result.reasons.join(", ")}`, verdictNote(result)].filter(Boolean).join(" ");
     render();
     return;
   }
