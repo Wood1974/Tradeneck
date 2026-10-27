@@ -45,10 +45,13 @@ main { flex: 1; padding: 14px 16px 150px; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 20px 18px 24px; text-align: center;
 }
-.finder-top { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between; }
+/* In the flow, above the heading: the number of chips varies by screen, so a fixed strip pinned to the top corner
+   ran into the heading when they wrapped. A chip never breaks its own text. */
+.finder-top { align-self: stretch; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-bottom: 18px; }
 .chip {
   font-family: ui-sans-serif, system-ui, sans-serif; font-size: 10px; letter-spacing: 0.12em;
   border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px; background: #0e100e;
+  white-space: nowrap; flex: none;
 }
 .chip.warn { color: var(--warn); border-color: #3a3220; }
 .chip.bad { color: var(--bad); border-color: #3a2420; }
@@ -108,7 +111,8 @@ input, select, textarea {
   padding: 10px 12px; font-family: ui-sans-serif, system-ui, sans-serif;
 }
 textarea { resize: vertical; line-height: 1.4; }
-.slots { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+/* The round camera button floats over the right edge, so the rows' own buttons keep clear of it. */
+.slots { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-right: 68px; }
 .slot {
   display: flex; justify-content: space-between; align-items: center;
   border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--panel);

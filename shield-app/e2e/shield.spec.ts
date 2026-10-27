@@ -590,3 +590,37 @@ test("signing out stops sealing until signing in again, and every tab still fits
   await page.click('[data-act="native"]');
   await expect(page.locator(".thumb")).toBeVisible();
 });
+
+test("the status chips on Capture keep their text on one line and clear the heading", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await asNativeApp(page);
+  await openApp(page);
+  // A phone that is enrolled with Apple and used a test ID check shows four long chips; add the two the stand-in does not have.
+  await page.evaluate(() => {
+    const row = document.querySelector(".finder-top")!;
+    for (const [cls, text] of [["bad", "TEST ID CHECK · NO REAL ID"], ["ok", "DEVICE ENROLLED WITH APPLE"]]) {
+      const chip = document.createElement("span");
+      chip.className = `chip ${cls}`;
+      chip.textContent = text;
+      row.appendChild(chip);
+    }
+  });
+  const chips = await page.locator(".finder-top .chip").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()));
+  expect(chips.length).toBeGreaterThanOrEqual(4);
+  for (const c of chips) expect(c.height).toBeLessThan(30); // one line each, not a wrapped blob
+  const row = await page.locator(".finder-top").evaluate((e) => e.getBoundingClientRect());
+  const heading = await page.locator(".finder h1").first().evaluate((e) => e.getBoundingClientRect());
+  expect(row.bottom).toBeLessThanOrEqual(heading.top);
+  for (const c of chips) expect(c.right).toBeLessThanOrEqual(390);
+});
+
+test("checkpoint SEAL buttons sit left of the round camera button's column", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await asNativeApp(page);
+  await lockBrief(page);
+  await page.click('[data-tab="capture"]');
+  const fab = await page.locator(".fab").evaluate((e) => e.getBoundingClientRect());
+  const buttons = await page.locator("[data-slot]").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()));
+  expect(buttons).toHaveLength(5);
+  for (const b of buttons) expect(b.right).toBeLessThanOrEqual(fab.left);
+});
