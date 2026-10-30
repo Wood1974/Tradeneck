@@ -56,7 +56,8 @@ every feature decision:
 - `index.html` — a static, crawlable marketing landing page (`#landing`)
   that swaps for the app shell (`#app`) on login. Uses Supabase Auth
   directly, project `jlaajejpqjldpbinktln`. App screens: Home, Find Work,
-  Post Job, Draws, Workers, Profile, Shield, Admin. **`app.html` does not
+  Post Job, Draws (hidden until escrow launches), Workers, Profile, Shield,
+  Admin. **`app.html` does not
   exist** on any branch, despite older notes describing it.
 - `assets/app.js` — the SPA's JavaScript, extracted out of `index.html` so
   it can be deferred and cached. Loaded `defer`, *after* the deferred
@@ -187,12 +188,26 @@ The schema is live, with 25+ tables, all RLS-enabled. Highlights:
   RLS — **never** put the service role key here). The Stripe **publishable**
   key (`pk_live_…`) is there too, which is also fine — publishable keys are
   meant to be client-visible; the secret key must stay in the backend's
-  environment only. Escrow is live, not test mode.
+  environment only. **Escrow is not launched ("coming soon")** — the code
+  is in the app but switched off behind `ESCROW_ENABLED` (see below).
 - **The dual-auth problem is resolved.** One user system (Supabase JWT) end
   to end, frontend and backend.
 - Stripe Connect / escrow / draw code exists in `assets/app.js`
   (`openEscrowFunding`, `confirmEscrowPayment`, `connectStripe`,
-  `submitDrawPhotos`, `drawAction`) talking to the Flask API.
+  `submitDrawPhotos`, `drawAction`) talking to the Flask API, gated by
+  `const ESCROW_ENABLED = false` at the top of the file. While it is
+  false the Draws tab, `/draws` route, Post Job milestone builder and
+  Profile Payouts card are hidden, draw data is not loaded, and each of
+  those functions (plus `loadStripeJs`) returns before any request. The
+  public pages (`escrow.html`, landing) say escrow is coming soon; keep
+  that copy until the owner turns the flag on. The flag is client-side
+  only — the backend is what actually has to refuse payments. As of Oct
+  2026 `tradedeck-api` main has no `/stripe/escrow/create` or
+  `/draws/<id>/approve` routes (removed with `escrow.py`); it still has
+  `/stripe/connect/onboard`. Turning escrow on needs those back first.
+  The escrow publishable key is `ESCROW_STRIPE_PK`, not `STRIPE_PK` —
+  `shield.js` declares its own top-level `STRIPE_PK`, and two classic
+  scripts declaring the same `const` stops `shield.js` from loading.
 - Separate Flask API backend lives in the sibling repo **tradedeck-api**
   (tradedeck-api.onrender.com), Supabase-native, with the escrow state
   machine and the Shield module. See that repo's CLAUDE.md.
@@ -279,7 +294,9 @@ irrelevant listings to find trades. Each trade tab shows a live count.
 
 ## Known-good next steps (Sep 2026)
 
-1. Run a full escrow cycle in Stripe **live** mode end-to-end and confirm
+1. Before launching escrow: restore the backend escrow routes, flip
+   `ESCROW_ENABLED`, update the "coming soon" copy, then run a full escrow
+   cycle in Stripe **live** mode end-to-end and confirm
    `bump_jobs_completed_on_release` actually fires — nothing below `jobs`
    has real rows yet, so this has never happened for real.
 2. Wire Shield's deeper hooks: the per-job brief (`renderShieldBrief` /
