@@ -25,6 +25,7 @@ import { attestation, bindIdentity, identityView, isAttested, loadIdentity } fro
 import { identityApi } from "../identity/client";
 import { bindReset, resetEntry, resetOpen, resetView } from "./reset";
 import { EMAIL_ATTRS, passwordField } from "./fields";
+import { exportErrorText, exportFileName, exportHardwarePackage } from "../native/export-package";
 import { ensureServerTicket } from "../native/tickets";
 import { appleCheckFor, connectionLine, hasClockWarning, missingFromVault, serverResultLines, uploadLine, uploadPending } from "../native/uploader";
 import { appAttestState, enrollDevice, enrollErrorText, enrollStepText, reasonOf, type AppAttestState } from "../native/appattest";
@@ -789,15 +790,18 @@ async function onAct(act: string): Promise<void> {
   }
   if (act === "export" && openVaultId) {
     const item = vault.find((v) => v.record.id === openVaultId);
-    const bytes = item ? await getVaultBytes(item.record.id) : undefined;
-    if (!item || !bytes) {
-      status = "Photo bytes unavailable on this device.";
+    if (!item) {
+      status = "Photo unavailable on this device.";
       render();
       return;
     }
-    const bundle = { version: 1 as const, record: item.record, originalB64: b64FromBytes(bytes), devicePublicKey: await devicePublicKeyRaw() };
-    const stamp = item.record.createdAt.replace(/[:.]/g, "-");
-    await download(`shield-photo_${item.record.id.slice(0, 8)}_${stamp}.shield.json`, new Blob([JSON.stringify(bundle)], { type: "application/json" }));
+    try {
+      const pkg = await exportHardwarePackage(item.record.sha256);
+      await download(exportFileName(item.record.id, item.record.createdAt), new Blob([JSON.stringify(pkg)], { type: "application/json" }));
+    } catch (err) {
+      status = exportErrorText(err);
+      render();
+    }
     return;
   }
   if (act === "pick-bundle") {
