@@ -4,8 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 
-<title>Milestone Escrow &amp; Draw Schedules | TradeDeck</title>
-<meta name="description" content="How TradeDeck's milestone escrow works: build a draw schedule, fund a stage through Stripe, submit photo evidence, approve, release. Nobody prepays a stranger."/>
+<title>Escrow, Funding &amp; Milestones — Coming Soon | TradeDeck</title>
+<meta name="description" content="TradeDeck connects Utah homeowners, contractors, and workers. Escrow, funding, and milestones are coming soon."/>
 <link rel="canonical" href="https://tradedeckapp.com/escrow"/>
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1"/>
 <meta name="theme-color" content="#0A0A0A"/>
@@ -13,14 +13,14 @@
 <meta property="og:type" content="website"/>
 <meta property="og:site_name" content="TradeDeck"/>
 <meta property="og:url" content="https://tradedeckapp.com/escrow"/>
-<meta property="og:title" content="Milestone Escrow &amp; Draw Schedules | TradeDeck"/>
-<meta property="og:description" content="How TradeDeck's milestone escrow works: build a draw schedule, fund a stage through Stripe, submit photo evidence, approve, release. Nobody prepays a stranger."/>
+<meta property="og:title" content="Escrow, Funding &amp; Milestones — Coming Soon | TradeDeck"/>
+<meta property="og:description" content="TradeDeck connects Utah homeowners, contractors, and workers. Escrow, funding, and milestones are coming soon."/>
 <meta property="og:image" content="https://tradedeckapp.com/og-image.png"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
 <meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:title" content="Milestone Escrow &amp; Draw Schedules | TradeDeck"/>
-<meta name="twitter:description" content="How TradeDeck's milestone escrow works: build a draw schedule, fund a stage through Stripe, submit photo evidence, approve, release. Nobody prepays a stranger."/>
+<meta name="twitter:title" content="Escrow, Funding &amp; Milestones — Coming Soon | TradeDeck"/>
+<meta name="twitter:description" content="TradeDeck connects Utah homeowners, contractors, and workers. Escrow, funding, and milestones are coming soon."/>
 <meta name="twitter:image" content="https://tradedeckapp.com/og-image.png"/>
 
 <link rel="icon" href="/favicon.ico" sizes="any"/>
@@ -58,7 +58,7 @@
       "name": "Does TradeDeck hold my money?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "No. Escrow is handled through Stripe. TradeDeck never takes custody of the funds itself."
+        "text": "Escrow, funding, and milestones are coming soon. These features are not available yet."
       }
     },
     {
@@ -66,7 +66,7 @@
       "name": "What is a draw schedule?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "A split of the contract value into milestones, each with a percentage. The percentages must total 100% before the job can post, so there is no ambiguity about the final payment."
+        "text": "Escrow, funding, and milestones are coming soon. These features are not available yet."
       }
     },
     {
@@ -90,7 +90,7 @@
       "name": "What happens to escrow if a job is abandoned?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Unreleased draws stay in escrow. Only milestones that were actually approved have been paid out."
+        "text": "Escrow, funding, and milestones are coming soon. These features are not available yet."
       }
     }
   ]
@@ -118,92 +118,13 @@
 <main class="mk-main" id="main">
   <div class="mk-wrap">
     <section class="mk-hero">
-      <span class="mk-eyebrow">Escrow &amp; draws</span>
-      <h1>Milestone escrow, in plain terms.</h1>
-      <p class="mk-lede">Money for a stage of work is held until that stage is
-      done and approved. Homeowners stop prepaying strangers; crews stop chasing
-      final payments. Same mechanism, both problems.</p>
+      <span class="mk-eyebrow">Coming soon</span>
+      <h1>Escrow, funding &amp; milestones</h1>
+      <p class="mk-lede">Milestone schedules, escrow funding, photo submissions, approvals, and payment releases are not available yet.</p>
+      <div class="mk-cta"><a class="mk-btn mk-btn-primary" href="/#signin">Post a job — free</a></div>
     </section>
-
-    <h2>The draw schedule</h2>
-    <p>A draw schedule splits the contract value into milestones, each carrying
-    a percentage of the total. TradeDeck enforces that the percentages add up to
-    exactly 100% before the job can post. That check exists because the single
-    most common payment dispute in construction is a final balance the two sides
-    remember differently.</p>
-    <p>A framing job might look like this:</p>
-    <div class="mk-table-scroll">
-    <table class="mk-table">
-      <thead><tr><th>Milestone</th><th>%</th><th>Released when</th></tr></thead>
-      <tbody>
-        <tr><td>Materials on site</td><td>30%</td><td>Delivery photos approved</td></tr>
-        <tr><td>Walls up and plumb</td><td>40%</td><td>Owner walkthrough</td></tr>
-        <tr><td>Roof structure complete</td><td>20%</td><td>Owner or inspector sign-off</td></tr>
-        <tr><td>Close-out and site clean</td><td>10%</td><td>Final approval</td></tr>
-      </tbody>
-    </table>
-    </div>
-
-    <h2>The cycle, one milestone at a time</h2>
-    <div class="mk-grid mk-grid-2">
-      <div class="mk-card"><span class="mk-card-num">1</span><h3>Fund</h3>
-        <p>The owner funds the milestone through Stripe. The money leaves their
-        control but does not reach the crew — it is held against that draw.</p></div>
-      <div class="mk-card"><span class="mk-card-num">2</span><h3>Build</h3>
-        <p>The crew works the stage knowing the funds for it are confirmed, not
-        promised.</p></div>
-      <div class="mk-card"><span class="mk-card-num">3</span><h3>Evidence</h3>
-        <p>The crew submits jobsite photos against the draw, which timestamps
-        what was done and when it was claimed.</p></div>
-      <div class="mk-card"><span class="mk-card-num">4</span><h3>Release</h3>
-        <p>The owner (or the named inspector) approves, and escrow releases to
-        the worker's connected Stripe account.</p></div>
-    </div>
-
-    <h2>Why this is fairer than a deposit</h2>
-    <p>A deposit moves all the risk to one party the instant it clears. Escrow
-    splits it. The owner's exposure is capped at the stage they approved; the
-    crew's exposure is capped at the stage they are currently building, and only
-    while the funds for it already exist.</p>
-    <p>When a milestone is disputed, funds stay in escrow. They do not snap back
-    to the owner, which is the detail that stops "I'll approve it next week"
-    from being a free option.</p>
-
-    <div class="mk-callout">
-      <p><strong>TradeDeck is not a bank.</strong> Escrow runs through Stripe
-      and payouts go to the worker's own connected Stripe account. TradeDeck
-      never takes custody of the funds.</p>
-    </div>
-
-    <h2>Common questions</h2>
-    <div class="mk-faq">
-      <details>
-        <summary>Does TradeDeck hold my money?</summary>
-        <p>No. Escrow is handled through Stripe. TradeDeck never takes custody of the funds itself.</p>
-      </details>
-      <details>
-        <summary>What is a draw schedule?</summary>
-        <p>A split of the contract value into milestones, each with a percentage. The percentages must total 100% before the job can post, so there is no ambiguity about the final payment.</p>
-      </details>
-      <details>
-        <summary>Can the percentages be uneven?</summary>
-        <p>Yes. A common shape is a larger first draw to cover materials and a smaller retention-style final draw at close-out.</p>
-      </details>
-      <details>
-        <summary>Who approves a draw?</summary>
-        <p>The job owner by default. A draw can also name an inspector as the verifier where a third-party sign-off is more appropriate.</p>
-      </details>
-      <details>
-        <summary>What happens to escrow if a job is abandoned?</summary>
-        <p>Unreleased draws stay in escrow. Only milestones that were actually approved have been paid out.</p>
-      </details>
-    </div>
-
-    <div class="mk-band">
-      <h2>Set up a draw schedule on your next job.</h2>
-      <p class="mk-lede" style="margin:0 auto">Optional on every job, and free to post one.</p>
-      <div class="mk-cta"><a class="mk-btn mk-btn-primary" href="/#signin">Post a job</a></div>
-    </div>
+    <h2>Available now</h2>
+    <p>You can post jobs, review applicants, hire, and contact the people you work with. TradeDeck does not currently process milestone payments.</p>
   </div>
 </main>
 <footer class="mk-footer">
@@ -238,3 +159,4 @@
 </footer>
 </body>
 </html>
+
