@@ -524,10 +524,15 @@ label{font-size:13px;color:var(--muted);margin-bottom:4px;display:block}
     <div id="profile-content"></div>
   </div>
 
-  <!-- SHIELD -->
+  <!-- SHIELD: independent product, no embedded auth or verification -->
   <div id="screen-shield" class="screen">
-    <div class="screen-header"><h2>TradeDeck Shield</h2></div>
-    <div id="shield-dashboard-mount"></div>
+    <div class="screen-header"><h2>Shield Photo Verification</h2></div>
+    <section aria-label="Standalone Shield signup" style="padding:20px;border:1px solid var(--border,#444);border-radius:12px;margin:16px 0">
+      <h3>Sign up for Shield photo verification</h3>
+      <p>Shield is a separate application with its own account and verification process. A single-use Shield invitation code is required to create an account.</p>
+      <p><a class="btn btn-primary" href="/shield-app/" target="_blank" rel="noopener noreferrer">Open Shield signup</a></p>
+      <p class="text-muted" style="font-size:0.85rem">You will leave TradeDeck. Signing in to TradeDeck does not sign you in to Shield. Photo verification and attestation are not performed on this page.</p>
+    </section>
   </div>
 
   <!-- ADMIN -->
