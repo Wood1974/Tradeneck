@@ -22,6 +22,14 @@ async function asNativeApp(page: Page): Promise<void> {
     const w = window as unknown as TestWindow & { Capacitor: unknown };
     w.Capacitor = { isNativePlatform: () => true, getPlatform: () => "android" };
     w.__shieldCalls = [];
+    // The stand-in camera makes only the Vault copy, never a hardware record, so the phone's queue is empty here.
+    (w as unknown as { __shieldE2EExportPlugin: unknown }).__shieldE2EExportPlugin = {
+      listQueue: async () => ({ records: [] }),
+      exportQueue: async () => ({ packages: [] }),
+      readOriginal: async () => {
+        throw new Error("no original");
+      },
+    };
     w.__shieldE2ECamera = async (direction: string) => {
       w.__shieldCalls.push(direction);
       await new Promise((r) => setTimeout(r, 120));
@@ -389,7 +397,10 @@ test("an unverified phone cannot seal: sign-on comes first, step by step", async
   await page.click('[data-tab="capture"]');
   await page.click('[data-act="native"]');
   await expect(page.locator(".thumb")).toBeVisible();
+  // Export writes only the phone's hardware-signed record. This photo has none (the stand-in camera makes the Vault copy
+  // only), so it says so and writes nothing, rather than handing over the software-key file.
   await page.click('[data-act="export"]');
+  await expect(page.locator(".foot-note", { hasText: "no hardware-signed record" })).toBeVisible();
 });
 
 test("a forgotten password is reset with an emailed code, from the sign-on screen", async ({ page }) => {
