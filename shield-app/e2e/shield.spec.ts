@@ -164,6 +164,27 @@ test("brief to sealed point to frozen record to verified packet", async ({ page 
 
   const text = await freeze(page);
   const packet = JSON.parse(text);
+
+  // The closed job now has a folder of its own in the Vault, holding its photo and its completion record.
+  await page.click('[data-tab="vault"]');
+  await page.click('[data-act="vault-back"]'); // the photo just sealed is still open
+  await expect(page.locator("h2", { hasText: "COMPLETED JOBS" })).toBeVisible();
+  const folder = page.locator("[data-folder]");
+  await expect(folder).toHaveCount(1);
+  await expect(folder).toContainText("Reroof 872 High Country Ln");
+  await expect(folder).toContainText("1 photo");
+  await folder.click();
+  await expect(page.locator('[data-act="folder-record"]')).toBeVisible();
+  await expect(page.locator("[data-open]")).toHaveCount(1);
+  await page.locator("[data-open]").click();
+  await page.click('[data-act="vault-back"]');
+  await expect(page.locator('[data-act="folder-record"]')).toBeVisible();
+  const [record] = await Promise.all([page.waitForEvent("download"), page.click('[data-act="folder-record"]')]);
+  expect(record.suggestedFilename()).toContain(".shield-record.json");
+  await page.click('[data-act="folder-back"]');
+  await expect(page.locator("[data-folder]")).toHaveCount(1);
+  await expect(page.locator("[data-open]")).toHaveCount(0); // the photo is in its job's folder, not in the open list
+
   expect(packet.counts).toMatchObject({ points: 5, sealed: 1, missing: 4 });
   expect(packet.integrity.hash).toMatch(/^[0-9a-f]{64}$/);
   expect(packet.photographer.attestationId).toBe("55555555-5555-4555-8555-555555555555");

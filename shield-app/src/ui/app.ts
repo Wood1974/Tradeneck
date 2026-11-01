@@ -1,5 +1,6 @@
 import { esc } from "../esc";
 import { clockNow, shownTime, shownTimeWithUtc } from "./time-format";
+import { folderCardsHtml, folderHeaderHtml, groupVault } from "./vault-folders";
 import { verdictLine, verdictNote } from "../verify/labels";
 import { accountView, bindAccount } from "./account";
 import { bindPhonesPanel } from "./devices-panel";
@@ -14,6 +15,7 @@ import { makeCheckpoints, PACK_ORDER } from "../packs";
 import { isNativeOriginAvailable } from "../platform";
 import {
   activeJobId,
+  getCloseout,
   getVaultBytes,
   listJobs,
   listVault,
@@ -22,7 +24,7 @@ import {
 } from "../store/db";
 import type { Job, PackKind, VaultItem } from "../types";
 import { MAX_IMPORT_BYTES, parseBundle, verifyBundle, verifyItemOriginal } from "../verify/verify";
-import { download, parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
+import { download, downloadPacketFiles, parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
 import type { CloseoutPacket } from "../types";
 import { attestation, bindIdentity, identityView, isAttested, loadIdentity } from "./identity";
 import { identityApi } from "../identity/client";
@@ -45,6 +47,8 @@ let jobs: Job[] = [];
 let vault: VaultItem[] = [];
 let activeId: string | null = null;
 let openVaultId: string | null = null;
+/** The completed job whose folder is open in the Vault, if any. */
+let openFolderId: string | null = null;
 let status = "";
 let selectedPack: PackKind = "remodel";
 let customCount = 8;
@@ -341,7 +345,7 @@ function vaultView(): string {
   if (open) {
     const rec = open.record;
     return `
-      <button class="btn ghost small" data-act="vault-back">BACK</button>
+      <button class="btn ghost small" data-act="vault-back">${openFolderId ? "BACK TO JOB" : "BACK"}</button>
       ${openImgUrl ? `<img class="thumb" alt="Sealed evidence photo" src="${esc(openImgUrl)}" />` : `<p class="meta">Photo bytes unavailable on this device.</p>`}
       <div class="card">
         <div class="row"><h2>${esc(rec.captureKind)}</h2><span class="chip">${esc(rec.platform)}</span></div>
@@ -365,17 +369,29 @@ device claim ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " (not c
     <p class="fine" id="upload-status" role="status">${esc(uploadLine())}</p>
     ${missingFromVault(vault.length) > 0 ? `<p class="fine bad">${missingFromVault(vault.length)} photo${missingFromVault(vault.length) === 1 ? " is" : "s are"} kept in this phone's protected storage but missing from this list. They are not lost and still upload. Do not delete the app: unsent photos are deleted with it.</p>` : ""}
     <p class="fine">Closing the app does not delete photos. Deleting the app deletes photos that have not reached the server.${storagePersisted === false ? " The system did not promise to keep this list; the protected copy is stored separately." : ""}</p>
-    <div class="list">${vault
-      .map(
-        (v) => `<button class="card" data-open="${esc(v.record.id)}" style="width:100%;text-align:left">
+    ${vaultListHtml()}
+  `;
+}
+
+function photoCardsHtml(items: VaultItem[]): string {
+  return items
+    .map(
+      (v) => `<button class="card" data-open="${esc(v.record.id)}" style="width:100%;text-align:left">
           <div class="row"><h2>${esc(v.record.captureKind)}</h2><span class="chip">${esc(v.record.platform)}</span></div>
           <div class="meta">${esc(v.record.sha256.slice(0, 16))}… · ${esc(shownTime(v.record.createdAt))}</div>
           ${appleLine(v.record.platform, v.record.sha256) ? `<div class="meta">${esc(appleLine(v.record.platform, v.record.sha256)!.text)}</div>` : ""}
           ${hasClockWarning(v.record.sha256) ? `<div class="meta"><span class="chip warn">CLOCKS DISAGREE · OPEN FOR DETAIL</span></div>` : ""}
         </button>`,
-      )
-      .join("")}${vault.length ? "" : `<p class="meta">Empty.</p>`}</div>
-  `;
+    )
+    .join("");
+}
+
+/** The Vault list: photos still being worked on, then a folder for each completed job. Inside a folder: that job's photos only. */
+function vaultListHtml(): string {
+  const { open, folders } = groupVault(vault, jobs);
+  const folder = folders.find((f) => f.job.id === openFolderId);
+  if (folder) return `${folderHeaderHtml(folder)}<div class="list">${photoCardsHtml(folder.items)}${folder.items.length ? "" : `<p class="meta">No photos from this job are on this phone.</p>`}</div>`;
+  return `<div class="list">${photoCardsHtml(open)}${open.length || folders.length ? "" : `<p class="meta">Empty.</p>`}</div>${folderCardsHtml(folders)}`;
 }
 
 function verifyView(): string {
@@ -466,6 +482,13 @@ function bind(): void {
       await setActiveJobId((el as HTMLElement).dataset.activate!);
       await reload();
       tab = "capture";
+      render();
+    });
+  });
+  root().querySelectorAll("[data-folder]").forEach((el) => {
+    el.addEventListener("click", () => {
+      openFolderId = (el as HTMLElement).dataset.folder ?? null;
+      status = "";
       render();
     });
   });
@@ -773,6 +796,19 @@ async function onAct(act: string): Promise<void> {
     status = `locked ${job.pack}`;
     render();
     warmNativeCamera(facing === "user" ? "front" : "back", job.id);
+    return;
+  }
+  if (act === "folder-back") {
+    openFolderId = null;
+    status = "";
+    render();
+    return;
+  }
+  if (act === "folder-record" && openFolderId) {
+    const packet = (await getCloseout(openFolderId)) as CloseoutPacket | undefined;
+    if (packet?.schema === "tradedeck.shield.completion.v3") await downloadPacketFiles(packet, true);
+    else status = "This job's completion record is not on this phone, so there is nothing to download.";
+    render();
     return;
   }
   if (act === "vault-back") {
