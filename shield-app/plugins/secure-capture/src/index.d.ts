@@ -61,6 +61,11 @@ export interface ExportPackage {
 export interface DepthProbeResult {
   /** Android only: this check does not exist there. */
   supported?: false;
+  /** The phone's model code, e.g. "iPhone18,2", and its iOS version, so a result says what it ran on. */
+  model?: string;
+  os?: string;
+  /** Back camera types iOS listed to the app, e.g. ["WideAngleCamera", "LiDARDepthCamera"]. */
+  cameras?: string[];
   lidar_device?: boolean;
   depth_delivery_supported?: boolean;
   captured?: boolean;
