@@ -1,3 +1,4 @@
+import { shownTimeWithUtc } from "./time-format";
 import { CODE_EDITION, codesForTrade, CODE_CHECKPOINTS, CODE_TRADE_ORDER, toCodeRef, type CodeCheckpoint } from "../construction/codes";
 import { esc } from "../esc";
 import { buildCloseoutPacket, downloadPacketFiles, missingPoints } from "../construction/closeout";
@@ -252,7 +253,7 @@ function closeView(ctx: ConstructionCtx, job: Job | undefined): string {
     ${packet ? `<div class="card">
       <h2>Record ${esc(packet.integrity.hash.slice(0, 12))}…</h2>
       <pre>${esc(packet.integrity.hash)}
-closed ${esc(packet.closedAt)} by ${esc(packet.closedBy.role)}
+closed ${esc(shownTimeWithUtc(packet.closedAt))} by ${esc(packet.closedBy.role)}
 ${packet.counts.sealed}/${packet.counts.points} sealed · ${packet.counts.missing} missing
 device ${esc(packet.deviceSealId)}</pre>
       <div class="actions">

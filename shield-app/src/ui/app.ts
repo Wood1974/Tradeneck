@@ -1,4 +1,5 @@
 import { esc } from "../esc";
+import { clockNow, shownTime, shownTimeWithUtc } from "./time-format";
 import { verdictLine, verdictNote } from "../verify/labels";
 import { accountView, bindAccount } from "./account";
 import { bindPhonesPanel } from "./devices-panel";
@@ -128,7 +129,7 @@ function activeJob(): Job | undefined {
 }
 
 function clock(): string {
-  return new Date().toISOString().slice(11, 19) + " UTC";
+  return clockNow();
 }
 
 export function render(): void {
@@ -344,7 +345,8 @@ function vaultView(): string {
       <div class="card">
         <div class="row"><h2>${esc(rec.captureKind)}</h2><span class="chip">${esc(rec.platform)}</span></div>
         <pre>${esc(rec.sha256)}
-${esc(rec.createdAt)}
+time   ${esc(shownTime(rec.createdAt))}
+UTC    ${esc(rec.createdAt)}
 job ${esc(rec.jobId ?? "—")} · ${esc(rec.checkpointId ?? "unbound")}
 ${rec.gps ? `location ${esc(rec.gps.source)} · ±${esc(Math.round(rec.gps.acc))} m` : "no location recorded"}
 device claim ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " (not checked on this phone)"}${appleLine(rec.platform, rec.sha256) ? `\n${esc(appleLine(rec.platform, rec.sha256)!.text)}` : ""}${serverResultLines(rec.sha256).map((l) => `\n${esc(l.text)}`).join("")}</pre>
@@ -366,7 +368,7 @@ device claim ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " (not c
       .map(
         (v) => `<button class="card" data-open="${esc(v.record.id)}" style="width:100%;text-align:left">
           <div class="row"><h2>${esc(v.record.captureKind)}</h2><span class="chip">${esc(v.record.platform)}</span></div>
-          <div class="meta">${esc(v.record.sha256.slice(0, 16))}… · ${esc(v.record.createdAt)}</div>
+          <div class="meta">${esc(v.record.sha256.slice(0, 16))}… · ${esc(shownTime(v.record.createdAt))}</div>
           ${appleLine(v.record.platform, v.record.sha256) ? `<div class="meta">${esc(appleLine(v.record.platform, v.record.sha256)!.text)}</div>` : ""}
           ${hasClockWarning(v.record.sha256) ? `<div class="meta"><span class="chip warn">CLOCKS DISAGREE · OPEN FOR DETAIL</span></div>` : ""}
         </button>`,
@@ -409,7 +411,7 @@ function packetResultView(r: NonNullable<typeof packetOut>): string {
       <div class="row"><h2>${ok ? "Record consistent" : r.verdict === "PACKET-TAMPERED" ? "Record altered" : "Not a Shield record"}</h2><span class="chip ${ok ? "ok" : "bad"}">${esc(r.verdict)}</span></div>
       <pre>${esc(r.reasons.join("\n"))}
 hash   ${esc(p.integrity.hash)}
-closed ${esc(p.closedAt)} by ${esc(p.closedBy.role)}
+closed ${esc(shownTimeWithUtc(p.closedAt))} by ${esc(p.closedBy.role)}
 job    ${esc(p.job.title || p.job.id)} · ${esc(p.job.trade)}
 signer ${esc(r.signer ?? "unknown")}
 photos sealed ${esc(p.counts.sealed)} · missing ${esc(p.counts.missing)}</pre>
