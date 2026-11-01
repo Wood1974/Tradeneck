@@ -23,6 +23,10 @@ export class SecureCaptureWeb extends WebPlugin {
     throw this.unavailable(UNAVAILABLE);
   }
 
+  async depthProbe() {
+    throw this.unavailable(UNAVAILABLE);
+  }
+
   async appAttestStatus() {
     throw this.unavailable(UNAVAILABLE);
   }

@@ -2,6 +2,7 @@ import { esc } from "../esc";
 import { verdictLine, verdictNote } from "../verify/labels";
 import { accountView, bindAccount } from "./account";
 import { bindPhonesPanel } from "./devices-panel";
+import { bindLidarCard } from "./lidar-card";
 import { bindSharePanel, resetShare, sharePanelHtml } from "./share-panel";
 import { captureNative, warmNativeCamera, type CaptureOk } from "../capture/capture";
 import { verifyExport, type ExportPackage } from "../capture/record";
@@ -478,6 +479,7 @@ function bind(): void {
   const openPhoto = openVaultId ? vault.find((v) => v.record.id === openVaultId) : undefined;
   if (openPhoto) bindSharePanel(root(), openPhoto.record.sha256, render);
   if (tab === "account" && identityApi().signedIn()) bindPhonesPanel(root(), render);
+  if (tab === "account") bindLidarCard(root(), render);
   if (tab === "account") bindAccount(root(), render);
   if (tab === "construction") bindConstruction(ctx);
   bindIdentity(root(), render);
