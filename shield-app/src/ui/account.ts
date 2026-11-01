@@ -3,6 +3,7 @@ import { IdentityError, identityApi } from "../identity/client";
 import { uploadLine, uploadPending } from "../native/uploader";
 import { phonesPanelHtml, resetPhones } from "./devices-panel";
 import { lidarCardHtml } from "./lidar-card";
+import { reenrollCardHtml } from "./reenroll-card";
 import { bindPasswordToggles, EMAIL_ATTRS, passwordField } from "./fields";
 import { resetEntry, resetOpen, resetView } from "./reset";
 import { resetShare } from "./share-panel";
@@ -38,6 +39,7 @@ export function accountView(): string {
         <p class="foot-note">Signing out does not delete anything: photos, the Vault and your signed statement stay on this phone, and photos not yet copied go up after the next sign-in. The server keeps a sign-in until it expires on its own (12 hours); signing out here removes it from this phone.</p>
       </section>
       ${phonesPanelHtml()}
+      ${reenrollCardHtml()}
       ${lidarCardHtml()}`;
   }
   return `
