@@ -4,6 +4,7 @@ import { verdictLine, verdictNote } from "../verify/labels";
 import { accountView, bindAccount } from "./account";
 import { bindPhonesPanel } from "./devices-panel";
 import { bindLidarCard } from "./lidar-card";
+import { bindReenrollCard } from "./reenroll-card";
 import { bindSharePanel, resetShare, sharePanelHtml } from "./share-panel";
 import { captureNative, warmNativeCamera, type CaptureOk } from "../capture/capture";
 import { verifyExport, type ExportPackage } from "../capture/record";
@@ -483,6 +484,7 @@ function bind(): void {
   if (openPhoto) bindSharePanel(root(), openPhoto.record.sha256, render);
   if (tab === "account" && identityApi().signedIn()) bindPhonesPanel(root(), render);
   if (tab === "account") bindLidarCard(root(), render);
+  if (tab === "account") bindReenrollCard(root(), render, () => void refreshAppAttest());
   if (tab === "account") bindAccount(root(), render);
   if (tab === "construction") bindConstruction(ctx);
   bindIdentity(root(), render);
