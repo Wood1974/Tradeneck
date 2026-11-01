@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import UIKit
 
 /// One test shot on the LiDAR camera, to learn what iOS gives an app as depth with a photo.
 /// It signs nothing, stores nothing and sends nothing: the photo is dropped here and only integers and short strings are returned.
@@ -31,8 +32,28 @@ final class DepthProbe: NSObject, AVCapturePhotoCaptureDelegate {
     private var completion: (([String: Any]) -> Void)?
     private var report: [String: Any] = [:]
 
+    /// The phone's model code ("iPhone18,2"), straight from the kernel.
+    private static func machine() -> String {
+        var info = utsname()
+        uname(&info)
+        return withUnsafePointer(to: &info.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: Int(_SYS_NAMELEN)) { String(cString: $0) }
+        }
+    }
+
+    /// Every back camera type iOS lists to this app, so a "no LiDAR" answer comes with what iOS did list.
+    private static func backCameraTypes() -> [String] {
+        var types: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera, .builtInDualCamera, .builtInDualWideCamera, .builtInTripleCamera]
+        if #available(iOS 15.4, *) { types.append(.builtInLiDARDepthCamera) }
+        let found = AVCaptureDevice.DiscoverySession(deviceTypes: types, mediaType: .video, position: .back).devices
+        return found.map { $0.deviceType.rawValue.replacingOccurrences(of: "AVCaptureDeviceTypeBuiltIn", with: "") }
+    }
+
     private func start(_ completion: @escaping ([String: Any]) -> Void) {
         self.completion = completion
+        report["model"] = DepthProbe.machine()
+        report["os"] = UIDevice.current.systemVersion
+        report["cameras"] = DepthProbe.backCameraTypes()
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             break
@@ -51,7 +72,10 @@ final class DepthProbe: NSObject, AVCapturePhotoCaptureDelegate {
 
     private func configureAndShoot() {
         // The LiDAR device type exists from iOS 15.4; the app still supports 15.0.
-        guard #available(iOS 15.4, *), let device = AVCaptureDevice.default(.builtInLiDARDepthCamera, for: .video, position: .back) else {
+        guard #available(iOS 15.4, *),
+              let device = AVCaptureDevice.default(.builtInLiDARDepthCamera, for: .video, position: .back)
+                ?? AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInLiDARDepthCamera], mediaType: .video, position: .back).devices.first
+        else {
             end(["lidar_device": false, "error": "no-lidar-camera"])
             return
         }

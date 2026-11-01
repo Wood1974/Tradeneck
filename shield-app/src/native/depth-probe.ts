@@ -25,8 +25,20 @@ export async function runDepthProbe(): Promise<DepthProbeResult> {
 
 const m = (mm: number): string => (mm / 1000).toFixed(2);
 
+/** What the check ran on, so a result can be read without guessing: the phone's model code, iOS version, and the back cameras iOS listed. */
+function ranOn(r: DepthProbeResult): string[] {
+  const lines: string[] = [];
+  if (r.model || r.os) lines.push(`Ran on: ${[r.model, r.os ? `iOS ${r.os}` : ""].filter(Boolean).join(", ")}`);
+  if (r.cameras) lines.push(`Back cameras iOS lists: ${r.cameras.length ? r.cameras.join(", ") : "none"}`);
+  return lines;
+}
+
 /** Plain lines for the screen. Every number here was measured by the native check; nothing is inferred. */
 export function depthProbeLines(r: DepthProbeResult): string[] {
+  return [...depthResultLines(r), ...ranOn(r)];
+}
+
+function depthResultLines(r: DepthProbeResult): string[] {
   if (r.error?.startsWith("capture-failed")) return [`LiDAR camera found, but the photo failed: ${r.error.slice("capture-failed: ".length) || "unknown reason"}.`];
   if (r.error && r.lidar_device !== true) return [`No LiDAR check: ${REASONS[r.error] ?? r.error}.`];
   if (r.error) return [`LiDAR camera found, but ${REASONS[r.error] ?? r.error}.`];

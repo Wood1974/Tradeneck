@@ -35,3 +35,20 @@ describe("the LiDAR check says only what was measured", () => {
     expect(text).not.toContain("Points with a distance");
   });
 });
+
+describe("the LiDAR check says what it ran on", () => {
+  it("adds the model, iOS version and the cameras iOS listed to a no-LiDAR answer", () => {
+    const lines = depthProbeLines({ lidar_device: false, error: "no-lidar-camera", model: "iPhone18,2", os: "26.0.1", cameras: ["WideAngleCamera", "UltraWideCamera"] });
+    expect(lines).toEqual([
+      "No LiDAR check: this phone has no LiDAR depth camera.",
+      "Ran on: iPhone18,2, iOS 26.0.1",
+      "Back cameras iOS lists: WideAngleCamera, UltraWideCamera",
+    ]);
+  });
+  it("says when iOS listed no back cameras at all", () => {
+    expect(depthProbeLines({ error: "camera-denied", cameras: [] }).at(-1)).toBe("Back cameras iOS lists: none");
+  });
+  it("adds nothing it was not given", () => {
+    expect(depthProbeLines({ lidar_device: false, error: "no-lidar-camera" })).toEqual(["No LiDAR check: this phone has no LiDAR depth camera."]);
+  });
+});
