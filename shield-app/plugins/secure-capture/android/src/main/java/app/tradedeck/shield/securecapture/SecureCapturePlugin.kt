@@ -102,6 +102,15 @@ class SecureCapturePlugin : Plugin() {
         }
     }
 
+    // The LiDAR check is iPhone only.
+    @PluginMethod
+    fun depthProbe(call: PluginCall) {
+        val result = JSObject()
+        result.put("supported", false)
+        result.put("error", "android-not-supported")
+        call.resolve(result)
+    }
+
     @PluginMethod
     fun readClock(call: PluginCall) {
         call.resolve(JSObject(JSONObject(clockMap() as Map<*, *>).toString()))

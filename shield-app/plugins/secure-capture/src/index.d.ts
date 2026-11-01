@@ -57,6 +57,25 @@ export interface ExportPackage {
   records: Array<Omit<NativeSealResult, "photoBase64"> & { photo_b64?: string }>;
 }
 
+/** What one LiDAR test shot returned. Numbers are integers in millimetres or whole percents; nothing from the shot is kept. */
+export interface DepthProbeResult {
+  /** Android only: this check does not exist there. */
+  supported?: false;
+  lidar_device?: boolean;
+  depth_delivery_supported?: boolean;
+  captured?: boolean;
+  width?: number;
+  height?: number;
+  min_mm?: number;
+  max_mm?: number;
+  median_mm?: number;
+  valid_percent?: number;
+  accuracy?: "absolute" | "relative";
+  quality?: "high" | "low";
+  filtered?: boolean;
+  error?: string;
+}
+
 export const SecureCapture: SecureCapturePlugin;
 
 export interface SecureCapturePlugin {
@@ -91,6 +110,8 @@ export interface SecureCapturePlugin {
   appAttestEnroll(options: { nonce: string }): Promise<{ key_id: string; attestation_b64: string }>;
   /** iOS only. Call after the server accepted the proof: later seals then carry an assertion. */
   appAttestConfirm(options: { keyId: string }): Promise<void>;
+  /** iOS only. One test shot on the LiDAR camera; reports what depth iOS gave with it. Signs, stores and sends nothing. */
+  depthProbe(): Promise<DepthProbeResult>;
   resetKey(): Promise<void>;
   adoptServerTicket(options: { ticketId: string; ticketHash: string; ticketClock: TicketClock }): Promise<void>;
   listQueue(options?: { ticketId?: string }): Promise<{ records: Array<{ record_hash: string; ticket_id: string; photo_sha256: string }> }>;
