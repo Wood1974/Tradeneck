@@ -1,3 +1,4 @@
+import { shownTimeWithUtc } from "../ui/time-format";
 import { identityApi, type CaptureUpload, type StoredCapture } from "../identity/client";
 import { isNativeOriginAvailable } from "../platform";
 
@@ -56,7 +57,7 @@ export function appleCheckFor(platform: string, photoSha256: string): DeviceChec
   return { text: `Apple device check: not verified by the server (${why})`, tone: "warn" };
 }
 
-const utc = (iso: string): string => iso.slice(0, 16).replace("T", " ") + " UTC";
+const utc = shownTimeWithUtc;
 
 /**
  * What the server says about a photo's clocks, how its chain started, and its outside time-stamp. Facts only, in the server's

@@ -177,8 +177,9 @@ describe("copying sealed photos to the server", () => {
     await u.uploadPending(true);
     expect(u.serverResultLines("p1")).toEqual([
       { text: "Clock check: the phone's clocks agree with each other (this is not a timestamp)", tone: "ok" },
-      { text: "Job start: anchored by a server ticket, started at 2026-10-21 10:00 UTC", tone: "ok" },
-      { text: "Outside timestamp: timestamp.digicert.com says this existed by 2026-10-22 00:00 UTC (its certificate chain was not checked)", tone: "" },
+      // The local part follows the zone the tests run in; the exact UTC minute beside it does not.
+      { text: expect.stringMatching(/^Job start: anchored by a server ticket, started at .+ \(2026-10-21 10:00 UTC\)$/), tone: "ok" },
+      { text: expect.stringMatching(/^Outside timestamp: timestamp\.digicert\.com says this existed by .+ \(2026-10-22 00:00 UTC\) \(its certificate chain was not checked\)$/), tone: "" },
     ]);
     expect(u.serverResultLines("p2")).toEqual([
       { text: "Clock check: the phone's clocks disagree (GPS time and the phone's clock differ by 3600 s)", tone: "warn" },
