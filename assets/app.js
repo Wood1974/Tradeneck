@@ -44,13 +44,34 @@ async function authSubmit() {
   const errEl    = document.getElementById('auth-error');
   errEl.textContent = '';
   if (!email||!password){errEl.textContent='Email and password required';return;}
-  const res = authMode==='signup'
-    ? await sb.auth.signUp({email,password})
-    : await sb.auth.signInWithPassword({email,password});
-  if (res.error){errEl.textContent=res.error.message;return;}
-  if (authMode==='signup'&&!res.error){td.signUp();errEl.style.color='var(--green)';errEl.textContent='Check your email to confirm.';return;}
-  td.login();
-  await onLogin(res.data.user);
+  const btn = document.getElementById('auth-submit');
+  const idleLabel = btn.textContent;
+  const isSignup = authMode==='signup';
+  btn.disabled = true;
+  btn.textContent = isSignup ? 'Creating account…' : 'Signing in…';
+  // Without this, a request that never returns leaves the screen unchanged.
+  const TIMEOUT_MS = 15000;
+  let timer;
+  const timeout = new Promise((_,reject)=>{ timer = setTimeout(()=>reject(new Error('timeout')), TIMEOUT_MS); });
+  try {
+    const res = await Promise.race([
+      isSignup ? sb.auth.signUp({email,password}) : sb.auth.signInWithPassword({email,password}),
+      timeout
+    ]);
+    if (res.error){console.error('auth error:', res.error);errEl.textContent=res.error.message;return;}
+    if (isSignup){td.signUp();errEl.style.color='var(--green)';errEl.textContent='Check your email to confirm.';return;}
+    td.login();
+    await onLogin(res.data.user);
+  } catch (e) {
+    console.error('auth request failed:', e);
+    errEl.textContent = e.message==='timeout'
+      ? 'No response from the sign-in server after 15 seconds. Check your connection, turn off content blockers or Private Relay, and try again.'
+      : 'Could not reach the sign-in server: '+(e.message||e);
+  } finally {
+    clearTimeout(timer);
+    btn.disabled = false;
+    btn.textContent = idleLabel;
+  }
 }
 async function onLogin(user) {
   STATE.user = user;
