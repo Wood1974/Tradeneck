@@ -111,7 +111,7 @@ async function loadData() {
     ESCROW_ENABLED
       ? sb.from('draw_schedules').select('*, draws(*)').order('created_at',{ascending:false}).limit(30)
       : {data:[]},
-    sb.from('jobs').select('*').eq('source','ksl').order('created_at',{ascending:false}).limit(200),
+    sb.from('jobs').select('*').neq('source','tradedeck').order('created_at',{ascending:false}).limit(300),
   ]);
   STATE.jobs    = jobsRes.data || [];
   /* Contact info for people you hired / who hired you. my_hire_contacts() is a
@@ -214,6 +214,8 @@ function workTab(tab,btn) {
 const TRADE_CATEGORIES = ['All Trades','General Labor','Electrical','Excavation','Concrete',
   'HVAC','Framing','Plumbing','Flooring','Landscaping','Roofing','Drywall','Other'];
 const KNOWN_TRADES = new Set(TRADE_CATEGORIES.filter(t=>t!=='All Trades'&&t!=='Other'));
+const JOB_SOURCE_LABELS = {ksl:'KSL', craigslist:'Craigslist', ziprecruiter:'ZipRecruiter', indeed:'Indeed'};
+function jobSourceLabel(src){ return JOB_SOURCE_LABELS[src] || 'Job board'; }
 function jobMatchesTrade(job, trade){
   if (trade==='all') return KNOWN_TRADES.has(job.trade); // hide "Other" noise by default
   if (trade==='Other') return !job.trade || !KNOWN_TRADES.has(job.trade);
@@ -371,11 +373,11 @@ function renderWork() {
     const jobs = STATE.activeCounty==='all'?byTrade:byTrade.filter(j=>j.county===STATE.activeCounty);
     el.innerHTML = jobs.length ? jobs.map(j=>`
       <div class="card">
-        <div class="flex between"><h3>${esc(j.title)}</h3><span class="badge badge-ksl">KSL</span></div>
+        <div class="flex between"><h3>${esc(j.title)}</h3><span class="badge badge-ksl">${esc(jobSourceLabel(j.source))}</span></div>
         <p>${esc(j.company)} · ${esc(j.location)}, ${esc(j.county)}${j.trade?' · '+esc(j.trade):''}</p>
         <p style="margin-top:6px">${esc((j.description||'').slice(0,120))}…</p>
         <p class="text-muted" style="margin-top:4px;font-size:12px">${esc(j.rate)}</p>
-      </div>`).join('') : '<p class="text-muted" style="padding:20px 0">No KSL jobs match this filter yet.</p>';
+      </div>`).join('') : '<p class="text-muted" style="padding:20px 0">No jobs match this filter yet.</p>';
   } else if (STATE.activeWorkTab==='leads') {
     countyEl.style.display = 'none';
     tradeEl.style.display = 'none';

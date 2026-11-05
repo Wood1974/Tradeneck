@@ -230,7 +230,7 @@ sets `jobs.status = 'filled'` client-side. Its migration lives in the
 
 ## Find Work / KSL trade + county filtering
 
-The KSL Jobs sub-tab has two independent filter rows: **county** (all 29 UT
+The Job Boards sub-tab (internal id `ksl`; shows every `jobs` row whose `source` is not `tradedeck` — KSL, Craigslist, ZipRecruiter) has two independent filter rows: **county** (all 29 UT
 counties, pre-filtered to `nearbyCounties` = Salt Lake, Wasatch, Utah,
 Weber, Davis, Summit) and **trade category** (`TRADE_CATEGORIES` in
 `assets/app.js` — Electrical, Plumbing, HVAC, Framing, etc., plus "Other").
