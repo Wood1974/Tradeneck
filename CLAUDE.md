@@ -11,6 +11,31 @@ against the code and the live DB, not against history or notes, before
 building on top of a feature** — this file has been wrong before and will
 be again the moment something changes without an update here.
 
+**Nov 2026 reconciliation. Read this before planning anything.** Four plans
+were drafted in one session and three were killed, every time by something
+that was either written here and untrue, or true and not written here. Both
+CLAUDE.mds were then checked against the code, the live Supabase and the live
+Render account. Three habits come out of it, and they are cheap:
+
+1. **Query activity, not just schema.** The schema says what is possible; only
+   the row counts say what is real. A close-out feature was fully designed
+   against a correct reading of the schema, for a marketplace that has had
+   **zero applications, ever**. See **Live Supabase schema** for the counts.
+2. **Check the live Render account, not `render.yaml`.** They disagree, and the
+   dashboard is what runs. `render.yaml` has no `DB_PATH` and no disk, so the
+   backend's SQLite file is on ephemeral disk — though it holds only Shield
+   capture v1 tables, not the marketplace's data. See the backend CLAUDE.md's
+   **Data layer**, which claimed the opposite until now.
+4. **Derive a doc from the code, never from the previous version of the doc.**
+   The backend CLAUDE.md spent months describing an auth system, a leads
+   aggregator and a chat proxy that had been deleted, because each rewrite
+   trusted the last. A first pass at fixing it re-committed some of those
+   claims as "corrected" — verifying the infrastructure carefully while taking
+   the application description on faith. Read `app.py`.
+3. **Check the other repo's CLAUDE.md before designing across the boundary.**
+   A session was spent designing Shield-to-TradeDeck integration that the
+   backend doc had already ruled out in writing.
+
 ## Working rules (set by the owner)
 
 Standing instructions from the owner. They apply to every session in this repo, so don't wait to be told again.
@@ -35,6 +60,30 @@ Standing instructions from the owner. They apply to every session in this repo, 
 - Photos are stored on the Shield server disk and are readable only by the account that took them. No administrator route reads them.
 - Honest labels: never say a photo is "attested" unless a server verified Apple's assertion. Say what was actually checked; a valid signature alone does not show the image matches.
 - Construction content uses Utah building codes only.
+
+### Shield is phone-only, and the two products are standalone (owner, Nov 2026)
+
+- **Shield and TradeDeck are completely standalone.** They share the
+  `tradedeckapp.com` domain and nothing else. This matches the backend
+  CLAUDE.md verbatim — *"No integration with jobs."*
+- **Nothing of Shield belongs in a web browser.** Shield is `shield-app/`, the
+  Capacitor phone app, which signs in to its own server
+  (`tradedeck-shield.onrender.com`) and never calls `tradedeck-api`.
+- Therefore the **old web Shield is to be removed**, not extended: `shield.js`
+  (95.8 KB), the `#screen-shield` screen, the Quick Actions and `#nav-shield`
+  buttons, the `/shield` route and `loadShield()` in `assets/app.js`. On the
+  backend, `shield_api.py` (60.8 KB) then has no caller left; retiring it is a
+  separate decision and a separate PR.
+- Removing it also kills a recurring bug class at the root rather than
+  documenting its next instance: the `API_BASE` and `STRIPE_PK` global-scope
+  collisions noted elsewhere in this file exist **only** because `shield.js`
+  shares one classic-`defer` global scope with `assets/app.js`.
+- **Do not propose feeding Shield evidence into TradeDeck profiles, tiers or
+  jobs.** A full session was spent designing exactly that — a verifier for
+  signed Shield close-out packets on the worker profile — before noticing it
+  contradicted the standalone decision already written down. It was scrapped.
+  If this ever gets revisited it is a product decision for the owner first, not
+  an engineering plan.
 
 ## Product context
 
@@ -76,7 +125,8 @@ every feature decision:
 - SEO/infra: `robots.txt`, `sitemap.xml`, `_redirects`, `site.webmanifest`
   (doubles as the PWA manifest — see below), `og-image.png`, `favicon.ico`,
   `icon.svg`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`.
-- `shield.js` — the **TradeDeck Shield UI** (mountable module, ~95KB).
+- `shield.js` — the **old web Shield UI**, 95.8 KB. **Slated for removal — see
+  "Shield is phone-only" below. Do not build on it, do not extend it.**
   Loaded `defer`, after `assets/app.js`, so it can read the shared top-level
   `sb` Supabase client (both are classic `defer` scripts, which execute in
   document order and share one global lexical scope — no `window.sb`
@@ -155,12 +205,22 @@ The schema is live, with 25+ tables, all RLS-enabled. Highlights:
 - `jobs` uses **`owner_id`**, **`trade`**, **`rate`** (not `posted_by`,
   `trade_type`, `pay`), plus a `source` column (`'ksl'` vs `'tradedeck'`).
   **Don't hardcode a row count anywhere** — the KSL scraper runs on a daily
-  cron and the table grows every day (289 rows on Sep 18, 659 on Sep 28, all
-  but one of them `source='ksl'`); query it live instead of trusting a
-  number in this file. Every table *below* `jobs` (`applications`,
-  `draw_schedules`, `draws`, `stripe_escrow`, `draw_photos`) is still at
-  **zero rows** as of this writing — the app has no real users yet, so no
-  schema decision here has a migration cost or a customer to break.
+  cron and the table grows every day (289 rows on Sep 18, 659 on Sep 28,
+  **1,814 on Nov 6**); query it live instead of trusting a number in this file.
+- **Query activity, not just schema, before designing anything.** Verified live
+  on **Nov 6 2026**: `applications` **0 — zero, ever**; `reviews` 0; `messages`
+  0; `conversations` 0; `worker_profiles` 0; `contact_requests` 0; `profiles` 8,
+  **none above tier 1**; `jobs` at `status='filled'` 0; `source='tradedeck'`
+  jobs **6**, against **1,814** `source='ksl'`. Shield's own tables are the
+  same story: `shield_jobs` 1, `shield_photos` 2, `shield_completion_reports` 0.
+  A whole session was spent designing a job close-out feature that credits the
+  payee on an *accepted application* before anyone checked that no application
+  has ever existed — the code was correct and could never have fired. Reading
+  the schema tells you what is *possible*; only the row counts tell you what is
+  *real*. Do both.
+- Every table *below* `jobs` (`applications`, `draw_schedules`, `draws`,
+  `stripe_escrow`, `draw_photos`) is at **zero rows**, so no schema decision
+  here has a migration cost or a customer to break.
 - Draw milestones live in **`draws`** (`milestone_order`, `milestone_name`,
   `percentage`, `amount_cents`, `verifier_type`, `status`, `payee_id`).
   **`draws.job_id` is a FK to `draw_schedules.id`, not `jobs.id`** —
@@ -210,8 +270,19 @@ The schema is live, with 25+ tables, all RLS-enabled. Highlights:
   `shield.js` declares its own top-level `STRIPE_PK`, and two classic
   scripts declaring the same `const` stops `shield.js` from loading.
 - Separate Flask API backend lives in the sibling repo **tradedeck-api**
-  (tradedeck-api.onrender.com), Supabase-native, with the escrow state
-  machine and the Shield module. See that repo's CLAUDE.md.
+  (tradedeck-api.onrender.com). See that repo's CLAUDE.md, which was rebuilt
+  from `app.py` in Nov 2026 after being obsolete for a while. Verified there:
+  it **is** Supabase-backed (`app.py` imports `create_client`; `auth.py`
+  validates Supabase JWTs; `/api/jobs` reads `supabase_admin.table("jobs")`),
+  so **the dual-auth problem is resolved — there is one user system**, exactly
+  as this file says above. It **no longer holds the escrow state machine**
+  (`escrow.py` deleted, no escrow or draw routes), so turning `ESCROW_ENABLED`
+  on needs them restored there first — `assets/app.js`'s
+  `/draws/<id>/approve` call currently has no server side. Its
+  `shield_api.py` serves only the **old web Shield**, not the phone app. Its
+  SQLite file is on ephemeral disk but holds only two tables (`custom_packs`,
+  `manifests` — Shield capture v1), **not** auth, jobs or applications; those
+  are all in Supabase.
 
 ## Accept-application → payee flow
 
@@ -248,6 +319,30 @@ irrelevant listings to find trades. Each trade tab shows a live count.
   every profile write. Thresholds are a documented **starter** formula —
   timeline adherence, cost variance, and cleanliness sign-offs aren't
   captured yet and should refine the formula when they are.
+- **The tier ladder is structurally frozen, and the cause is not escrow.**
+  Verified live: `compute_profile_tier()` gates every tier above 1 behind
+  `jobs_completed >= 1` (thresholds 25/10/3/1 with ratings 4.8/4.5/4.0), and the
+  *only* thing that increments `jobs_completed` is the
+  `bump_jobs_completed_on_release` trigger, which needs every `draw` on a
+  `draw_schedule` at `released`. Escrow is off and the backend escrow routes are
+  gone, so it can never fire. But even restoring escrow would not unfreeze it:
+  there are **0 applications**, so nobody has ever been hired. A worker with a
+  5.0 average from ten reviews still reads "Verified", tier 1. Reviews do work
+  without escrow; the ladder they feed does not.
+- **Tier 1 is labelled "Verified" and nothing is verified.** All 8 accounts sit
+  there, including ones created seconds ago with no ID check, licence or COI,
+  while `for-homeowners.html` tells homeowners the tier means something. This is
+  the same failure the Shield rule already forbids — never claim "attested"
+  unless something actually verified it. Rename tier 1 to "New", or gate the
+  badge on a real check. Unfixed as of Nov 2026.
+- **`update_profile_rating()` is an orphaned landmine — drop it.** It sits in
+  the live database with no trigger attached, so it is inert *today*. It reads
+  `j.posted_by`, a column that does not exist on `jobs` (it is `owner_id`), so
+  it throws the moment anything wires it up; it carries contradictory
+  thresholds (30/15/5/2 vs the live 25/10/3/1); and it sets `jobs_completed`
+  from a **review count on jobs the user posted**, crediting the homeowner for
+  hiring rather than the worker for working. Inverted and broken. One-line
+  migration to remove.
 - Verification stack (identity → background → license → COI → quarterly
   monitoring): a `verifications` storage bucket exists; the flow is not
   built in the frontend.
@@ -274,10 +369,17 @@ irrelevant listings to find trades. Each trade tab shows a live count.
 - **Not yet done:** Google Search Console + GA4 are not fully verified.
   `assets/analytics.js` is wired but inert until a Measurement ID is filled
   in.
-- **Next SEO step:** programmatic `/jobs/{trade}` and `/jobs/{trade}/{county}`
-  pages with `JobPosting` schema, generated from Supabase. Gate each combo
-  page on ≥3 real listings — thin pages with nothing on them are a
-  doorway-page risk.
+- **Programmatic `/jobs/{trade}` pages: refused, do not revive without new
+  inventory.** The idea was `/jobs/{trade}` and `/jobs/{trade}/{county}` pages
+  with `JobPosting` schema generated from Supabase. It was investigated and
+  rejected in Oct 2026 on the numbers: **1,814 of 1,820 jobs are scraped KSL
+  listings.** Publishing them would breach Google's `JobPosting` guidelines
+  (you may only mark up jobs you are authorised to list), count as scraped
+  content under Google's spam policies — which is a **site-wide** risk, not a
+  per-page one — and likely breach KSL's ToS. A "≥3 real listings" gate does
+  not help when the listings themselves are someone else's. This becomes
+  viable only once TradeDeck has its own job inventory; it is blocked on the
+  KSL decision (next-steps item 5), not on engineering.
 
 ## Conventions / working notes
 
@@ -293,20 +395,57 @@ irrelevant listings to find trades. Each trade tab shows a live count.
 - Keep secrets (Supabase service role key, Stripe secret key, Anthropic API
   key) out of this repo — those belong in the backend's environment config.
 
-## Known-good next steps (Sep 2026)
+## Next steps, in priority order (Nov 2026)
 
-1. Before launching escrow: restore the backend escrow routes, flip
-   `ESCROW_ENABLED`, update the "coming soon" copy, then run a full escrow
-   cycle in Stripe **live** mode end-to-end and confirm
-   `bump_jobs_completed_on_release` actually fires — nothing below `jobs`
-   has real rows yet, so this has never happened for real.
-2. Wire Shield's deeper hooks: the per-job brief (`renderShieldBrief` /
-   `renderShieldToggle`) into the Post Job flow, and the contractor upload
-   flow (`renderContractorUploadFlow`) into the draw view. The Shield tab +
-   dashboard are live; these hooks exist in `shield.js` but aren't mounted
-   into those screens yet.
-3. Programmatic SEO job pages (see SEO section above).
-4. Calibrate the KSL scraper itself so `jobs.trade` is populated at ingest
-   time — most rows arrive without a recognized trade and fall into
-   "Other," which the Find Work trade tabs then hide by default. That's a
-   UI workaround, not a fix; the real fix is upstream in the scraper.
+The previous version of this list recommended wiring Shield's hooks into Post
+Job and the draw view — which **contradicts the standalone decision above** —
+and programmatic SEO job pages, which were refused because 1,814 of 1,820 jobs
+are scraped KSL listings (Google scraped-content policy, `JobPosting`
+guidelines, and KSL's ToS). Both are struck.
+
+**Infrastructure first. None of the product items below matter while the
+backend's data is not durable.**
+
+1. **Decide whether Shield capture v1 is still in use.** `Tradedeck-api`'s
+   SQLite file is on ephemeral disk and is lost on every deploy. It holds only
+   `custom_packs` and `manifests` — Shield capture v1 — so the question is not
+   "attach a disk" but "does this subsystem still have a job?" If
+   `tradedeck-shield.onrender.com` superseded it, retire the store and the
+   `/api/captures/*` and `/api/manifests/*` routes. If it is still live, sealed
+   manifests are being destroyed on every deploy, which is severe. Attaching a
+   disk before answering would be a patch on a possibly-vestigial subsystem.
+   **Owner's call.** (Nothing else is at risk: jobs, profiles and applications
+   are all in Supabase.)
+2. **The standalone Shield server is deployed three times over**, two with
+   separate 10 GB photo disks — a custody problem for an evidence product.
+   Confirm which disk holds real photos, then suspend the rest. **Owner-only.**
+3. **Decide which copy of the Shield server source is authoritative.** A full
+   vendored copy lives in `Tradedeck-api/shield/` while the Render services
+   deploy `Wood1974/tradedeck-shield`. Two copies of an evidence system's
+   source is a silent correctness risk.
+4. **GA4 Measurement ID** — `assets/analytics.js` is wired and inert without
+   it. Two minutes, owner-only, and until it is set every product decision
+   here is made blind. With 0 applications there is no way to tell whether
+   nobody arrives, nobody signs up, or everyone bounces off Find Work.
+5. **Decide what the KSL feed is for.** One decision that unblocks three
+   things at once: SEO (doorway-page risk), Find Work UX (1,814 unactionable
+   listings against 6 real ones, which is the likeliest reason the apply rate
+   is zero), and ToS exposure. Either drop it, or split it out behind an honest
+   "posted elsewhere" label with real TradeDeck jobs as the default view.
+6. Remove the web Shield (see "Shield is phone-only" above).
+7. Drop the orphaned `update_profile_rating()`; fix tier 1 claiming
+   "Verified". Both described under **Trust / tier**.
+8. **Product features last** — job close-out, and anything tier-related — once
+   something above has produced a single real application. A close-out
+   migration is already written, reviewed and **unapplied** on
+   `claude/tradeckapp-seo-analysis-2meuw7` in `Tradedeck-api`; it credits the
+   payee from an accepted application, so it cannot fire until one exists.
+9. If escrow is ever switched on: restore the backend routes **first** (they
+   are gone, `escrow.py` deleted — verified Nov 2026), then flip
+   `ESCROW_ENABLED`, update the "coming soon" copy, and run a full cycle in
+   Stripe live mode confirming `bump_jobs_completed_on_release` fires. It never
+   has.
+10. Calibrate the KSL scraper so `jobs.trade` is populated at ingest, if the
+    feed survives decision 5. Most rows arrive untagged and fall into "Other",
+    which the trade tabs hide by default — the UI filter is a workaround, the
+    fix is upstream.
