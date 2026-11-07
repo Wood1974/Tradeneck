@@ -22,6 +22,14 @@ async function asNativeApp(page: Page): Promise<void> {
     const w = window as unknown as TestWindow & { Capacitor: unknown };
     w.Capacitor = { isNativePlatform: () => true, getPlatform: () => "android" };
     w.__shieldCalls = [];
+    // The stand-in camera makes only the Vault copy, never a hardware record, so the phone's queue is empty here.
+    (w as unknown as { __shieldE2EExportPlugin: unknown }).__shieldE2EExportPlugin = {
+      listQueue: async () => ({ records: [] }),
+      exportQueue: async () => ({ packages: [] }),
+      readOriginal: async () => {
+        throw new Error("no original");
+      },
+    };
     w.__shieldE2ECamera = async (direction: string) => {
       w.__shieldCalls.push(direction);
       await new Promise((r) => setTimeout(r, 120));
@@ -156,6 +164,27 @@ test("brief to sealed point to frozen record to verified packet", async ({ page 
 
   const text = await freeze(page);
   const packet = JSON.parse(text);
+
+  // The closed job now has a folder of its own in the Vault, holding its photo and its completion record.
+  await page.click('[data-tab="vault"]');
+  await page.click('[data-act="vault-back"]'); // the photo just sealed is still open
+  await expect(page.locator("h2", { hasText: "COMPLETED JOBS" })).toBeVisible();
+  const folder = page.locator("[data-folder]");
+  await expect(folder).toHaveCount(1);
+  await expect(folder).toContainText("Reroof 872 High Country Ln");
+  await expect(folder).toContainText("1 photo");
+  await folder.click();
+  await expect(page.locator('[data-act="folder-record"]')).toBeVisible();
+  await expect(page.locator("[data-open]")).toHaveCount(1);
+  await page.locator("[data-open]").click();
+  await page.click('[data-act="vault-back"]');
+  await expect(page.locator('[data-act="folder-record"]')).toBeVisible();
+  const [record] = await Promise.all([page.waitForEvent("download"), page.click('[data-act="folder-record"]')]);
+  expect(record.suggestedFilename()).toContain(".shield-record.json");
+  await page.click('[data-act="folder-back"]');
+  await expect(page.locator("[data-folder]")).toHaveCount(1);
+  await expect(page.locator("[data-open]")).toHaveCount(0); // the photo is in its job's folder, not in the open list
+
   expect(packet.counts).toMatchObject({ points: 5, sealed: 1, missing: 4 });
   expect(packet.integrity.hash).toMatch(/^[0-9a-f]{64}$/);
   expect(packet.photographer.attestationId).toBe("55555555-5555-4555-8555-555555555555");
@@ -389,7 +418,10 @@ test("an unverified phone cannot seal: sign-on comes first, step by step", async
   await page.click('[data-tab="capture"]');
   await page.click('[data-act="native"]');
   await expect(page.locator(".thumb")).toBeVisible();
+  // Export writes only the phone's hardware-signed record. This photo has none (the stand-in camera makes the Vault copy
+  // only), so it says so and writes nothing, rather than handing over the software-key file.
   await page.click('[data-act="export"]');
+  await expect(page.locator(".foot-note", { hasText: "no hardware-signed record" })).toBeVisible();
 });
 
 test("a forgotten password is reset with an emailed code, from the sign-on screen", async ({ page }) => {

@@ -1,7 +1,11 @@
 import { esc } from "../esc";
+import { clockNow, shownTime, shownTimeWithUtc } from "./time-format";
+import { folderCardsHtml, folderHeaderHtml, groupVault } from "./vault-folders";
 import { verdictLine, verdictNote } from "../verify/labels";
 import { accountView, bindAccount } from "./account";
 import { bindPhonesPanel } from "./devices-panel";
+import { bindLidarCard } from "./lidar-card";
+import { bindReenrollCard } from "./reenroll-card";
 import { bindSharePanel, resetShare, sharePanelHtml } from "./share-panel";
 import { captureNative, warmNativeCamera, type CaptureOk } from "../capture/capture";
 import { verifyExport, type ExportPackage } from "../capture/record";
@@ -11,6 +15,7 @@ import { makeCheckpoints, PACK_ORDER } from "../packs";
 import { isNativeOriginAvailable } from "../platform";
 import {
   activeJobId,
+  getCloseout,
   getVaultBytes,
   listJobs,
   listVault,
@@ -19,12 +24,13 @@ import {
 } from "../store/db";
 import type { Job, PackKind, VaultItem } from "../types";
 import { MAX_IMPORT_BYTES, parseBundle, verifyBundle, verifyItemOriginal } from "../verify/verify";
-import { download, parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
+import { download, downloadPacketFiles, parseCloseoutPacket, verifyCloseoutPacket, type PacketVerification } from "../construction/closeout";
 import type { CloseoutPacket } from "../types";
 import { attestation, bindIdentity, identityView, isAttested, loadIdentity } from "./identity";
 import { identityApi } from "../identity/client";
 import { bindReset, resetEntry, resetOpen, resetView } from "./reset";
 import { EMAIL_ATTRS, passwordField } from "./fields";
+import { exportErrorText, exportFileName, exportHardwarePackage } from "../native/export-package";
 import { ensureServerTicket } from "../native/tickets";
 import { appleCheckFor, connectionLine, hasClockWarning, missingFromVault, serverResultLines, uploadLine, uploadPending } from "../native/uploader";
 import { appAttestState, enrollDevice, enrollErrorText, enrollStepText, reasonOf, type AppAttestState } from "../native/appattest";
@@ -41,6 +47,8 @@ let jobs: Job[] = [];
 let vault: VaultItem[] = [];
 let activeId: string | null = null;
 let openVaultId: string | null = null;
+/** The completed job whose folder is open in the Vault, if any. */
+let openFolderId: string | null = null;
 let status = "";
 let selectedPack: PackKind = "remodel";
 let customCount = 8;
@@ -126,7 +134,7 @@ function activeJob(): Job | undefined {
 }
 
 function clock(): string {
-  return new Date().toISOString().slice(11, 19) + " UTC";
+  return clockNow();
 }
 
 export function render(): void {
@@ -337,12 +345,13 @@ function vaultView(): string {
   if (open) {
     const rec = open.record;
     return `
-      <button class="btn ghost small" data-act="vault-back">BACK</button>
+      <button class="btn ghost small" data-act="vault-back">${openFolderId ? "BACK TO JOB" : "BACK"}</button>
       ${openImgUrl ? `<img class="thumb" alt="Sealed evidence photo" src="${esc(openImgUrl)}" />` : `<p class="meta">Photo bytes unavailable on this device.</p>`}
       <div class="card">
         <div class="row"><h2>${esc(rec.captureKind)}</h2><span class="chip">${esc(rec.platform)}</span></div>
         <pre>${esc(rec.sha256)}
-${esc(rec.createdAt)}
+time   ${esc(shownTime(rec.createdAt))}
+UTC    ${esc(rec.createdAt)}
 job ${esc(rec.jobId ?? "—")} · ${esc(rec.checkpointId ?? "unbound")}
 ${rec.gps ? `location ${esc(rec.gps.source)} · ±${esc(Math.round(rec.gps.acc))} m` : "no location recorded"}
 device claim ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " (not checked on this phone)"}${appleLine(rec.platform, rec.sha256) ? `\n${esc(appleLine(rec.platform, rec.sha256)!.text)}` : ""}${serverResultLines(rec.sha256).map((l) => `\n${esc(l.text)}`).join("")}</pre>
@@ -360,17 +369,29 @@ device claim ${esc(rec.attest.kind)}${rec.attest.kind === "none" ? "" : " (not c
     <p class="fine" id="upload-status" role="status">${esc(uploadLine())}</p>
     ${missingFromVault(vault.length) > 0 ? `<p class="fine bad">${missingFromVault(vault.length)} photo${missingFromVault(vault.length) === 1 ? " is" : "s are"} kept in this phone's protected storage but missing from this list. They are not lost and still upload. Do not delete the app: unsent photos are deleted with it.</p>` : ""}
     <p class="fine">Closing the app does not delete photos. Deleting the app deletes photos that have not reached the server.${storagePersisted === false ? " The system did not promise to keep this list; the protected copy is stored separately." : ""}</p>
-    <div class="list">${vault
-      .map(
-        (v) => `<button class="card" data-open="${esc(v.record.id)}" style="width:100%;text-align:left">
+    ${vaultListHtml()}
+  `;
+}
+
+function photoCardsHtml(items: VaultItem[]): string {
+  return items
+    .map(
+      (v) => `<button class="card" data-open="${esc(v.record.id)}" style="width:100%;text-align:left">
           <div class="row"><h2>${esc(v.record.captureKind)}</h2><span class="chip">${esc(v.record.platform)}</span></div>
-          <div class="meta">${esc(v.record.sha256.slice(0, 16))}… · ${esc(v.record.createdAt)}</div>
+          <div class="meta">${esc(v.record.sha256.slice(0, 16))}… · ${esc(shownTime(v.record.createdAt))}</div>
           ${appleLine(v.record.platform, v.record.sha256) ? `<div class="meta">${esc(appleLine(v.record.platform, v.record.sha256)!.text)}</div>` : ""}
           ${hasClockWarning(v.record.sha256) ? `<div class="meta"><span class="chip warn">CLOCKS DISAGREE · OPEN FOR DETAIL</span></div>` : ""}
         </button>`,
-      )
-      .join("")}${vault.length ? "" : `<p class="meta">Empty.</p>`}</div>
-  `;
+    )
+    .join("");
+}
+
+/** The Vault list: photos still being worked on, then a folder for each completed job. Inside a folder: that job's photos only. */
+function vaultListHtml(): string {
+  const { open, folders } = groupVault(vault, jobs);
+  const folder = folders.find((f) => f.job.id === openFolderId);
+  if (folder) return `${folderHeaderHtml(folder)}<div class="list">${photoCardsHtml(folder.items)}${folder.items.length ? "" : `<p class="meta">No photos from this job are on this phone.</p>`}</div>`;
+  return `<div class="list">${photoCardsHtml(open)}${open.length || folders.length ? "" : `<p class="meta">Empty.</p>`}</div>${folderCardsHtml(folders)}`;
 }
 
 function verifyView(): string {
@@ -407,7 +428,7 @@ function packetResultView(r: NonNullable<typeof packetOut>): string {
       <div class="row"><h2>${ok ? "Record consistent" : r.verdict === "PACKET-TAMPERED" ? "Record altered" : "Not a Shield record"}</h2><span class="chip ${ok ? "ok" : "bad"}">${esc(r.verdict)}</span></div>
       <pre>${esc(r.reasons.join("\n"))}
 hash   ${esc(p.integrity.hash)}
-closed ${esc(p.closedAt)} by ${esc(p.closedBy.role)}
+closed ${esc(shownTimeWithUtc(p.closedAt))} by ${esc(p.closedBy.role)}
 job    ${esc(p.job.title || p.job.id)} · ${esc(p.job.trade)}
 signer ${esc(r.signer ?? "unknown")}
 photos sealed ${esc(p.counts.sealed)} · missing ${esc(p.counts.missing)}</pre>
@@ -464,6 +485,13 @@ function bind(): void {
       render();
     });
   });
+  root().querySelectorAll("[data-folder]").forEach((el) => {
+    el.addEventListener("click", () => {
+      openFolderId = (el as HTMLElement).dataset.folder ?? null;
+      status = "";
+      render();
+    });
+  });
   root().querySelectorAll("[data-open]").forEach((el) => {
     el.addEventListener("click", () => {
       void openVault((el as HTMLElement).dataset.open!).then(() => {
@@ -478,6 +506,8 @@ function bind(): void {
   const openPhoto = openVaultId ? vault.find((v) => v.record.id === openVaultId) : undefined;
   if (openPhoto) bindSharePanel(root(), openPhoto.record.sha256, render);
   if (tab === "account" && identityApi().signedIn()) bindPhonesPanel(root(), render);
+  if (tab === "account") bindLidarCard(root(), render);
+  if (tab === "account") bindReenrollCard(root(), render, () => void refreshAppAttest());
   if (tab === "account") bindAccount(root(), render);
   if (tab === "construction") bindConstruction(ctx);
   bindIdentity(root(), render);
@@ -768,6 +798,19 @@ async function onAct(act: string): Promise<void> {
     warmNativeCamera(facing === "user" ? "front" : "back", job.id);
     return;
   }
+  if (act === "folder-back") {
+    openFolderId = null;
+    status = "";
+    render();
+    return;
+  }
+  if (act === "folder-record" && openFolderId) {
+    const packet = (await getCloseout(openFolderId)) as CloseoutPacket | undefined;
+    if (packet?.schema === "tradedeck.shield.completion.v3") await downloadPacketFiles(packet, true);
+    else status = "This job's completion record is not on this phone, so there is nothing to download.";
+    render();
+    return;
+  }
   if (act === "vault-back") {
     await openVault(null);
     status = "";
@@ -789,15 +832,18 @@ async function onAct(act: string): Promise<void> {
   }
   if (act === "export" && openVaultId) {
     const item = vault.find((v) => v.record.id === openVaultId);
-    const bytes = item ? await getVaultBytes(item.record.id) : undefined;
-    if (!item || !bytes) {
-      status = "Photo bytes unavailable on this device.";
+    if (!item) {
+      status = "Photo unavailable on this device.";
       render();
       return;
     }
-    const bundle = { version: 1 as const, record: item.record, originalB64: b64FromBytes(bytes), devicePublicKey: await devicePublicKeyRaw() };
-    const stamp = item.record.createdAt.replace(/[:.]/g, "-");
-    await download(`shield-photo_${item.record.id.slice(0, 8)}_${stamp}.shield.json`, new Blob([JSON.stringify(bundle)], { type: "application/json" }));
+    try {
+      const pkg = await exportHardwarePackage(item.record.sha256);
+      await download(exportFileName(item.record.id, item.record.createdAt), new Blob([JSON.stringify(pkg)], { type: "application/json" }));
+    } catch (err) {
+      status = exportErrorText(err);
+      render();
+    }
     return;
   }
   if (act === "pick-bundle") {

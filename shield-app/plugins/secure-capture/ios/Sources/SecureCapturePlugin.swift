@@ -25,6 +25,7 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "appAttestStatus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "appAttestEnroll", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "appAttestConfirm", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "depthProbe", returnType: CAPPluginReturnPromise),
     ]
 
     private let sealQueue = DispatchQueue(label: "app.tradedeck.shield.seal")
@@ -69,6 +70,11 @@ public class SecureCapturePlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         call.reject("camera-denied")
+    }
+
+    /// One test shot on the LiDAR camera. Returns numbers only; the shot is not stored, signed or sent.
+    @objc func depthProbe(_ call: CAPPluginCall) {
+        DepthProbe.run { result in call.resolve(self.bridgeObject(result)) }
     }
 
     @objc func readClock(_ call: CAPPluginCall) {
