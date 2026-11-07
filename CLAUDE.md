@@ -22,9 +22,16 @@ Render account. Three habits come out of it, and they are cheap:
    against a correct reading of the schema, for a marketplace that has had
    **zero applications, ever**. See **Live Supabase schema** for the counts.
 2. **Check the live Render account, not `render.yaml`.** They disagree, and the
-   dashboard is what runs. `render.yaml` has no `DB_PATH` and no disk, and the
-   backend's database is consequently **not durable** — see the backend
-   CLAUDE.md's **Data layer**, which claimed the opposite until now.
+   dashboard is what runs. `render.yaml` has no `DB_PATH` and no disk, so the
+   backend's SQLite file is on ephemeral disk — though it holds only Shield
+   capture v1 tables, not the marketplace's data. See the backend CLAUDE.md's
+   **Data layer**, which claimed the opposite until now.
+4. **Derive a doc from the code, never from the previous version of the doc.**
+   The backend CLAUDE.md spent months describing an auth system, a leads
+   aggregator and a chat proxy that had been deleted, because each rewrite
+   trusted the last. A first pass at fixing it re-committed some of those
+   claims as "corrected" — verifying the infrastructure carefully while taking
+   the application description on faith. Read `app.py`.
 3. **Check the other repo's CLAUDE.md before designing across the boundary.**
    A session was spent designing Shield-to-TradeDeck integration that the
    backend doc had already ruled out in writing.
@@ -262,16 +269,19 @@ The schema is live, with 25+ tables, all RLS-enabled. Highlights:
   `shield.js` declares its own top-level `STRIPE_PK`, and two classic
   scripts declaring the same `const` stops `shield.js` from loading.
 - Separate Flask API backend lives in the sibling repo **tradedeck-api**
-  (tradedeck-api.onrender.com). See that repo's CLAUDE.md — and note this
-  bullet described it wrongly in three ways until Nov 2026. Corrected:
-  it is **not** Supabase-native (it runs its own SQLite store and its own
-  auth system, which is the unresolved dual-auth problem); it **no longer
-  holds the escrow state machine** (`escrow.py` deleted, no escrow or draw
-  routes — verified Nov 2026, so turning `ESCROW_ENABLED` on needs them
-  restored there first); and its Shield module (`shield_api.py`) serves only
-  the **old web Shield**, not the phone app, which talks to its own server.
-  **Its SQLite data is on ephemeral disk and does not survive a deploy** —
-  do not treat anything stored there as durable.
+  (tradedeck-api.onrender.com). See that repo's CLAUDE.md, which was rebuilt
+  from `app.py` in Nov 2026 after being obsolete for a while. Verified there:
+  it **is** Supabase-backed (`app.py` imports `create_client`; `auth.py`
+  validates Supabase JWTs; `/api/jobs` reads `supabase_admin.table("jobs")`),
+  so **the dual-auth problem is resolved — there is one user system**, exactly
+  as this file says above. It **no longer holds the escrow state machine**
+  (`escrow.py` deleted, no escrow or draw routes), so turning `ESCROW_ENABLED`
+  on needs them restored there first — `assets/app.js`'s
+  `/draws/<id>/approve` call currently has no server side. Its
+  `shield_api.py` serves only the **old web Shield**, not the phone app. Its
+  SQLite file is on ephemeral disk but holds only two tables (`custom_packs`,
+  `manifests` — Shield capture v1), **not** auth, jobs or applications; those
+  are all in Supabase.
 
 ## Accept-application → payee flow
 
@@ -395,18 +405,23 @@ guidelines, and KSL's ToS). Both are struck.
 **Infrastructure first. None of the product items below matter while the
 backend's data is not durable.**
 
-1. **`Tradedeck-api`'s SQLite database is on ephemeral disk and is lost on
-   every deploy** — its own auth accounts, native jobs, applications and leads.
-   See the backend CLAUDE.md **Data layer** for the verified detail.
-   Recommendation: move that data to Supabase rather than attach a disk; it
-   kills the dual-auth problem in the same change. **Owner's call.**
+1. **Decide whether Shield capture v1 is still in use.** `Tradedeck-api`'s
+   SQLite file is on ephemeral disk and is lost on every deploy. It holds only
+   `custom_packs` and `manifests` — Shield capture v1 — so the question is not
+   "attach a disk" but "does this subsystem still have a job?" If
+   `tradedeck-shield.onrender.com` superseded it, retire the store and the
+   `/api/captures/*` and `/api/manifests/*` routes. If it is still live, sealed
+   manifests are being destroyed on every deploy, which is severe. Attaching a
+   disk before answering would be a patch on a possibly-vestigial subsystem.
+   **Owner's call.** (Nothing else is at risk: jobs, profiles and applications
+   are all in Supabase.)
 2. **The standalone Shield server is deployed three times over**, two with
    separate 10 GB photo disks — a custody problem for an evidence product.
    Confirm which disk holds real photos, then suspend the rest. **Owner-only.**
-3. **Confirm `SECRET_KEY` is set in Render** (not declared in `render.yaml`;
-   the committed fallback is public) and settle why `render.yaml` provisions a
-   `SUPABASE_SERVICE_KEY` for a service documented as not using Supabase.
-   **Owner-only.**
+3. **Decide which copy of the Shield server source is authoritative.** A full
+   vendored copy lives in `Tradedeck-api/shield/` while the Render services
+   deploy `Wood1974/tradedeck-shield`. Two copies of an evidence system's
+   source is a silent correctness risk.
 4. **GA4 Measurement ID** — `assets/analytics.js` is wired and inert without
    it. Two minutes, owner-only, and until it is set every product decision
    here is made blind. With 0 applications there is no way to tell whether
